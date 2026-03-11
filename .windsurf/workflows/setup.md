@@ -4,18 +4,18 @@ description: Install or update detritus MCP knowledge base server
 
 # Setup Detritus MCP Server
 
-Detect the user's OS before proceeding. Run ONLY the commands matching their platform.
+Detect the user's OS and **shell** before proceeding. On Windows, check if the terminal is PowerShell or a bash-like shell (Git Bash, WSL, MSYS2). Run ONLY the commands matching their platform and shell.
 
 ## Step 1: Install the binary
 
-### Linux / macOS
+### Linux / macOS / Windows (Git Bash, WSL, MSYS2)
 
 // turbo
 ```bash
 curl -sSL https://raw.githubusercontent.com/benitogf/detritus/main/install.sh | sh
 ```
 
-### Windows (PowerShell, no WSL)
+### Windows (PowerShell only)
 
 // turbo
 ```powershell
@@ -36,14 +36,14 @@ Read the config file and verify the `"detritus"` entry exists with the correct b
 
 If `.windsurfrules` does not exist in the project root, download it:
 
-#### Linux / macOS
+#### Linux / macOS / Windows (Git Bash, WSL, MSYS2)
 
 // turbo
 ```bash
 [ ! -f .windsurfrules ] && curl -sSL https://raw.githubusercontent.com/benitogf/detritus/main/templates/.windsurfrules -o .windsurfrules
 ```
 
-#### Windows (PowerShell)
+#### Windows (PowerShell only)
 
 // turbo
 ```powershell

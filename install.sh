@@ -2,7 +2,6 @@
 set -e
 
 REPO="benitogf/detritus"
-INSTALL_DIR="/usr/local/bin"
 BINARY="detritus"
 
 # Detect OS
@@ -31,6 +30,18 @@ fi
 
 echo "Installing ${BINARY} ${VERSION} (${OS}/${ARCH})..."
 
+# Setup install directory
+if [ "$OS" = "windows" ]; then
+  # Convert Windows LOCALAPPDATA path for Git Bash
+  WIN_APPDATA=$(cygpath -u "$LOCALAPPDATA" 2>/dev/null || echo "$HOME/AppData/Local")
+  INSTALL_DIR="${WIN_APPDATA}/detritus"
+  BINARY_NAME="${BINARY}.exe"
+  mkdir -p "$INSTALL_DIR"
+else
+  INSTALL_DIR="/usr/local/bin"
+  BINARY_NAME="${BINARY}"
+fi
+
 # Download
 EXT="tar.gz"
 if [ "$OS" = "windows" ]; then
@@ -52,18 +63,29 @@ else
 fi
 
 # Install
-if [ -w "$INSTALL_DIR" ]; then
-  mv "${TMP}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
+if [ "$OS" = "windows" ]; then
+  cp "${TMP}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
 else
-  echo "Installing to ${INSTALL_DIR} (requires sudo)..."
-  sudo mv "${TMP}/${BINARY}" "${INSTALL_DIR}/${BINARY}"
+  if [ -w "$INSTALL_DIR" ]; then
+    mv "${TMP}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
+  else
+    echo "Installing to ${INSTALL_DIR} (requires sudo)..."
+    sudo mv "${TMP}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
+  fi
 fi
-chmod +x "${INSTALL_DIR}/${BINARY}"
+chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
 
-# Verify binary works
+# Verify binary works (timeout protects against old binaries without --version)
 echo "Verifying installation..."
-VERIFY=$("${INSTALL_DIR}/${BINARY}" --version 2>&1)
-echo "  ${VERIFY}"
+BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
+if command -v timeout >/dev/null 2>&1; then
+  VERIFY=$(timeout 5 "$BINARY_PATH" --version 2>&1) && echo "  ${VERIFY}" || echo "  Warning: --version timed out or failed. Install completed."
+elif command -v gtimeout >/dev/null 2>&1; then
+  VERIFY=$(gtimeout 5 "$BINARY_PATH" --version 2>&1) && echo "  ${VERIFY}" || echo "  Warning: --version timed out or failed. Install completed."
+else
+  # No timeout command available, skip verification
+  echo "  Skipping verification (no timeout command). Binary installed."
+fi
 
 echo ""
 echo "Installed ${BINARY} ${VERSION} to ${INSTALL_DIR}/${BINARY}"
@@ -71,7 +93,14 @@ echo "Installed ${BINARY} ${VERSION} to ${INSTALL_DIR}/${BINARY}"
 # Auto-configure mcp_config.json
 MCP_CONFIG="$HOME/.codeium/windsurf/mcp_config.json"
 MCP_DIR=$(dirname "$MCP_CONFIG")
-BINARY_PATH="${INSTALL_DIR}/${BINARY}"
+
+# For mcp_config.json, use forward-slash absolute path
+if [ "$OS" = "windows" ]; then
+  # Convert to Windows path with forward slashes for JSON
+  BINARY_PATH_JSON=$(cygpath -w "${INSTALL_DIR}/${BINARY_NAME}" 2>/dev/null | sed 's/\\/\//g' || echo "${INSTALL_DIR}/${BINARY_NAME}")
+else
+  BINARY_PATH_JSON="$BINARY_PATH"
+fi
 
 mkdir -p "$MCP_DIR"
 
@@ -82,7 +111,7 @@ import json, sys
 with open('$MCP_CONFIG', 'r') as f:
     config = json.load(f)
 config.setdefault('mcpServers', {})
-config['mcpServers']['detritus'] = {'command': '$BINARY_PATH', 'args': [], 'disabled': False}
+config['mcpServers']['detritus'] = {'command': '$BINARY_PATH_JSON', 'args': [], 'disabled': False}
 with open('$MCP_CONFIG', 'w') as f:
     json.dump(config, f, indent=2)
 print('Updated detritus in $MCP_CONFIG')
@@ -96,7 +125,7 @@ else
 {
   "mcpServers": {
     "detritus": {
-      "command": "${BINARY_PATH}",
+      "command": "${BINARY_PATH_JSON}",
       "args": [],
       "disabled": false
     }
@@ -108,6 +137,6 @@ fi
 
 echo ""
 echo "MCP config: ${MCP_CONFIG}"
-echo "Binary:     ${BINARY_PATH}"
+echo "Binary:     ${INSTALL_DIR}/${BINARY_NAME}"
 echo ""
 echo "Restart Windsurf to activate."

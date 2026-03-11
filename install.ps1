@@ -43,10 +43,23 @@ Remove-Item $tmpExtract -Recurse -Force -ErrorAction SilentlyContinue
 
 $binaryPath = "$installDir\$binary.exe"
 
-# Verify binary works
+# Verify binary works (timeout protects against old binaries without --version)
 Write-Host "Verifying installation..."
-$verifyOutput = & $binaryPath --version 2>&1
-Write-Host "  $verifyOutput"
+try {
+    $proc = Start-Process -FilePath $binaryPath -ArgumentList "--version" -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\detritus_ver.txt" -RedirectStandardError "$env:TEMP\detritus_ver_err.txt"
+    $exited = $proc.WaitForExit(5000)
+    if ($exited -and $proc.ExitCode -eq 0) {
+        $verifyOutput = (Get-Content "$env:TEMP\detritus_ver.txt" -Raw).Trim()
+        Write-Host "  $verifyOutput"
+    } else {
+        if (-not $exited) { $proc.Kill() }
+        Write-Host "  Warning: --version not supported (old binary?). Install completed but verify manually after restart."
+    }
+    Remove-Item "$env:TEMP\detritus_ver.txt" -Force -ErrorAction SilentlyContinue
+    Remove-Item "$env:TEMP\detritus_ver_err.txt" -Force -ErrorAction SilentlyContinue
+} catch {
+    Write-Host "  Warning: Could not verify binary. Install completed."
+}
 
 Write-Host ""
 Write-Host "Installed $binary $version to $binaryPath"
