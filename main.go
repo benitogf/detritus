@@ -6,18 +6,44 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+var version = "dev"
+
 //go:embed docs/*.md
 var docsFS embed.FS
 
 func main() {
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--version", "-v":
+			fmt.Println("detritus " + version)
+			return
+		case "--help", "-h":
+			fmt.Println("detritus " + version)
+			fmt.Println("MCP knowledge base server (stdio transport)")
+			fmt.Println("")
+			fmt.Println("Usage:")
+			fmt.Println("  detritus              Start MCP server (used by Windsurf)")
+			fmt.Println("  detritus --version    Print version")
+			fmt.Println("  detritus --help       Print this help")
+			fmt.Println("")
+			fmt.Println("This server communicates via stdio using the Model Context Protocol.")
+			fmt.Println("It is not meant to be run interactively — Windsurf spawns it automatically.")
+			return
+		default:
+			fmt.Fprintf(os.Stderr, "unknown flag: %s\nRun 'detritus --help' for usage.\n", os.Args[1])
+			os.Exit(1)
+		}
+	}
+
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "ooo-knowledge-base",
-		Version: "v1.0.0",
+		Version: version,
 	}, nil)
 
 	type ListArgs struct{}
@@ -57,6 +83,7 @@ func main() {
 			"AUTH: ooo-auth (JWT, github.com/benitogf/auth, auth.New, auth.NewJwtStore, tokenAuth.Verify/Router, /register, /authorize, /verify, Audit middleware)\n" +
 			"FRONTEND: ooo-client-js (JavaScript, React, npm, WebSocket client, ooo-client, subscribe, onmessage, publish, unpublish, JSON Patch, TypeScript, useOoo hook, HTTP fallback)\n" +
 			"TESTING: testing (index, decision table) | testing-go-backend-async (sync.WaitGroup, deterministic, wg.Add/Wait/Done, callbacks, no sleep, no require.Eventually, no channels, flaky tests) | " +
+			"async-events (general async principles, synchronization, race conditions, event-driven, never sleep, prove don't assume, fan-out, idempotent, observability) | " +
 			"testing-go-backend-mock (mocking, SendFunc, function injection, boundary, simple state toggle, connected.Store, onSend callback) | " +
 			"testing-go-backend-e2e (end-to-end, lifecycle, state transitions, phase pattern, consolidated test, ordering)\n" +
 			"GO: go-modern (Go 1.22+/1.24+, gopls modernize -fix, for range n, any, t.Context(), b.Loop(), slices, maps, clear, cmp.Or, errors.Join)\n" +

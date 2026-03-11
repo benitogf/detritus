@@ -60,15 +60,54 @@ else
 fi
 chmod +x "${INSTALL_DIR}/${BINARY}"
 
+# Verify binary works
+echo "Verifying installation..."
+VERIFY=$("${INSTALL_DIR}/${BINARY}" --version 2>&1)
+echo "  ${VERIFY}"
+
 echo ""
 echo "Installed ${BINARY} ${VERSION} to ${INSTALL_DIR}/${BINARY}"
+
+# Auto-configure mcp_config.json
+MCP_CONFIG="$HOME/.codeium/windsurf/mcp_config.json"
+MCP_DIR=$(dirname "$MCP_CONFIG")
+BINARY_PATH="${INSTALL_DIR}/${BINARY}"
+
+mkdir -p "$MCP_DIR"
+
+if [ -f "$MCP_CONFIG" ]; then
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "
+import json, sys
+with open('$MCP_CONFIG', 'r') as f:
+    config = json.load(f)
+config.setdefault('mcpServers', {})
+config['mcpServers']['detritus'] = {'command': '$BINARY_PATH', 'args': [], 'disabled': False}
+with open('$MCP_CONFIG', 'w') as f:
+    json.dump(config, f, indent=2)
+print('Updated detritus in $MCP_CONFIG')
+"
+  else
+    echo "python3 not found, please add manually to ${MCP_CONFIG}:"
+    echo '  "detritus": { "command": "'${BINARY_PATH}'", "args": [], "disabled": false }'
+  fi
+else
+  cat > "$MCP_CONFIG" <<EOF
+{
+  "mcpServers": {
+    "detritus": {
+      "command": "${BINARY_PATH}",
+      "args": [],
+      "disabled": false
+    }
+  }
+}
+EOF
+  echo "Created ${MCP_CONFIG}"
+fi
+
 echo ""
-echo "Add to your Windsurf MCP config (~/.codeium/windsurf/mcp_config.json):"
+echo "MCP config: ${MCP_CONFIG}"
+echo "Binary:     ${BINARY_PATH}"
 echo ""
-echo '  "detritus": {'
-echo '    "command": "'${INSTALL_DIR}/${BINARY}'",'
-echo '    "args": [],'
-echo '    "disabled": false'
-echo '  }'
-echo ""
-echo "Then restart Windsurf to activate."
+echo "Restart Windsurf to activate."

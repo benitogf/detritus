@@ -43,15 +43,59 @@ Remove-Item $tmpExtract -Recurse -Force -ErrorAction SilentlyContinue
 
 $binaryPath = "$installDir\$binary.exe"
 
+# Verify binary works
+Write-Host "Verifying installation..."
+$verifyOutput = & $binaryPath --version 2>&1
+Write-Host "  $verifyOutput"
+
 Write-Host ""
 Write-Host "Installed $binary $version to $binaryPath"
+
+# Auto-configure mcp_config.json
+$mcpConfigPath = Join-Path $env:USERPROFILE ".codeium\windsurf\mcp_config.json"
+$mcpConfigDir = Split-Path $mcpConfigPath
+$binaryPathForJson = $binaryPath -replace '\\', '/'
+
+if (-not (Test-Path $mcpConfigDir)) {
+    New-Item -ItemType Directory -Path $mcpConfigDir -Force | Out-Null
+}
+
+if (Test-Path $mcpConfigPath) {
+    $config = Get-Content $mcpConfigPath -Raw | ConvertFrom-Json
+    if (-not $config.mcpServers) {
+        $config | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{})
+    }
+    $detritusCfg = [PSCustomObject]@{
+        command  = $binaryPathForJson
+        args     = @()
+        disabled = $false
+    }
+    if ($config.mcpServers.detritus) {
+        $config.mcpServers.detritus = $detritusCfg
+        Write-Host "Updated existing detritus entry in $mcpConfigPath"
+    } else {
+        $config.mcpServers | Add-Member -NotePropertyName "detritus" -NotePropertyValue $detritusCfg
+        Write-Host "Added detritus to $mcpConfigPath"
+    }
+    $config | ConvertTo-Json -Depth 10 | Set-Content $mcpConfigPath -Encoding UTF8
+} else {
+    $config = [PSCustomObject]@{
+        mcpServers = [PSCustomObject]@{
+            detritus = [PSCustomObject]@{
+                command  = $binaryPathForJson
+                args     = @()
+                disabled = $false
+            }
+        }
+    }
+    $config | ConvertTo-Json -Depth 10 | Set-Content $mcpConfigPath -Encoding UTF8
+    Write-Host "Created $mcpConfigPath"
+}
+
 Write-Host ""
-Write-Host "Add to your Windsurf MCP config (~/.codeium/windsurf/mcp_config.json):"
+Write-Host "MCP config: $mcpConfigPath"
+Write-Host "Binary:     $binaryPath"
 Write-Host ""
-Write-Host "  `"detritus`": {"
-Write-Host "    `"command`": `"$($binaryPath -replace '\\', '/')`","
-Write-Host '    "args": [],'
-Write-Host '    "disabled": false'
-Write-Host "  }"
+Write-Host "Restart Windsurf (File > Exit, then reopen) to activate."
 Write-Host ""
-Write-Host "Then restart Windsurf to activate."
+Write-Host "To verify after restart, ask Cascade: 'list available kb docs'"

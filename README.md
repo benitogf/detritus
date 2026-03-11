@@ -56,21 +56,12 @@ Restart Windsurf to activate.
 
 ## Project Files
 
-The setup also installs project-level files (`.windsurfrules` and workflow templates) that enable Windsurf to auto-discover detritus capabilities. Run from your project root:
+The `/setup` workflow installs project-level files (`.windsurfrules` and workflow aliases) that enable Windsurf to auto-discover detritus capabilities.
 
-### Linux / macOS
+- **`.windsurfrules`** — downloaded from [templates/.windsurfrules](templates/.windsurfrules) if it doesn't exist
+- **Workflow aliases** — generated dynamically from `kb_list()` output. Each MCP document gets a `.windsurf/workflows/{name}.md` file that delegates to `kb_get`. New documents are automatically picked up on re-run — no manifest file needed.
 
-```bash
-mkdir -p .windsurf/workflows && [ ! -f .windsurfrules ] && curl -sSL https://raw.githubusercontent.com/benitogf/detritus/main/templates/.windsurfrules -o .windsurfrules; for f in setup.md _truthseeker.md plan.md scaffold-simple-service.md; do [ ! -f ".windsurf/workflows/$f" ] && curl -sSL "https://raw.githubusercontent.com/benitogf/detritus/main/templates/workflows/$f" -o ".windsurf/workflows/$f"; done
-```
-
-### Windows (PowerShell)
-
-```powershell
-New-Item -ItemType Directory -Path .windsurf/workflows -Force | Out-Null; if (-not (Test-Path .windsurfrules)) { irm https://raw.githubusercontent.com/benitogf/detritus/main/templates/.windsurfrules | Set-Content .windsurfrules -Encoding UTF8 }; @('setup.md','_truthseeker.md','plan.md','scaffold-simple-service.md') | ForEach-Object { if (-not (Test-Path ".windsurf/workflows/$_")) { irm "https://raw.githubusercontent.com/benitogf/detritus/main/templates/workflows/$_" | Set-Content ".windsurf/workflows/$_" -Encoding UTF8 } }
-```
-
-These files won't overwrite existing ones, so repo-specific customizations are preserved.
+Run `/setup` in Windsurf to install everything, or re-run it to pick up new documents after an update.
 
 ## Update
 
@@ -105,6 +96,7 @@ The server exposes 3 MCP tools:
 - **testing-go-backend-async** — Deterministic async testing with WaitGroup
 - **testing-go-backend-mock** — Minimal mocking at boundaries
 - **testing-go-backend-e2e** — End-to-end lifecycle tests
+- **async-events** — General async event principles (language-agnostic)
 
 ### Patterns
 - **go-modern** — Modern Go idioms (1.22+/1.24+) with gopls modernize
@@ -119,6 +111,25 @@ The server exposes 3 MCP tools:
 All documents are embedded in the binary at compile time (`embed.FS`). No external files or runtime dependencies.
 
 The `kb_get` tool description contains keyword-packed summaries of every document. When the AI sees relevant keywords in your prompt, it automatically calls `kb_get` to fetch the full document — no manual invocation needed.
+
+## Troubleshooting
+
+Verify the binary:
+
+```bash
+detritus --version
+```
+
+On Windows:
+```powershell
+& "$env:LOCALAPPDATA\detritus\detritus.exe" --version
+```
+
+If Windsurf doesn't load the MCP server after restart, check:
+1. Config path: `~/.codeium/windsurf/mcp_config.json`
+2. Binary path uses **forward slashes** (even on Windows)
+3. **Full restart** required (File > Exit, not just close window)
+4. On Windows, antivirus may block unsigned executables
 
 ## Development
 
