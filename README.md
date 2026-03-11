@@ -4,15 +4,27 @@ MCP (Model Context Protocol) knowledge base server. Exposes coding knowledge doc
 
 ## Install
 
+### Linux / macOS
+
 ```bash
 curl -sSL https://raw.githubusercontent.com/benitogf/detritus/main/install.sh | sh
 ```
 
-This downloads the latest binary for your platform and installs it to `/usr/local/bin/detritus`.
+Installs to `/usr/local/bin/detritus`.
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/benitogf/detritus/main/install.ps1 | iex
+```
+
+Installs to `%LOCALAPPDATA%\detritus\detritus.exe`.
 
 ## Configure Windsurf
 
 Add to `~/.codeium/windsurf/mcp_config.json`:
+
+### Linux / macOS
 
 ```json
 {
@@ -26,15 +38,25 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 }
 ```
 
+### Windows
+
+```json
+{
+  "mcpServers": {
+    "detritus": {
+      "command": "C:/Users/YOUR_USER/AppData/Local/detritus/detritus.exe",
+      "args": [],
+      "disabled": false
+    }
+  }
+}
+```
+
 Restart Windsurf to activate.
 
 ## Update
 
-Re-run the install script to get the latest version:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/benitogf/detritus/main/install.sh | sh
-```
+Re-run the install command for your platform.
 
 ## Tools
 
