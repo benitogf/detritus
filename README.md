@@ -54,6 +54,24 @@ Add to `~/.codeium/windsurf/mcp_config.json`:
 
 Restart Windsurf to activate.
 
+## Project Files
+
+The setup also installs project-level files (`.windsurfrules` and workflow templates) that enable Windsurf to auto-discover detritus capabilities. Run from your project root:
+
+### Linux / macOS
+
+```bash
+mkdir -p .windsurf/workflows && [ ! -f .windsurfrules ] && curl -sSL https://raw.githubusercontent.com/benitogf/detritus/main/templates/.windsurfrules -o .windsurfrules; for f in setup.md _truthseeker.md plan.md scaffold-simple-service.md; do [ ! -f ".windsurf/workflows/$f" ] && curl -sSL "https://raw.githubusercontent.com/benitogf/detritus/main/templates/workflows/$f" -o ".windsurf/workflows/$f"; done
+```
+
+### Windows (PowerShell)
+
+```powershell
+New-Item -ItemType Directory -Path .windsurf/workflows -Force | Out-Null; if (-not (Test-Path .windsurfrules)) { irm https://raw.githubusercontent.com/benitogf/detritus/main/templates/.windsurfrules | Set-Content .windsurfrules -Encoding UTF8 }; @('setup.md','_truthseeker.md','plan.md','scaffold-simple-service.md') | ForEach-Object { if (-not (Test-Path ".windsurf/workflows/$_")) { irm "https://raw.githubusercontent.com/benitogf/detritus/main/templates/workflows/$_" | Set-Content ".windsurf/workflows/$_" -Encoding UTF8 } }
+```
+
+These files won't overwrite existing ones, so repo-specific customizations are preserved.
+
 ## Update
 
 Re-run the install command for your platform.

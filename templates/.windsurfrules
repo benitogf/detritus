@@ -1,0 +1,21 @@
+# Project Rules
+
+## First-Time Setup
+
+This project uses the **detritus MCP server** for knowledge base access. If the `kb_get`, `kb_list`, `kb_search` tools are not available, run the `/setup` workflow to install it.
+
+## Foundational Principles
+
+Fetch kb_get(name="_truthseeker") at conversation start when the detritus MCP server is available. Core mandate: push back with evidence, question assumptions, prove before acting, radical honesty even when uncomfortable. Never ask permission to challenge — if something appears wrong or unproven, say so directly.
+
+## Knowledge Base
+
+General knowledge (ooo ecosystem, testing, Go patterns) is served by the **detritus MCP server**. The MCP tools `kb_get`, `kb_list`, and `kb_search` are auto-invoked based on keywords in prompts.
+
+## Workflows
+
+| Command | Description |
+|---------|-------------|
+| `/setup` | Install or update detritus MCP server |
+| `/plan` | Requirements analysis (delegates to MCP) |
+| `/scaffold-simple-service` | Scaffold new ooo+ko service (delegates to MCP) |
