@@ -2,15 +2,23 @@
 
 MCP (Model Context Protocol) knowledge base server. Exposes coding knowledge documents as tools that AI assistants can query on-demand.
 
-## Install
+## Quick Install (Windsurf)
 
-### Linux / macOS
+Paste this into Windsurf Cascade:
+
+> Follow the setup instructions at https://raw.githubusercontent.com/benitogf/detritus/main/templates/workflows/setup.md
+
+This handles everything: binary install, MCP config, and project workflow files. In multi-root workspaces, it will ask which project should receive the workflow files.
+
+To update, paste the same prompt again or run `/setup` if already installed.
+
+## Manual Install
+
+### Linux / macOS / Windows (Git Bash)
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/benitogf/detritus/main/install.sh | sh
 ```
-
-Installs to `/usr/local/bin/detritus`.
 
 ### Windows (PowerShell)
 
@@ -18,54 +26,7 @@ Installs to `/usr/local/bin/detritus`.
 irm https://raw.githubusercontent.com/benitogf/detritus/main/install.ps1 | iex
 ```
 
-Installs to `%LOCALAPPDATA%\detritus\detritus.exe`.
-
-## Configure Windsurf
-
-Add to `~/.codeium/windsurf/mcp_config.json`:
-
-### Linux / macOS
-
-```json
-{
-  "mcpServers": {
-    "detritus": {
-      "command": "/usr/local/bin/detritus",
-      "args": [],
-      "disabled": false
-    }
-  }
-}
-```
-
-### Windows
-
-```json
-{
-  "mcpServers": {
-    "detritus": {
-      "command": "C:/Users/YOUR_USER/AppData/Local/detritus/detritus.exe",
-      "args": [],
-      "disabled": false
-    }
-  }
-}
-```
-
-Restart Windsurf to activate.
-
-## Project Files
-
-The `/setup` workflow installs project-level files (`.windsurfrules` and workflow aliases) that enable Windsurf to auto-discover detritus capabilities.
-
-- **`.windsurfrules`** — downloaded from [templates/.windsurfrules](templates/.windsurfrules) if it doesn't exist
-- **Workflow aliases** — generated dynamically from `kb_list()` output. Each MCP document gets a `.windsurf/workflows/{name}.md` file that delegates to `kb_get`. New documents are automatically picked up on re-run — no manifest file needed.
-
-Run `/setup` in Windsurf to install everything, or re-run it to pick up new documents after an update.
-
-## Update
-
-Re-run the install command for your platform.
+The install script downloads the binary and configures `~/.codeium/windsurf/mcp_config.json` automatically. Restart Windsurf after install.
 
 ## Tools
 

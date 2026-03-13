@@ -30,11 +30,20 @@ Read the config file and verify the `"detritus"` entry exists with the correct b
 - **Linux/macOS**: `/usr/local/bin/detritus`
 - **Windows**: `C:/Users/USERNAME/AppData/Local/detritus/detritus.exe` (forward slashes)
 
-## Step 3: Install project files
+## Step 3: Select target project
 
-### 3a. Download `.windsurfrules`
+Check the workspace roots (available from IDE metadata). **Install project files only to the root the user selects.**
 
-If `.windsurfrules` does not exist in the project root, download it:
+- **Single root**: use it directly, no prompt needed.
+- **Multiple roots**: list all workspace roots and ask the user which one should receive the MCP workflow files. Install to that root only.
+
+Let `TARGET` be the selected root for the steps below.
+
+## Step 4: Install project files to TARGET
+
+### 4a. Download `.windsurfrules`
+
+If `TARGET/.windsurfrules` does not exist, download it:
 
 #### Linux / macOS / Windows (Git Bash, WSL, MSYS2)
 
@@ -50,9 +59,24 @@ If `.windsurfrules` does not exist in the project root, download it:
 if (-not (Test-Path .windsurfrules)) { irm https://raw.githubusercontent.com/benitogf/detritus/main/templates/.windsurfrules | Set-Content .windsurfrules -Encoding UTF8 }
 ```
 
-### 3b. Create workflow aliases from MCP
+### 4b. Create the setup workflow bootstrapper
 
-Call `kb_list()` to get all available document names. For each document, create a workflow alias file at `.windsurf/workflows/{name}.md` **only if it doesn't already exist**. Skip documents that start with `_` (e.g., `_truthseeker` — handled by `.windsurfrules`).
+Create `TARGET/.windsurf/workflows/setup.md` if it doesn't exist:
+
+```markdown
+---
+description: Install or update detritus MCP knowledge base server
+---
+
+Fetch the latest setup instructions from:
+https://raw.githubusercontent.com/benitogf/detritus/main/templates/workflows/setup.md
+
+Read that URL and execute all the steps in the fetched document.
+```
+
+### 4c. Create workflow aliases from MCP
+
+Call `kb_list()` to get all available document names. For each document, create a workflow alias file at `TARGET/.windsurf/workflows/{name}.md` **only if it doesn't already exist**. Skip documents that start with `_` (e.g., `_truthseeker` — handled by `.windsurfrules`).
 
 Each workflow alias file should follow this exact format:
 
@@ -64,27 +88,17 @@ description: {description from kb_list}
 Call kb_get(name="{name}") and follow the instructions in the returned document.
 ```
 
-Also create `.windsurf/workflows/setup.md` pointing to this workflow if it doesn't exist:
+**If `kb_list` is not available** (first-time install — MCP not loaded yet), skip this step and tell the user to restart Windsurf then re-run `/setup` to generate the workflow aliases.
 
-```markdown
----
-description: Install or update detritus MCP knowledge base server
----
-
-Call kb_get(name="setup") — but since setup is this workflow itself, just follow these steps directly.
-```
-
-**If `kb_list` is not available** (first-time install — MCP not loaded yet), skip this step and tell the user to re-run `/setup` after restart to generate the workflow aliases.
-
-## Step 4: Restart Windsurf
+## Step 5: Restart Windsurf
 
 Tell the user to **fully close Windsurf** (File > Exit, not just close the window) and reopen it. After restart, the `kb_list`, `kb_get`, and `kb_search` tools will be available.
 
-If this was a first-time install, remind the user to run `/setup` again after restart to generate workflow aliases (Step 3b).
+If this was a first-time install, remind the user to run `/setup` again after restart to generate workflow aliases (Step 4c).
 
 ## Update
 
-To update to the latest version, re-run all steps. Step 3b will add workflow aliases for any new documents added since the last run.
+To update to the latest version, re-run all steps. Step 4c will add workflow aliases for any new documents added since the last run.
 
 ## Troubleshooting
 
