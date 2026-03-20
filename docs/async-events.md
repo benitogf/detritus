@@ -15,7 +15,7 @@ triggers:
 when: Working with async events, callbacks, subscriptions, event-driven architectures, or debugging race conditions
 related:
   - testing-go-backend-async
-  - _truthseeker
+  - truthseeker
 ---
 
 # Async Events: General Principles
@@ -196,4 +196,4 @@ When an entity moves through multiple async states (connecting → connected →
 ## Related
 
 - `testing-go-backend-async` — Go-specific implementation of these principles using `sync.WaitGroup`
-- `_truthseeker` — "Prove don't assume" as a foundational principle
+- `truthseeker` — "Prove don't assume" as a foundational principle

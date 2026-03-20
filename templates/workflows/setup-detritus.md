@@ -80,10 +80,8 @@ Call `kb_list()` to get all available document names. For each document, create 
 
 Deriving the alias filename from the document name:
 
-- **Underscore prefix**: strip it (e.g., `_truthseeker` → `truthseeker.md`)
 - **Subdirectory path**: use only the last segment (e.g., `scaffold/create` → `create.md`)
-- **Both rules are additive** — apply all that match
-- The `kb_get` call inside must always use the **full original name** (e.g., `scaffold/create`, `_truthseeker`)
+- The `kb_get` call inside must always use the **full original name** (e.g., `scaffold/create`)
 
 Each workflow alias file should follow this exact format:
 
@@ -101,7 +99,7 @@ Call kb_get(name="{full_name}") and follow the instructions in the returned docu
 
 Previous versions of detritus installed workflow aliases directly into `TARGET/.windsurf/workflows/`. Check if any detritus-created alias files exist there (outside the `detritus/` subfolder).
 
-To identify detritus-created files: call `kb_list()` to get all document names. Any `.md` file in `TARGET/.windsurf/workflows/` whose name (without `.md`) matches a document name or alias name from `kb_list()` — or is `setup` or `setup-detritus` — is a detritus-created file. Also check for these known old names: `_truthseeker.md`, `truthseeker.md`, `scaffold-simple-service.md`, `create-app.md`, `create-service.md`, `setup.md`.
+To identify detritus-created files: call `kb_list()` to get all document names. Any `.md` file in `TARGET/.windsurf/workflows/` whose name (without `.md`) matches a document name or alias name from `kb_list()` — or is `setup` or `setup-detritus` — is a detritus-created file. Also check for these known old names: `_truthseeker.md`, `scaffold-simple-service.md`, `create-app.md`, `create-service.md`, `setup.md`.
 
 Also clean up old alias files inside `TARGET/.windsurf/workflows/detritus/` that no longer match any current document (e.g., `scaffold-simple-service.md`).
 

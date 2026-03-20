@@ -1,5 +1,22 @@
 ---
 description: Foundational principles - ALWAYS ACTIVE, do not invoke
+category: principles
+triggers:
+  - pushback
+  - evidence
+  - assumption
+  - prove
+  - verify
+  - question
+  - bias
+  - honesty
+  - challenge
+when: Always active via .windsurfrules. Manual invocation forces elevated rigor on the current task.
+related:
+  - grow
+  - testing-go-backend-async
+  - testing-go-backend-mock
+  - async-events
 ---
 
 # Truthseeker Principles

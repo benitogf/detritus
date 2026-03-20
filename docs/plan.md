@@ -10,7 +10,9 @@ triggers:
   - specification
   - feature request
 when: User provides requirements, feature request, or asks for analysis/planning before implementation
-related: []
+related:
+  - grow
+  - truthseeker
 ---
 
 # Requirement Analysis Workflow

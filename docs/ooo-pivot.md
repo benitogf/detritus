@@ -19,7 +19,6 @@ triggers:
 when: Distributed systems, multi-node setup, cluster configuration, sync issues between instances
 related:
   - ooo-package
-  - ooo-ko
 ---
 
 # Pivot Package Reference

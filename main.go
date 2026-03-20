@@ -89,8 +89,10 @@ func main() {
 			"testing-go-backend-mock (mocking, SendFunc, function injection, boundary, simple state toggle, connected.Store, onSend callback) | " +
 			"testing-go-backend-e2e (end-to-end, lifecycle, state transitions, phase pattern, consolidated test, ordering)\n" +
 			"GO: go-modern (Go 1.22+/1.24+, gopls modernize -fix, for range n, any, t.Context(), b.Loop(), slices, maps, clear, cmp.Or, errors.Join)\n" +
-			"PRINCIPLES: _truthseeker (pushback, evidence, question assumptions, prove before acting, radical honesty, intellectual humility, confirmation bias)\n" +
-			"WORKFLOW: plan (requirements analysis, feedback, design, specification, implementation plan, insights, questions)",
+			"PRINCIPLES: truthseeker (pushback, evidence, question assumptions, prove before acting, radical honesty, intellectual humility, confirmation bias)\n" +
+			"WORKFLOW: plan (requirements analysis, feedback, design, specification, implementation plan, insights, questions)\n" +
+			"META: grow (learn from corrections, conversation review, missed guidance, rule violation, feedback loop, distill fixes into KB) | " +
+			"optimize (re-index, optimize docs, agent retrieval, detection efficiency, keyword density, anti-patterns, triggers audit)",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args GetArgs) (*mcp.CallToolResult, any, error) {
 		content, err := fs.ReadFile(docsFS, "docs/"+args.Name+".md")
 		if err != nil {

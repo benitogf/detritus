@@ -21,9 +21,10 @@ triggers:
   - CRUD
 when: Setting up ooo servers, adding filters, CRUD operations, WebSocket subscriptions, custom endpoints
 related:
-  - ooo-ko
   - ooo-pivot
   - ooo-auth
+  - ooo-nopog
+  - ooo-client-js
 ---
 
 # ooo Package Reference

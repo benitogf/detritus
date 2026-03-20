@@ -6,7 +6,7 @@ This project uses the **detritus MCP server** for knowledge base access. If the 
 
 ## Foundational Principles
 
-Fetch kb_get(name="_truthseeker") at conversation start when the detritus MCP server is available. Core mandate: push back with evidence, question assumptions, prove before acting, radical honesty even when uncomfortable. Never ask permission to challenge — if something appears wrong or unproven, say so directly.
+Fetch kb_get(name="truthseeker") at conversation start when the detritus MCP server is available. Core mandate: push back with evidence, question assumptions, prove before acting, radical honesty even when uncomfortable. Never ask permission to challenge — if something appears wrong or unproven, say so directly.
 
 ## Knowledge Base
 
@@ -20,3 +20,5 @@ General knowledge (ooo ecosystem, testing, Go patterns) is served by the **detri
 | `/truthseeker` | Foundational principles - ALWAYS ACTIVE |
 | `/plan` | Requirements analysis (delegates to MCP) |
 | `/create` | Scaffold a new app - backend, full-stack, or desktop (delegates to MCP) |
+| `/grow` | Learn from conversation corrections - distill fixes into KB updates |
+| `/optimize` | Re-index and optimize KB docs for agent retrieval efficiency |

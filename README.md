@@ -65,7 +65,7 @@ The server exposes 3 MCP tools:
 - **plan** — Requirements analysis workflow
 
 ### Principles
-- **_truthseeker** — Foundational principles: evidence-based reasoning, pushback, intellectual humility
+- **truthseeker** — Foundational principles: evidence-based reasoning, pushback, intellectual humility
 
 ## How It Works
 
