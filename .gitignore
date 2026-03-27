@@ -1,3 +1,5 @@
 detritus
 ooo-kb
 dist/
+models/
+generated/search.bleve/

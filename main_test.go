@@ -134,6 +134,26 @@ func TestMCPServer(t *testing.T) {
 		t.Fatal("expected error for nonexistent doc")
 	}
 
+	// Test: kb_get with section parameter
+	sectionResult, err := session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "kb_get",
+		Arguments: map[string]any{"name": "ooo/package", "section": "Server Setup"},
+	})
+	if err != nil {
+		t.Fatal("kb_get section:", err)
+	}
+	if sectionResult.IsError {
+		t.Fatal("kb_get section returned error")
+	}
+	sectionText := sectionResult.Content[0].(*mcp.TextContent).Text
+	if len(sectionText) == 0 {
+		t.Fatal("kb_get section returned empty")
+	}
+	if len(sectionText) >= len(getText) {
+		t.Fatalf("section should be shorter than full doc (%d >= %d)", len(sectionText), len(getText))
+	}
+	t.Log("kb_get section length:", len(sectionText))
+
 	// Test: kb_search
 	searchResult, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      "kb_search",

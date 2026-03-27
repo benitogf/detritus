@@ -20,6 +20,15 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Cache ONNX model
+        uses: actions/cache@v4
+        with:
+          path: models/
+          key: onnx-model-all-MiniLM-L6-v2
+
+      - name: Generate embeddings and index
+        run: go generate ./...
+
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: "~> v2"
