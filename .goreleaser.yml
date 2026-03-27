@@ -1,8 +1,5 @@
 version: 2
 
-git:
-  ignore_dirty: true
-
 builds:
   - binary: detritus
     env:
