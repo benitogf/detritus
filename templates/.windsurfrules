@@ -24,3 +24,5 @@ General knowledge (ooo ecosystem, testing, Go patterns) is served by the **detri
 | `/create` | Scaffold a new app - backend, full-stack, or desktop (delegates to MCP) |
 | `/grow` | Learn from conversation corrections - distill fixes into KB updates |
 | `/optimize` | Re-index and optimize KB docs for agent retrieval efficiency |
+| `/line-of-sight` | Line-of-sight code style - flat code, early returns |
+| `/research-first` | Exhaust available resources before asking the user |

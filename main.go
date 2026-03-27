@@ -92,7 +92,8 @@ func main() {
 			"CORE: ooo/package (ooo.Server, filters: ReadObjectFilter/ReadListFilter/WriteFilter/AfterWriteFilter/DeleteFilter/OpenFilter/LimitFilter/NoopObjectFilter/NoopListFilter/NoopFilter, " +
 			"CRUD: ooo.Get/ooo.GetList/ooo.Set/ooo.Push/ooo.Delete/ooo.Patch, meta.Object, WebSocket client.Subscribe/client.SubscribeList/SubscribeEvents/SubscribeListEvents, " +
 			"custom server.Endpoint/EndpointConfig, remote io.RemoteGet/io.RemoteSet/io.RemotePush/io.RemoteDelete/io.RemotePatch/RemoteConfig, REST API, glob paths, " +
-			"storage.Database, ko.EmbeddedStorage, storage.LayeredConfig, storage.NewMemoryLayer, storage.WatchStorageNoop, layered storage, NoopHook, NoopNotify, NoBroadcastKeys, Static)\n" +
+			"storage.Database, ko.EmbeddedStorage, storage.LayeredConfig, storage.NewMemoryLayer, storage.WatchStorageNoop, layered storage, NoopHook, NoopNotify, NoBroadcastKeys, Static) | " +
+			"ooo/filters-internals (filter bypass, direct storage, store.Set, storage.Set, LimitFilter internals, AfterWrite, WriteFilter enforcement, filters gate writes, filters read-side)\n" +
 			"HISTORY: ooo/nopog (nopog.Storage, long-term historical data, millions of records, time-range queries, GetN, GetNRange, KeysRange, analytics, logs, audit trail)\n" +
 			"SYNC: ooo/pivot (clustering, distributed, AP system, multi-instance, pivot.Config, pivot.Setup, pivot.GetInstance, pivot.Key, ClusterURL, NodesKey, leader/follower, node discovery, Attach)\n" +
 			"AUTH: ooo/auth (JWT, github.com/benitogf/auth, auth.New, auth.NewJwtStore, tokenAuth.Verify/Router, /register, /authorize, /verify, Audit middleware, Bearer token)\n" +
@@ -103,13 +104,15 @@ func main() {
 			"PATTERNS: patterns/async-events (general async principles, synchronization, race conditions, event-driven, never sleep, prove don't assume, fan-out, idempotent, observability) | " +
 			"patterns/go-modern (Go 1.22+/1.24+, gopls modernize -fix, for range n, any, t.Context(), b.Loop(), slices, maps, clear, cmp.Or, errors.Join) | " +
 			"patterns/coding-style (naming, rename, self-documenting, extract function, readability, side effects in name, refactor) | " +
-			"patterns/state-management (state mutation, wasted write, double write, single writer, consolidate, counter, increment, pending flag, deferred action, schedule)\n" +
+			"patterns/state-management (state mutation, wasted write, double write, single writer, consolidate, counter, increment, pending flag, deferred action, schedule) | " +
+			"patterns/line-of-sight (error handling, nested if, happy path, line of sight, early return, guard clause, nesting, flat code, if err == nil, err != nil)\n" +
 			"PLANNING: plan/analyze (requirements analysis, feedback, design, specification, implementation plan, insights, questions) | " +
 			"plan/export (export, planning document, generate document, PDF, architecture document, design document) | " +
 			"plan/diagrams (mermaid, diagram, flowchart, sequence diagram, ER diagram, state diagram, class diagram, gantt, architecture, data model, visual)\n" +
 			"PRINCIPLES: meta/truthseeker (pushback, evidence, question assumptions, prove before acting, radical honesty, intellectual humility, confirmation bias)\n" +
 			"META: meta/grow (learn from corrections, conversation review, missed guidance, rule violation, feedback loop, distill fixes into KB) | " +
-			"meta/optimize (re-index, optimize docs, agent retrieval, detection efficiency, keyword density, anti-patterns, triggers audit)",
+			"meta/optimize (re-index, optimize docs, agent retrieval, detection efficiency, keyword density, anti-patterns, triggers audit) | " +
+			"meta/research-first (uncertain about API, how does this work, is this true, does this work, can you verify, asking user to confirm)",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args GetArgs) (*mcp.CallToolResult, any, error) {
 		content, err := fs.ReadFile(docsFS, "docs/"+args.Name+".md")
 		if err != nil {

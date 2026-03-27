@@ -83,35 +83,41 @@ Run `detritus --list` to get all available document names and descriptions direc
 
 The output is tab-separated: `name<TAB>description`, one document per line. Subdirectory docs use `/` in the name (e.g., `scaffold/create`).
 
-For each document, create or update a workflow alias file at `TARGET/.windsurf/workflows/detritus/{alias}.md`:
+For each document, create or update a workflow alias file. Aliases are organized into **subfolders matching the doc group** (first path segment), mirroring the `docs/` layout in the detritus repo.
 
 - **Create** the file if it doesn't exist
-- **Update** the description in the frontmatter if it differs from the binary's output
+- **Update** if the file exists but the description or the `kb_get(name="...")` call inside differs from the expected values
 
-Deriving the alias filename from the document name:
+#### Deriving the alias path from the document name
 
-- **Single segment** (e.g., `diagrams`): use as-is → `diagrams.md`
-- **Two segments** where first is the group:
-  - If the last segment is `index`, use the group name (e.g., `testing/index` → `testing.md`)
-  - If the last segment is unique enough, use just the last segment (e.g., `scaffold/create` → `create.md`)
-  - If the last segment needs the group for context, join with `-` (e.g., `plan/analyze` → `plan.md`, `plan/export` → `plan-export.md`, `testing/go-backend-async` → `testing-go-backend-async.md`)
-- The `kb_get` call inside must always use the **full original name** (e.g., `scaffold/create`, `plan/analyze`)
+The alias file path is: `TARGET/.windsurf/workflows/detritus/{group}/{alias}.md`
 
-Special alias mappings (hardcoded):
+Where `{group}` is the first path segment of the doc name, and `{alias}` is the filename (Windsurf uses only the filename as the slash command, ignoring parent directories).
 
-| Doc name | Alias file | Workflow command |
-|----------|-----------|-----------------|
-| `plan/analyze` | `plan.md` | `/plan` |
-| `plan/export` | `plan-export.md` | `/plan-export` |
-| `plan/diagrams` | `diagrams.md` | `/diagrams` |
-| `testing/index` | `testing.md` | `/testing` |
-| `scaffold/create` | `create.md` | `/create` |
-| `meta/truthseeker` | `truthseeker.md` | `/truthseeker` |
-| `meta/grow` | `grow.md` | `/grow` |
-| `meta/optimize` | `optimize.md` | `/optimize` |
-| `ooo/*` | `ooo-{name}.md` | `/ooo-{name}` |
-| `testing/go-backend-*` | `testing-go-backend-{name}.md` | `/testing-go-backend-{name}` |
-| `patterns/*` | `{name}.md` | `/{name}` |
+Alias filename rules:
+
+| Doc name | Alias path (under `detritus/`) | Slash command |
+|----------|-------------------------------|---------------|
+| `plan/analyze` | `plan/plan.md` | `/plan` |
+| `plan/export` | `plan/plan-export.md` | `/plan-export` |
+| `plan/diagrams` | `plan/diagrams.md` | `/diagrams` |
+| `testing/index` | `testing/testing.md` | `/testing` |
+| `testing/go-backend-*` | `testing/testing-go-backend-{name}.md` | `/testing-go-backend-{name}` |
+| `scaffold/create` | `scaffold/create.md` | `/create` |
+| `meta/truthseeker` | `meta/truthseeker.md` | `/truthseeker` |
+| `meta/grow` | `meta/grow.md` | `/grow` |
+| `meta/optimize` | `meta/optimize.md` | `/optimize` |
+| `meta/research-first` | `meta/research-first.md` | `/research-first` |
+| `ooo/*` | `ooo/ooo-{name}.md` | `/ooo-{name}` |
+| `patterns/*` | `patterns/{name}.md` | `/{name}` |
+
+General rules:
+- **`ooo/*`**: prefix filename with `ooo-` to avoid ambiguous commands (e.g., `ooo/package` → `ooo/ooo-package.md` → `/ooo-package`)
+- **`testing/go-backend-*`**: prefix filename with `testing-` (e.g., `testing/go-backend-async` → `testing/testing-go-backend-async.md`)
+- **`testing/index`**: use group name as filename (e.g., `testing/testing.md` → `/testing`)
+- **`plan/analyze`**: use group name as filename (e.g., `plan/plan.md` → `/plan`)
+- **All others**: use the last segment as filename (e.g., `meta/grow` → `meta/grow.md`, `patterns/coding-style` → `patterns/coding-style.md`)
+- The `kb_get` call inside must always use the **full original doc name** (e.g., `scaffold/create`, `plan/analyze`)
 
 Each workflow alias file should follow this exact format:
 
@@ -125,17 +131,25 @@ Call kb_get(name="{full_name}") and follow the instructions in the returned docu
 
 **If `detritus --list` fails** (binary too old — pre-v1.5.0), fall back to `kb_list()` via MCP. If MCP is also unavailable (first-time install), tell the user to restart Windsurf and re-run `/setup-detritus`.
 
-### 4d. Clean up old flat installations
+### 4d. Clean up old installations
 
-Previous versions of detritus installed workflow aliases directly into `TARGET/.windsurf/workflows/`. Check if any detritus-created alias files exist there (outside the `detritus/` subfolder).
+Clean up aliases from previous detritus versions. There are three categories:
 
-To identify detritus-created files: use the document names from `detritus --list` (or `kb_list()` as fallback). Any `.md` file in `TARGET/.windsurf/workflows/` whose name (without `.md`) matches a document name or alias name — or is `setup` or `setup-detritus` — is a detritus-created file. Also check for these known old names: `_truthseeker.md`, `scaffold-simple-service.md`, `create-app.md`, `create-service.md`, `setup.md`, `ooo-package.md`, `ooo-auth.md`, `ooo-client-js.md`, `ooo-nopog.md`, `ooo-pivot.md`, `async-events.md`, `go-modern.md`, `coding-style.md`, `state-management.md`.
+#### 1. Flat aliases in `TARGET/.windsurf/workflows/` (outside `detritus/`)
 
-Also clean up old alias files inside `TARGET/.windsurf/workflows/detritus/` that no longer match any current document. Known old flat names that were restructured into folders: `ooo-package.md`, `ooo-auth.md`, `ooo-client-js.md`, `ooo-nopog.md`, `ooo-pivot.md`, `testing-go-backend-async.md`, `testing-go-backend-e2e.md`, `testing-go-backend-mock.md`, `async-events.md`, `go-modern.md`, `coding-style.md`, `state-management.md`, `plan.md` (replaced by `plan.md` pointing to `plan/analyze`), `scaffold-simple-service.md`.
+Very old versions installed aliases directly in the workflows root. Delete any `.md` file there whose name matches a known detritus alias or old name: `_truthseeker.md`, `scaffold-simple-service.md`, `create-app.md`, `create-service.md`, `setup.md`, `setup-detritus.md`, `ooo-package.md`, `ooo-auth.md`, `ooo-client-js.md`, `ooo-nopog.md`, `ooo-pivot.md`, `async-events.md`, `go-modern.md`, `coding-style.md`, `state-management.md`, `truthseeker.md`, `plan.md`, `testing.md`, `create.md`, `grow.md`, `optimize.md`.
 
-**Important**: Some old alias filenames (e.g., `ooo-package.md`) match the new alias filenames (e.g., `ooo-package.md` for `ooo/package`). Only delete an alias if its `kb_get` call inside uses an old name that no longer exists. If the content already points to the correct new name, leave it.
+#### 2. Flat aliases in `TARGET/.windsurf/workflows/detritus/` (root of detritus/)
 
-Delete only those files. Do **not** delete any other files or folders — those are user-created.
+Previous versions (pre-v1.6.0) placed all aliases flat in the `detritus/` folder. Now aliases live in subfolders (`detritus/ooo/`, `detritus/meta/`, etc.). Delete any `.md` file **directly** in `detritus/` (not in subfolders) that is a detritus-generated alias — i.e., any file other than `setup-detritus.md`. Do **not** delete `setup-detritus.md` (the bootstrapper stays at the root).
+
+To identify: any `.md` file directly in `detritus/` whose content contains `kb_get(name=` is a detritus alias and should be deleted. Also delete known stale names: `ooo-ko.md`, `scaffold-simple-service.md`, `setup.md`.
+
+#### 3. Stale aliases in subfolders
+
+After creating/updating aliases in Step 4c, check each subfolder under `detritus/` for `.md` files whose `kb_get` name no longer appears in `detritus --list` output. Delete those.
+
+**Do not** delete any files or folders outside `detritus/` that are not in the known lists above — those are user-created.
 
 ## Step 5: Restart Windsurf
 
