@@ -153,6 +153,8 @@ vscode_alias_for_doc() {
   local leaf="${name##*/}"
   case "$name" in
     plan/analyze)        echo "plan" ;;
+    plan/export)         echo "plan-export" ;;
+    plan/diagrams)       echo "diagrams" ;;
     testing/index)       echo "testing" ;;
     testing/go-backend-*) echo "testing-${leaf}" ;;
     ooo/*)               echo "ooo-${leaf}" ;;
@@ -204,7 +206,8 @@ EOF
   local PROMPTS_DIR="${VSCODE_DIR}/prompts"
   mkdir -p "$PROMPTS_DIR"
 
-  while IFS='	' read -r name desc; do
+  tab=$(printf '\t')
+  while IFS="$tab" read -r name desc; do
     [ -z "$name" ] && continue
     local alias
     alias=$(vscode_alias_for_doc "$name")

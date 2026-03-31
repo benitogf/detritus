@@ -190,6 +190,8 @@ function Configure-VSCodeDir {
 
             $alias = switch -Wildcard ($name) {
                 "plan/analyze"       { "plan" }
+                "plan/export"        { "plan-export" }
+                "plan/diagrams"      { "diagrams" }
                 "testing/index"      { "testing" }
                 "testing/go-backend-*" { "testing-$leaf" }
                 "ooo/*"              { "ooo-$leaf" }
