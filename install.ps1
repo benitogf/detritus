@@ -396,9 +396,44 @@ if (Test-ContinueInstalled) {
 $vsCodeUserDir = Join-Path $env:APPDATA "Code\User"
 Configure-VSCodeMcp $vsCodeUserDir
 
+# Auto-configure Cursor MCP
+function Configure-CursorMcp {
+    param([string]$CursorDir)
+    if (-not (Test-Path $CursorDir)) { return }
+
+    $cursorMcp = Join-Path $CursorDir "mcp.json"
+    $binaryPathJson = $binaryPath -replace '\\', '/'
+
+    $detritusBlock = "    `"detritus`": {`n      `"command`": `"$binaryPathJson`",`n      `"args`": []`n    }"
+    if (Test-Path $cursorMcp) {
+        $raw = Get-Content $cursorMcp -Raw
+        if ($raw -match '"detritus"\s*:') {
+            $raw = [regex]::Replace($raw, '"detritus"\s*:\s*\{[^}]*\}', $detritusBlock.Trim())
+            Write-Host "Updated detritus in $cursorMcp"
+        } elseif ($raw -match '"mcpServers"\s*:\s*\{') {
+            $raw = [regex]::Replace($raw, '("mcpServers"\s*:\s*\{)', "`$1`n$detritusBlock,")
+            Write-Host "Added detritus to $cursorMcp"
+        } else {
+            $json = "{`n  `"mcpServers`": {`n$detritusBlock`n  }`n}"
+            $raw = $json
+        }
+        [System.IO.File]::WriteAllText($cursorMcp, $raw, [System.Text.UTF8Encoding]::new($false))
+    } else {
+        $json = "{`n  `"mcpServers`": {`n$detritusBlock`n  }`n}"
+        [System.IO.File]::WriteAllText($cursorMcp, $json, [System.Text.UTF8Encoding]::new($false))
+        Write-Host "Created $cursorMcp"
+    }
+
+    Write-Host "Cursor MCP config: $cursorMcp"
+}
+
+$cursorUserDir = Join-Path $env:APPDATA "Cursor\User"
+Configure-CursorMcp $cursorUserDir
+
 Write-Host ""
 Write-Host "VS Code slash commands: loaded from ~/.copilot/prompts/ (shared across workspaces)"
 Write-Host "Inline detritus tokens: use multiple commands anywhere in one message (example: '/truthseeker ... /plan')."
 Write-Host "Continue integration: if Continue is installed, installer writes ~/.continue/mcpServers + ~/.continue/prompts."
+Write-Host "Cursor integration: MCP config written to Cursor User directory."
 Write-Host "Optional: run 'detritus --init' in a repo if you specifically want repo-local prompt files."
 Write-Host "Reload VS Code window (Ctrl+Shift+P > Developer: Reload Window) to activate."

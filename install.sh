@@ -436,9 +436,62 @@ elif [ "$OS" = "windows" ]; then
   configure_vscode_mcp "${WIN_APPDATA_CODE}/Code/User"
 fi
 
+# Auto-configure Cursor MCP
+configure_cursor_mcp() {
+  local CURSOR_DIR="$1"
+  if [ ! -d "$CURSOR_DIR" ]; then
+    return
+  fi
+
+  local CURSOR_MCP="${CURSOR_DIR}/mcp.json"
+
+  if [ -f "$CURSOR_MCP" ]; then
+    if command -v python3 >/dev/null 2>&1; then
+      python3 -c "
+import json, sys
+with open('$CURSOR_MCP', 'r') as f:
+    config = json.load(f)
+config.setdefault('mcpServers', {})
+config['mcpServers']['detritus'] = {'command': '$BINARY_PATH_JSON', 'args': []}
+with open('$CURSOR_MCP', 'w') as f:
+    json.dump(config, f, indent=2)
+print('Updated detritus in $CURSOR_MCP')
+"
+    else
+      echo "python3 not found, please add manually to ${CURSOR_MCP}:"
+      echo '  "detritus": { "command": "'${BINARY_PATH_JSON}'", "args": [] }'
+    fi
+  else
+    cat > "$CURSOR_MCP" <<EOF
+{
+  "mcpServers": {
+    "detritus": {
+      "command": "${BINARY_PATH_JSON}",
+      "args": []
+    }
+  }
+}
+EOF
+    echo "Created ${CURSOR_MCP}"
+  fi
+
+  echo "Cursor MCP config: ${CURSOR_MCP}"
+}
+
+# Cursor config locations
+if [ "$OS" = "linux" ]; then
+  configure_cursor_mcp "$HOME/.config/Cursor/User"
+elif [ "$OS" = "darwin" ]; then
+  configure_cursor_mcp "$HOME/Library/Application Support/Cursor/User"
+elif [ "$OS" = "windows" ]; then
+  WIN_APPDATA_CURSOR=$(cygpath -u "$APPDATA" 2>/dev/null || echo "$HOME/AppData/Roaming")
+  configure_cursor_mcp "${WIN_APPDATA_CURSOR}/Cursor/User"
+fi
+
 echo ""
 echo "VS Code slash commands: loaded from ~/.copilot/prompts/ (shared across workspaces)"
 echo "Inline detritus tokens: use multiple commands anywhere in one message (example: '/truthseeker ... /plan')."
 echo "Continue integration: if Continue is installed, installer writes ~/.continue/mcpServers + ~/.continue/prompts."
+echo "Cursor integration: MCP config written to Cursor User directory."
 echo "Optional: run 'detritus --init' in a repo if you specifically want repo-local prompt files."
 echo "Reload VS Code window (Developer: Reload Window) to activate."

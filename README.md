@@ -1,145 +1,141 @@
 # detritus
 
-MCP (Model Context Protocol) knowledge base server. Exposes coding knowledge documents as tools that AI assistants can query on-demand.
+MCP knowledge base server + Agent Plugin. Exposes coding knowledge as MCP tools and Agent Skills for AI assistants across VS Code, Windsurf, Cursor, and Claude Code.
 
-## Quick Install (Windsurf)
+## Architecture
 
-Paste this into Windsurf Cascade:
+detritus delivers knowledge through two complementary layers:
 
-> Follow the setup instructions at https://raw.githubusercontent.com/benitogf/detritus/main/templates/workflows/setup-detritus.md
+1. **Agent Plugin** (`plugin.json`, `skills/`, `agents/`, `instructions/`) — Skills, custom agents, and always-on instructions. Works in VS Code (Copilot) and Claude Code natively.
+2. **MCP Server** (Go binary, stdio transport) — Semantic search across all docs via `kb_list`, `kb_get`, `kb_search` tools. Works in any editor with MCP support.
 
-This handles everything: binary install, MCP config, and project workflow files. In multi-root workspaces, it will ask which project should receive the workflow files.
+## Quick Install
 
-To update, paste the same prompt again or run `/setup-detritus` if already installed.
-
-## Quick Install (VS Code + Copilot)
-
-Paste this into VS Code Copilot Chat (agent mode):
+Paste this into your AI assistant (Copilot Chat, Windsurf Cascade, Cursor, etc.):
 
 > Follow the setup instructions at https://raw.githubusercontent.com/benitogf/detritus/main/templates/workflows/setup-detritus.md
 
-The same setup workflow handles VS Code. The install script writes:
-- **User-level MCP config** (`~/.config/Code/User/mcp.json`) — detritus tools available in all workspaces
-- **Shared prompt source config** (`chat.promptFilesLocations`) pointing to `~/.copilot/prompts`
-- **Shared prompt files** in `~/.copilot/prompts/*.prompt.md`
-- **Shared inline command instructions** in `~/.copilot/instructions/detritus.instructions.md`
-- **Instruction source config** (`chat.instructionsFilesLocations`) pointing to `~/.copilot/instructions`
+This handles binary install, MCP config, and editor integration.
 
-After install, slash commands are available globally from the shared prompt folder.
-You can also use multiple detritus command tokens anywhere in one message (example: `/truthseeker ... /plan ... /testing`).
+### Manual Install
 
-Optionally, if you want repository-local prompt files for a specific project, run:
-
-```bash
-cd your-project
-detritus --init
-```
-
-This creates `.github/prompts/*.prompt.md` files in that repo. By default, shared prompts remain the primary source.
-
-Reload the VS Code window (`Ctrl+Shift+P` > `Developer: Reload Window`) after setup.
-
-## Manual Install
-
-### Linux / macOS / Windows (Git Bash)
-
+**Linux / macOS / Windows (Git Bash):**
 ```bash
 curl -sSL https://raw.githubusercontent.com/benitogf/detritus/main/install.sh | sh
 ```
 
-### Windows (PowerShell)
-
+**Windows (PowerShell):**
 ```powershell
 irm https://raw.githubusercontent.com/benitogf/detritus/main/install.ps1 | iex
 ```
 
-The install script downloads the binary and configures both IDEs automatically:
+The install script downloads the binary and configures:
 - **Windsurf**: `~/.codeium/windsurf/mcp_config.json`
-- **VS Code**: `~/.config/Code/User/mcp.json`
-- **VS Code shared prompts**: `~/.copilot/prompts/`
-- **VS Code shared instructions**: `~/.copilot/instructions/detritus.instructions.md`
+- **VS Code**: `~/.config/Code/User/mcp.json` + shared prompts/instructions
+- **Cursor**: `~/.config/Cursor/User/mcp.json` (Linux), `%APPDATA%\Cursor\User\mcp.json` (Windows)
+- **Continue**: `~/.continue/mcpServers/` + `~/.continue/prompts/`
 
-It also configures `chat.promptFilesLocations` to load prompts from `~/.copilot/prompts` and disable `.github/prompts` by default to prevent duplicate slash commands in multi-root workspaces.
-It configures `chat.instructionsFilesLocations` to load `~/.copilot/instructions`, enabling inline multi-command token routing.
+Restart your editor after install.
 
-Restart Windsurf and reload VS Code after install.
+## Agent Plugin
 
-If you want repo-specific Copilot instructions as an extra, you can manually add `.github/copilot-instructions.md`, but it is not required for detritus to work in VS Code.
+The repository itself is an Agent Plugin. In VS Code/Claude Code, the plugin provides:
 
-## Tools
+### Skills (invokable)
 
-The server exposes 3 MCP tools:
+| Skill | Description |
+|-------|-------------|
+| `/truthseeker` | Elevated rigor — evidence-based reasoning, push back on assumptions |
+| `/plan` | Requirements analysis workflow |
+| `/plan-export` | Export planning docs with Mermaid diagrams |
+| `/diagrams` | Mermaid diagram quick reference |
+| `/create` | Scaffold a new project |
+| `/grow` | KB improvement from conversation corrections |
+| `/optimize` | KB retrieval optimization |
+| `/research-first` | Exhaust resources before asking the user |
+| `/testing` | Testing decision table |
+| `/line-of-sight` | Flat code style — early returns, no deep nesting |
+| `/setup-detritus` | Installation workflow |
+
+### Skills (auto-loaded)
+
+These are loaded automatically when relevant — no manual invocation needed:
+
+ooo-package, ooo-auth, ooo-nopog, ooo-pivot, ooo-client-js, ooo-filters-internals, coding-style, go-modern, async-events, state-management, go-backend-async, go-backend-mock, go-backend-e2e
+
+### Custom Agent
+
+Select the **detritus** agent for a session with truthseeker principles, research-first behavior, and MCP knowledge base access pre-configured.
+
+### Always-On Instructions
+
+The `instructions/detritus.instructions.md` file applies to all files (`applyTo: "**"`) with distilled guardrails: push back with evidence, research before asking, prove before acting.
+
+## MCP Tools
 
 | Tool | Description |
 |------|-------------|
 | `kb_list` | List all available documents with descriptions |
-| `kb_get` | Get a full document by name (keyword-packed description enables auto-routing) |
-| `kb_search` | Search across all documents for a topic or API name |
+| `kb_get` | Get a full document by name |
+| `kb_search` | Semantic search across all documents |
 
 ## Included Documents
 
 ### Core
-- **ooo-package** — Server setup, filters, CRUD helpers, WebSocket subscriptions, custom endpoints, remote operations
+- **ooo-package** — Server setup, filters, CRUD, WebSocket subscriptions, custom endpoints
 
 ### Storage
-- **ooo-ko** — LevelDB persistent storage adapter
-- **ooo-nopog** — PostgreSQL storage for large-scale data
+- **ooo-nopog** — PostgreSQL storage adapter
 
 ### Infrastructure
-- **ooo-pivot** — AP distributed multi-instance synchronization
+- **ooo-pivot** — AP distributed multi-instance sync
 - **ooo-auth** — JWT authentication
 - **ooo-client-js** — JavaScript/React WebSocket client
 
 ### Testing
 - **testing** — Testing index and decision table
-- **testing-go-backend-async** — Deterministic async testing with WaitGroup
-- **testing-go-backend-mock** — Minimal mocking at boundaries
-- **testing-go-backend-e2e** — End-to-end lifecycle tests
-- **async-events** — General async event principles (language-agnostic)
+- **go-backend-async** — Deterministic async testing
+- **go-backend-mock** — Minimal mocking at boundaries
+- **go-backend-e2e** — End-to-end lifecycle tests
 
 ### Patterns
-- **go-modern** — Modern Go idioms (1.22+/1.24+) with gopls modernize
-- **scaffold-simple-service** — Template for new ooo+ko backend services
-- **plan** — Requirements analysis workflow
+- **go-modern** — Modern Go idioms (1.22+/1.24+)
+- **coding-style** — Naming, error handling, formatting, commits
+- **async-events** — Channel-based pub/sub, backpressure
+- **state-management** — Single source of truth, immutable updates
+- **line-of-sight** — Early returns, flat code structure
 
 ### Principles
-- **truthseeker** — Foundational principles: evidence-based reasoning, pushback, intellectual humility
+- **truthseeker** — Evidence-based reasoning, pushback, intellectual humility
+- **research-first** — Exhaust available resources before asking
 
 ## How It Works
 
 All documents are embedded in the binary at compile time (`embed.FS`). No external files or runtime dependencies.
 
-The `kb_get` tool description contains keyword-packed summaries of every document. When the AI sees relevant keywords in your prompt, it automatically calls `kb_get` to fetch the full document — no manual invocation needed.
+The `kb_get` tool description contains keyword-packed summaries. When the AI sees relevant keywords in your prompt, it automatically calls `kb_get` — no manual invocation needed.
+
+Agent Skills provide the same knowledge in a format native to VS Code/Claude Code, with YAML frontmatter controlling invocability and auto-loading behavior.
 
 ## Troubleshooting
-
-Verify the binary:
 
 ```bash
 detritus --version
 ```
 
-On Windows:
-```powershell
-& "$env:LOCALAPPDATA\detritus\detritus.exe" --version
-```
-
 ### Windsurf
-
-If Windsurf doesn't load the MCP server after restart, check:
-1. Config path: `~/.codeium/windsurf/mcp_config.json`
+1. Config: `~/.codeium/windsurf/mcp_config.json`
 2. Binary path uses **forward slashes** (even on Windows)
-3. **Full restart** required (File > Exit, not just close window)
-4. On Windows, antivirus may block unsigned executables
+3. **Full restart** required (File > Exit)
 
 ### VS Code
-
-If the MCP tools don't appear after reload, check:
-1. Config: `~/.config/Code/User/mcp.json` (Linux), `~/Library/Application Support/Code/User/mcp.json` (macOS), `%APPDATA%\Code\User\mcp.json` (Windows)
+1. Config: `~/.config/Code/User/mcp.json` (Linux), `~/Library/Application Support/Code/User/mcp.json` (macOS)
 2. Config uses **`"servers"`** key (not `"mcpServers"`)
-3. Run `Developer: Reload Window` from the Command Palette
-4. VS Code may show a trust prompt on first use — click Allow
-5. On Linux with VS Code Server, the install also writes to `~/.vscode-server/data/User/`
+3. Run `Developer: Reload Window`
+
+### Cursor
+1. Config: `~/.config/Cursor/User/mcp.json` (Linux), `%APPDATA%\Cursor\User\mcp.json` (Windows)
+2. Uses **`"mcpServers"`** key
 
 ## Development
 
@@ -150,10 +146,9 @@ go build -o detritus .
 
 ## Release
 
-Uses [goreleaser](https://goreleaser.com/) for cross-platform builds:
+Uses [goreleaser](https://goreleaser.com/) for cross-platform builds. Push a tag to trigger GitHub Actions:
 
 ```bash
-goreleaser release --clean
+git tag v3.0.0
+git push origin v3.0.0
 ```
-
-Or via GitHub Actions on tag push.
