@@ -145,33 +145,16 @@ echo "Restart Windsurf to activate."
 
 # Auto-configure VS Code
 # VS Code uses "servers" (not "mcpServers") in mcp.json
-# Prompt files are written to the user-level prompts dir — available in all workspaces
+# Prompt files (slash commands) are workspace-level — use 'detritus --init' per repo
 
-# Alias name mapping for VS Code prompt files (mirrors setup-detritus.md logic)
-vscode_alias_for_doc() {
-  local name="$1"
-  local leaf="${name##*/}"
-  case "$name" in
-    plan/analyze)        echo "plan" ;;
-    plan/export)         echo "plan-export" ;;
-    plan/diagrams)       echo "diagrams" ;;
-    testing/index)       echo "testing" ;;
-    testing/go-backend-*) echo "testing-${leaf}" ;;
-    ooo/*)               echo "ooo-${leaf}" ;;
-    *)                   echo "$leaf" ;;
-  esac
-}
-
-configure_vscode_dir() {
+configure_vscode_mcp() {
   local VSCODE_DIR="$1"
   if [ ! -d "$VSCODE_DIR" ]; then
     return
   fi
 
   local VSCODE_MCP="${VSCODE_DIR}/mcp.json"
-  mkdir -p "$VSCODE_DIR"
 
-  # Write mcp.json
   if [ -f "$VSCODE_MCP" ]; then
     if command -v python3 >/dev/null 2>&1; then
       python3 -c "
@@ -202,43 +185,32 @@ EOF
     echo "Created ${VSCODE_MCP}"
   fi
 
-  # Write user-level prompt files (slash commands available in all workspaces)
-  local PROMPTS_DIR="${VSCODE_DIR}/prompts"
-  mkdir -p "$PROMPTS_DIR"
+  # Clean up old user-level prompt files (no longer used — prompts are workspace-level now)
+  local OLD_PROMPTS="${VSCODE_DIR}/prompts"
+  if [ -d "$OLD_PROMPTS" ]; then
+    # Only remove files that look like detritus-generated prompts (contain kb_get)
+    for f in "$OLD_PROMPTS"/*.prompt.md; do
+      [ -f "$f" ] && grep -q 'kb_get' "$f" 2>/dev/null && rm -f "$f"
+    done
+    # Remove dir if empty
+    rmdir "$OLD_PROMPTS" 2>/dev/null || true
+    echo "Cleaned up old user-level prompt files from ${OLD_PROMPTS}/"
+  fi
 
-  tab=$(printf '\t')
-  while IFS="$tab" read -r name desc; do
-    [ -z "$name" ] && continue
-    local alias
-    alias=$(vscode_alias_for_doc "$name")
-    local file="${PROMPTS_DIR}/${alias}.prompt.md"
-    cat > "$file" <<EOF
----
-description: ${desc}
-agent: agent
-tools: ["detritus/*"]
----
-
-Call kb_get(name="${name}") and follow the instructions in the returned document.
-EOF
-  done << DOCLIST
-$("$BINARY_PATH" --list 2>/dev/null)
-DOCLIST
-
-  echo "VS Code config: ${VSCODE_MCP}"
-  echo "VS Code prompts: ${PROMPTS_DIR}/"
+  echo "VS Code MCP config: ${VSCODE_MCP}"
 }
 
 # Linux/macOS VS Code locations
 if [ "$OS" = "linux" ]; then
-  configure_vscode_dir "$HOME/.config/Code/User"
-  configure_vscode_dir "$HOME/.vscode-server/data/User"
+  configure_vscode_mcp "$HOME/.config/Code/User"
+  configure_vscode_mcp "$HOME/.vscode-server/data/User"
 elif [ "$OS" = "darwin" ]; then
-  configure_vscode_dir "$HOME/Library/Application Support/Code/User"
+  configure_vscode_mcp "$HOME/Library/Application Support/Code/User"
 elif [ "$OS" = "windows" ]; then
   WIN_APPDATA_CODE=$(cygpath -u "$APPDATA" 2>/dev/null || echo "$HOME/AppData/Roaming")
-  configure_vscode_dir "${WIN_APPDATA_CODE}/Code/User"
+  configure_vscode_mcp "${WIN_APPDATA_CODE}/Code/User"
 fi
 
 echo ""
+echo "VS Code slash commands: run 'detritus --init' in each project to generate .github/prompts/"
 echo "Reload VS Code window (Developer: Reload Window) to activate."

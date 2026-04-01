@@ -20,11 +20,17 @@ Paste this into VS Code Copilot Chat (agent mode):
 
 The same setup workflow handles VS Code. The install script writes:
 - **User-level MCP config** (`~/.config/Code/User/mcp.json`) — detritus tools available in all workspaces
-- **User-level prompt files** (`~/.config/Code/User/prompts/`) — `/plan`, `/testing`, etc. available as slash commands in all workspaces without any per-repo setup
 
-Reload the VS Code window (`Ctrl+Shift+P` > `Developer: Reload Window`) after install.
+Then run `detritus --init` in each project to generate workspace-level slash commands:
 
-No repo-level files are required for VS Code.
+```bash
+cd your-project
+detritus --init
+```
+
+This creates `.github/prompts/*.prompt.md` files — `/plan`, `/testing`, `/truthseeker`, etc. are available as slash commands in that workspace.
+
+Reload the VS Code window (`Ctrl+Shift+P` > `Developer: Reload Window`) after setup.
 
 ## Manual Install
 
@@ -42,7 +48,9 @@ irm https://raw.githubusercontent.com/benitogf/detritus/main/install.ps1 | iex
 
 The install script downloads the binary and configures both IDEs automatically:
 - **Windsurf**: `~/.codeium/windsurf/mcp_config.json`
-- **VS Code**: `~/.config/Code/User/mcp.json` + `~/.config/Code/User/prompts/*.prompt.md`
+- **VS Code**: `~/.config/Code/User/mcp.json`
+
+Then run `detritus --init` in each VS Code project to generate `.github/prompts/` slash commands.
 
 Restart Windsurf and reload VS Code after install.
 

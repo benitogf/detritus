@@ -8,7 +8,7 @@ Detect the user's OS and **shell** before proceeding. On Windows, check if the t
 
 ## Step 1: Install the binary
 
-The install script handles **both Windsurf and VS Code** automatically — it writes the MCP config and prompt files for both IDEs.
+The install script handles **both Windsurf and VS Code** automatically — it writes the MCP config for both IDEs.
 
 ### Linux / macOS / Windows (Git Bash, WSL, MSYS2)
 
@@ -54,24 +54,23 @@ The VS Code config format uses `"servers"` (not `"mcpServers"`):
 }
 ```
 
-Also verify prompt files were written to the `prompts/` subdirectory of the same user dir (e.g., `~/.config/Code/User/prompts/plan.prompt.md`). These are VS Code's slash commands — available in all workspaces without any per-repo setup.
+The install script also cleans up any old user-level prompt files from previous versions.
 
-## Step 3: Windsurf-only project selection
+## Step 3: Project selection
 
-If the user is setting up **Windsurf**, check the workspace roots (available from IDE metadata). **Install project files only to the root the user selects.**
-
-If the user is setting up **VS Code**, skip this step entirely. VS Code uses only the user-level MCP config and user-level prompt files written in Step 1.
+Check the workspace roots (available from IDE metadata). **Install project files only to the root the user selects.**
 
 - **Single root**: use it directly, no prompt needed.
-- **Multiple roots**: list all workspace roots and ask the user which one should receive the MCP workflow files. Install to that root only.
+- **Multiple roots**: list all workspace roots and ask the user which one should receive the project files. Install to that root only.
 
-Let `TARGET` be the selected root for the Windsurf-only steps below.
+Let `TARGET` be the selected root for the steps below.
 
-## Step 4: Windsurf-only project files
+## Step 4: Project files
 
-Only do this step for **Windsurf**. Skip it for **VS Code**.
+For **Windsurf**: create workflow aliases (Steps 4a-4c below).
+For **VS Code**: run `detritus --init` in `TARGET` to generate `.github/prompts/` (Step 4e below).
 
-### 4a. Download `.windsurfrules`
+### 4a. Download `.windsurfrules` (Windsurf only)
 
 #### Windsurf — `.windsurfrules`
 
@@ -91,7 +90,7 @@ If `TARGET/.windsurfrules` does not exist, download it:
 if (-not (Test-Path .windsurfrules)) { irm https://raw.githubusercontent.com/benitogf/detritus/main/templates/.windsurfrules | Set-Content .windsurfrules -Encoding UTF8 }
 ```
 
-### 4b. Create the setup bootstrappers
+### 4b. Create the setup bootstrapper (Windsurf only)
 
 #### Windsurf — `TARGET/.windsurf/workflows/detritus/setup-detritus.md`
 
@@ -108,11 +107,7 @@ https://raw.githubusercontent.com/benitogf/detritus/main/templates/workflows/set
 Read that URL and execute all the steps in the fetched document.
 ```
 
-#### VS Code — note
-
-VS Code slash commands (`/plan`, `/testing`, etc.) are user-level prompt files written by the install script to `~/.config/Code/User/prompts/` (or the equivalent on your OS). They are **not** stored per-repo — they are available in all workspaces automatically. No bootstrapper file is needed in the project.
-
-### 4c. Create workflow aliases from the installed binary
+### 4c. Create workflow aliases from the installed binary (Windsurf only)
 
 Run `detritus --list` to get all available document names and descriptions directly from the **on-disk binary**. This bypasses the running MCP server process, which may still be serving stale data from a previous version.
 
@@ -167,45 +162,7 @@ description: {description from --list}
 Call kb_get(name="{full_name}") and follow the instructions in the returned document.
 ```
 
-#### VS Code user-level prompt files
-
-VS Code prompt files (slash commands) are user-level and were already written by the install script. To ensure they are up-to-date after a binary update, re-run Step 1. The alias filename rules are the same as Windsurf above, but:
-
-- Files go to `~/.config/Code/User/prompts/` (Linux), `~/Library/Application Support/Code/User/prompts/` (macOS), or `%APPDATA%\Code\User\prompts\` (Windows) — **not** inside the project
-- Extension is `.prompt.md` instead of `.md`
-- Frontmatter includes `agent: agent` and `tools: ["detritus/*"]`
-
-Each VS Code prompt file format:
-
-```markdown
----
-description: {description from --list}
-agent: agent
-tools: ["detritus/*"]
----
-
-Call kb_get(name="{full_name}") and follow the instructions in the returned document.
-```
-
-To refresh VS Code prompt files without re-running the full install script, run the appropriate command for your OS/shell:
-
-**Linux / macOS / Windows (Git Bash, WSL, MSYS2)**
-
-// turbo
-```bash
-curl -sSL https://raw.githubusercontent.com/benitogf/detritus/main/install.sh | sh
-```
-
-**Windows (PowerShell)**
-
-// turbo
-```powershell
-irm https://raw.githubusercontent.com/benitogf/detritus/main/install.ps1 | iex
-```
-
-**If `detritus --list` fails** (binary too old — pre-v1.5.0), fall back to `kb_list()` via MCP. If MCP is also unavailable (first-time install), tell the user to restart their IDE and re-run `/setup-detritus`.
-
-### 4d. Clean up old installations
+### 4d. Clean up old installations (Windsurf only)
 
 Clean up aliases from previous detritus versions. There are three categories:
 
@@ -225,15 +182,35 @@ After creating/updating aliases in Step 4c, check each subfolder under `detritus
 
 **Do not** delete any files or folders outside `detritus/` that are not in the known lists above — those are user-created.
 
+### 4e. Generate VS Code prompt files
+
+For **VS Code only**, run `detritus --init` in the `TARGET` directory. This generates `.github/prompts/*.prompt.md` workspace-level slash commands.
+
+**Linux / macOS / Windows (Git Bash, WSL, MSYS2)**
+
+// turbo
+```bash
+cd TARGET && detritus --init
+```
+
+**Windows (PowerShell)**
+
+// turbo
+```powershell
+cd TARGET; & "$env:LOCALAPPDATA\detritus\detritus.exe" --init
+```
+
+This creates files like `.github/prompts/plan.prompt.md`, `.github/prompts/truthseeker.prompt.md`, etc. The `--init` command also removes stale prompt files from previous versions.
+
+**If `detritus --init` fails** (binary too old — pre-v2.2.0), fall back to re-running the install script to get the latest binary.
+
 ## Step 5: Restart IDEs
 
 ### Windsurf
 Tell the user to **fully close Windsurf** (File > Exit, not just close the window) and reopen it. After restart, the `kb_list`, `kb_get`, and `kb_search` tools will serve the updated documents.
 
 ### VS Code
-Tell the user to **reload the VS Code window**: press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS) and run `Developer: Reload Window`. A full restart is not required — VS Code picks up the user-level MCP config and prompt files on reload.
-
-No re-run is needed — Windsurf aliases were created from the binary in Step 4c, and VS Code prompt files were written by the install script in Step 1.
+Tell the user to **reload the VS Code window**: press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS) and run `Developer: Reload Window`. VS Code discovers the workspace-level prompt files from `.github/prompts/` on reload.
 
 ## Optional: repo-specific Copilot instructions
 
@@ -243,11 +220,11 @@ If the user explicitly wants extra repo-local Copilot instructions, they can add
 
 `https://raw.githubusercontent.com/benitogf/detritus/main/templates/copilot-instructions.md`
 
-This file is optional and independent from the global detritus MCP setup.
+This file is optional and independent from the detritus MCP setup.
 
 ## Update
 
-To update to the latest version, re-run all steps. Since Step 4c reads directly from the installed binary (`detritus --list`), new documents are discovered immediately without needing the MCP server to restart first.
+To update to the latest version, re-run all steps. For Windsurf, Step 4c reads directly from the installed binary. For VS Code, re-run `detritus --init` in each project to regenerate prompt files.
 
 ## Troubleshooting
 

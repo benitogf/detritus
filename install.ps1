@@ -141,9 +141,9 @@ Write-Host "To verify after restart, ask Cascade: 'list available kb docs'"
 
 # Auto-configure VS Code
 # VS Code uses "servers" (not "mcpServers") in mcp.json
-# Prompt files go to user-level prompts dir — available in all workspaces
+# Prompt files (slash commands) are workspace-level — use 'detritus --init' per repo
 
-function Configure-VSCodeDir {
+function Configure-VSCodeMcp {
     param([string]$VsCodeDir)
     if (-not (Test-Path $VsCodeDir)) { return }
 
@@ -172,44 +172,25 @@ function Configure-VSCodeDir {
         Write-Host "Created $vscodeMcp"
     }
 
-    # Write user-level prompt files (slash commands available in all workspaces)
-    $promptsDir = Join-Path $VsCodeDir "prompts"
-    if (-not (Test-Path $promptsDir)) { New-Item -ItemType Directory -Path $promptsDir -Force | Out-Null }
-
-    # Get doc list from binary
-    $listOutput = & $binaryPath --list 2>$null
-    if ($listOutput) {
-        foreach ($line in $listOutput -split "`n") {
-            $line = $line.Trim()
-            if (-not $line) { continue }
-            $parts = $line -split "`t", 2
-            $name = $parts[0].Trim()
-            $desc = if ($parts.Count -gt 1) { $parts[1].Trim() } else { "" }
-            $group = $name -split "/" | Select-Object -First 1
-            $leaf  = $name -split "/" | Select-Object -Last 1
-
-            $alias = switch -Wildcard ($name) {
-                "plan/analyze"       { "plan" }
-                "plan/export"        { "plan-export" }
-                "plan/diagrams"      { "diagrams" }
-                "testing/index"      { "testing" }
-                "testing/go-backend-*" { "testing-$leaf" }
-                "ooo/*"              { "ooo-$leaf" }
-                default              { $leaf }
+    # Clean up old user-level prompt files (no longer used — prompts are workspace-level now)
+    $oldPrompts = Join-Path $VsCodeDir "prompts"
+    if (Test-Path $oldPrompts) {
+        Get-ChildItem "$oldPrompts\*.prompt.md" | ForEach-Object {
+            if ((Get-Content $_.FullName -Raw) -match 'kb_get') {
+                Remove-Item $_.FullName -Force
             }
-
-            $content = "---`ndescription: $desc`nagent: agent`ntools: [`"detritus/*`"]`n---`n`nCall kb_get(name=`"$name`") and follow the instructions in the returned document.`n"
-            $file = Join-Path $promptsDir "$alias.prompt.md"
-            [System.IO.File]::WriteAllText($file, $content, [System.Text.UTF8Encoding]::new($false))
         }
-        Write-Host "VS Code prompts: $promptsDir\"
+        $remaining = Get-ChildItem $oldPrompts -ErrorAction SilentlyContinue
+        if (-not $remaining) { Remove-Item $oldPrompts -Force -ErrorAction SilentlyContinue }
+        Write-Host "Cleaned up old user-level prompt files from $oldPrompts\"
     }
 
-    Write-Host "VS Code config:  $vscodeMcp"
+    Write-Host "VS Code MCP config: $vscodeMcp"
 }
 
 $vsCodeUserDir = Join-Path $env:APPDATA "Code\User"
-Configure-VSCodeDir $vsCodeUserDir
+Configure-VSCodeMcp $vsCodeUserDir
 
 Write-Host ""
+Write-Host "VS Code slash commands: run 'detritus --init' in each project to generate .github/prompts/"
 Write-Host "Reload VS Code window (Ctrl+Shift+P > Developer: Reload Window) to activate."

@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/benitogf/detritus/internal/search"
@@ -41,18 +42,22 @@ func main() {
 				return nil
 			})
 			return
+		case "--init":
+			initPromptFiles()
+			return
 		case "--help", "-h":
 			fmt.Println("detritus " + version)
 			fmt.Println("MCP knowledge base server (stdio transport)")
 			fmt.Println("")
 			fmt.Println("Usage:")
-			fmt.Println("  detritus              Start MCP server (used by Windsurf)")
+			fmt.Println("  detritus              Start MCP server (used by Windsurf/VS Code)")
 			fmt.Println("  detritus --version    Print version")
 			fmt.Println("  detritus --list       List embedded documents (name<TAB>description)")
+			fmt.Println("  detritus --init       Generate .github/prompts/ for VS Code slash commands")
 			fmt.Println("  detritus --help       Print this help")
 			fmt.Println("")
 			fmt.Println("This server communicates via stdio using the Model Context Protocol.")
-			fmt.Println("It is not meant to be run interactively — Windsurf or VS Code spawns it automatically.")
+			fmt.Println("Windsurf or VS Code spawns it automatically via MCP config.")
 			return
 		default:
 			fmt.Fprintf(os.Stderr, "unknown flag: %s\nRun 'detritus --help' for usage.\n", os.Args[1])
@@ -159,6 +164,84 @@ func main() {
 	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func aliasForDoc(name string) string {
+	parts := strings.SplitN(name, "/", 2)
+	leaf := parts[len(parts)-1]
+	switch {
+	case name == "plan/analyze":
+		return "plan"
+	case name == "plan/export":
+		return "plan-export"
+	case name == "plan/diagrams":
+		return "diagrams"
+	case name == "testing/index":
+		return "testing"
+	case strings.HasPrefix(name, "testing/go-backend-"):
+		return "testing-" + leaf
+	case strings.HasPrefix(name, "ooo/"):
+		return "ooo-" + leaf
+	default:
+		return leaf
+	}
+}
+
+func initPromptFiles() {
+	promptsDir := filepath.Join(".github", "prompts")
+	if err := os.MkdirAll(promptsDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create %s: %v\n", promptsDir, err)
+		os.Exit(1)
+	}
+
+	// Track which files we generate so we can clean stale ones
+	generated := map[string]bool{}
+
+	count := 0
+	_ = fs.WalkDir(docsFS, "docs", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+		name := strings.TrimSuffix(strings.TrimPrefix(path, "docs/"), ".md")
+		content, _ := fs.ReadFile(docsFS, path)
+		desc := extractDescription(string(content))
+		alias := aliasForDoc(name)
+		filename := alias + ".prompt.md"
+		generated[filename] = true
+
+		prompt := fmt.Sprintf("---\ndescription: %s\nagent: agent\ntools: [\"detritus/*\"]\n---\n\nCall kb_get(name=\"%s\") and follow the instructions in the returned document.\n", desc, name)
+
+		fpath := filepath.Join(promptsDir, filename)
+		if err := os.WriteFile(fpath, []byte(prompt), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "  warning: could not write %s: %v\n", fpath, err)
+			return nil
+		}
+		count++
+		return nil
+	})
+
+	// Remove stale detritus-generated prompt files
+	entries, _ := os.ReadDir(promptsDir)
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".prompt.md") {
+			continue
+		}
+		if generated[e.Name()] {
+			continue
+		}
+		fpath := filepath.Join(promptsDir, e.Name())
+		data, err := os.ReadFile(fpath)
+		if err != nil {
+			continue
+		}
+		if strings.Contains(string(data), "kb_get") {
+			os.Remove(fpath)
+			fmt.Printf("  removed stale: %s\n", e.Name())
+		}
+	}
+
+	fmt.Printf("Generated %d prompt files in %s/\n", count, promptsDir)
+	fmt.Println("Reload VS Code window (Developer: Reload Window) to activate slash commands.")
 }
 
 func textResult(text string) *mcp.CallToolResult {
