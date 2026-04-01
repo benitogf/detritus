@@ -54,7 +54,10 @@ The VS Code config format uses `"servers"` (not `"mcpServers"`):
 }
 ```
 
-The install script also cleans up any old user-level prompt files from previous versions.
+The install script also:
+- generates shared prompt files in `~/.copilot/prompts/*.prompt.md`
+- sets `chat.promptFilesLocations` so VS Code loads prompts from `~/.copilot/prompts` and disables `.github/prompts` by default
+- cleans up old user-level prompt files from previous versions
 
 ## Step 3: Project selection
 
@@ -68,7 +71,7 @@ Let `TARGET` be the selected root for the steps below.
 ## Step 4: Project files
 
 For **Windsurf**: create workflow aliases (Steps 4a-4c below).
-For **VS Code**: run `detritus --init` in `TARGET` to generate `.github/prompts/` (Step 4e below).
+For **VS Code**: shared prompts are already configured globally by the installer. Step 4e is optional only if the user explicitly wants repo-local prompt files.
 
 ### 4a. Download `.windsurfrules` (Windsurf only)
 
@@ -182,9 +185,9 @@ After creating/updating aliases in Step 4c, check each subfolder under `detritus
 
 **Do not** delete any files or folders outside `detritus/` that are not in the known lists above — those are user-created.
 
-### 4e. Generate VS Code prompt files
+### 4e. Optional: Generate repo-local VS Code prompt files
 
-For **VS Code only**, run `detritus --init` in the `TARGET` directory. This generates `.github/prompts/*.prompt.md` workspace-level slash commands.
+For **VS Code only**, if the user explicitly wants prompt files stored in the repository, run `detritus --init` in the `TARGET` directory. This generates `.github/prompts/*.prompt.md` workspace-level slash commands.
 
 **Linux / macOS / Windows (Git Bash, WSL, MSYS2)**
 
@@ -202,6 +205,8 @@ cd TARGET; & "$env:LOCALAPPDATA\detritus\detritus.exe" --init
 
 This creates files like `.github/prompts/plan.prompt.md`, `.github/prompts/truthseeker.prompt.md`, etc. The `--init` command also removes stale prompt files from previous versions.
 
+Note: default installer configuration disables `.github/prompts` to avoid duplicate slash commands in multi-root workspaces. If the user wants repo-local prompts to be active, they must re-enable `.github/prompts` in `chat.promptFilesLocations`.
+
 **If `detritus --init` fails** (binary too old — pre-v2.2.0), fall back to re-running the install script to get the latest binary.
 
 ## Step 5: Restart IDEs
@@ -210,7 +215,7 @@ This creates files like `.github/prompts/plan.prompt.md`, `.github/prompts/truth
 Tell the user to **fully close Windsurf** (File > Exit, not just close the window) and reopen it. After restart, the `kb_list`, `kb_get`, and `kb_search` tools will serve the updated documents.
 
 ### VS Code
-Tell the user to **reload the VS Code window**: press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS) and run `Developer: Reload Window`. VS Code discovers the workspace-level prompt files from `.github/prompts/` on reload.
+Tell the user to **reload the VS Code window**: press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS) and run `Developer: Reload Window`. VS Code discovers the shared prompt files from `~/.copilot/prompts/` on reload.
 
 ## Optional: repo-specific Copilot instructions
 
@@ -224,7 +229,7 @@ This file is optional and independent from the detritus MCP setup.
 
 ## Update
 
-To update to the latest version, re-run all steps. For Windsurf, Step 4c reads directly from the installed binary. For VS Code, re-run `detritus --init` in each project to regenerate prompt files.
+To update to the latest version, re-run all steps. For Windsurf, Step 4c reads directly from the installed binary. For VS Code shared prompts, re-running the install script regenerates `~/.copilot/prompts/`.
 
 ## Troubleshooting
 

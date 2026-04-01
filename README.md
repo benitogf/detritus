@@ -20,15 +20,19 @@ Paste this into VS Code Copilot Chat (agent mode):
 
 The same setup workflow handles VS Code. The install script writes:
 - **User-level MCP config** (`~/.config/Code/User/mcp.json`) — detritus tools available in all workspaces
+- **Shared prompt source config** (`chat.promptFilesLocations`) pointing to `~/.copilot/prompts`
+- **Shared prompt files** in `~/.copilot/prompts/*.prompt.md`
 
-Then run `detritus --init` in each project to generate workspace-level slash commands:
+After install, slash commands are available globally from the shared prompt folder.
+
+Optionally, if you want repository-local prompt files for a specific project, run:
 
 ```bash
 cd your-project
 detritus --init
 ```
 
-This creates `.github/prompts/*.prompt.md` files — `/plan`, `/testing`, `/truthseeker`, etc. are available as slash commands in that workspace.
+This creates `.github/prompts/*.prompt.md` files in that repo. By default, shared prompts remain the primary source.
 
 Reload the VS Code window (`Ctrl+Shift+P` > `Developer: Reload Window`) after setup.
 
@@ -49,8 +53,9 @@ irm https://raw.githubusercontent.com/benitogf/detritus/main/install.ps1 | iex
 The install script downloads the binary and configures both IDEs automatically:
 - **Windsurf**: `~/.codeium/windsurf/mcp_config.json`
 - **VS Code**: `~/.config/Code/User/mcp.json`
+- **VS Code shared prompts**: `~/.copilot/prompts/`
 
-Then run `detritus --init` in each VS Code project to generate `.github/prompts/` slash commands.
+It also configures `chat.promptFilesLocations` to load prompts from `~/.copilot/prompts` and disable `.github/prompts` by default to prevent duplicate slash commands in multi-root workspaces.
 
 Restart Windsurf and reload VS Code after install.
 

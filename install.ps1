@@ -141,7 +141,62 @@ Write-Host "To verify after restart, ask Cascade: 'list available kb docs'"
 
 # Auto-configure VS Code
 # VS Code uses "servers" (not "mcpServers") in mcp.json
-# Prompt files (slash commands) are workspace-level — use 'detritus --init' per repo
+# Prompt files (slash commands) are loaded from one shared folder to avoid duplicates in multi-root workspaces
+
+function Get-VSCodeAliasForDoc {
+    param([string]$Name)
+    $parts = $Name.Split('/')
+    $leaf = $parts[$parts.Length - 1]
+    if ($Name -eq "plan/analyze") { return "plan" }
+    if ($Name -eq "plan/export") { return "plan-export" }
+    if ($Name -eq "plan/diagrams") { return "diagrams" }
+    if ($Name -eq "testing/index") { return "testing" }
+    if ($Name.StartsWith("testing/go-backend-")) { return "testing-$leaf" }
+    if ($Name.StartsWith("ooo/")) { return "ooo-$leaf" }
+    return $leaf
+}
+
+function Generate-SharedPrompts {
+    $sharedPrompts = Join-Path $env:USERPROFILE ".copilot\prompts"
+    New-Item -ItemType Directory -Path $sharedPrompts -Force | Out-Null
+
+    $generated = @{}
+    $listOutput = & $binaryPath --list 2>$null
+    foreach ($line in $listOutput) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $parts = $line -split "`t", 2
+        if ($parts.Count -lt 1 -or [string]::IsNullOrWhiteSpace($parts[0])) { continue }
+        $name = $parts[0]
+        $desc = if ($parts.Count -ge 2) { $parts[1] } else { "" }
+        $alias = Get-VSCodeAliasForDoc $name
+        $fileName = "$alias.prompt.md"
+        $generated[$fileName] = $true
+        $filePath = Join-Path $sharedPrompts $fileName
+
+        $content = @"
+---
+description: $desc
+agent: agent
+tools: ["detritus/*"]
+---
+
+Call kb_get(name="$name") and follow the instructions in the returned document.
+"@
+        [System.IO.File]::WriteAllText($filePath, $content, [System.Text.UTF8Encoding]::new($false))
+    }
+
+    # Remove stale detritus-generated prompts (keep unrelated user prompts)
+    Get-ChildItem $sharedPrompts -Filter "*.prompt.md" -ErrorAction SilentlyContinue | ForEach-Object {
+        if (-not $generated.ContainsKey($_.Name)) {
+            $raw = Get-Content $_.FullName -Raw
+            if ($raw -match 'kb_get\(name="') {
+                Remove-Item $_.FullName -Force
+            }
+        }
+    }
+
+    Write-Host "Shared VS Code prompts: $sharedPrompts"
+}
 
 function Configure-VSCodeMcp {
     param([string]$VsCodeDir)
@@ -172,6 +227,33 @@ function Configure-VSCodeMcp {
         Write-Host "Created $vscodeMcp"
     }
 
+    # Configure a single prompt source to avoid duplicate slash commands in multi-root workspaces.
+    $settingsPath = Join-Path $VsCodeDir "settings.json"
+    $promptLocationsBlock = @"
+  "chat.promptFilesLocations": {
+    ".github/prompts": false,
+    "~/.copilot/prompts": true
+  }
+"@
+    if (Test-Path $settingsPath) {
+        $raw = Get-Content $settingsPath -Raw
+        if ([string]::IsNullOrWhiteSpace($raw) -or $raw.Trim() -eq "{}") {
+            $raw = "{`n$promptLocationsBlock`n}`n"
+        } elseif ($raw -match '"chat\.promptFilesLocations"\s*:\s*\{[^}]*\}') {
+            $raw = [regex]::Replace($raw, '"chat\.promptFilesLocations"\s*:\s*\{[^}]*\}', $promptLocationsBlock.Trim())
+        } elseif ($raw -match '^\s*\{') {
+            $raw = [regex]::Replace($raw, '^\s*\{', "{`n$promptLocationsBlock,", 1)
+        } else {
+            $raw = "{`n$promptLocationsBlock`n}`n"
+        }
+        [System.IO.File]::WriteAllText($settingsPath, $raw, [System.Text.UTF8Encoding]::new($false))
+        Write-Host "Updated $settingsPath (chat.promptFilesLocations)"
+    } else {
+        $json = "{`n$promptLocationsBlock`n}`n"
+        [System.IO.File]::WriteAllText($settingsPath, $json, [System.Text.UTF8Encoding]::new($false))
+        Write-Host "Created $settingsPath"
+    }
+
     # Clean up old user-level prompt files (no longer used — prompts are workspace-level now)
     $oldPrompts = Join-Path $VsCodeDir "prompts"
     if (Test-Path $oldPrompts) {
@@ -188,9 +270,12 @@ function Configure-VSCodeMcp {
     Write-Host "VS Code MCP config: $vscodeMcp"
 }
 
+Generate-SharedPrompts
+
 $vsCodeUserDir = Join-Path $env:APPDATA "Code\User"
 Configure-VSCodeMcp $vsCodeUserDir
 
 Write-Host ""
-Write-Host "VS Code slash commands: run 'detritus --init' in each project to generate .github/prompts/"
+Write-Host "VS Code slash commands: loaded from ~/.copilot/prompts/ (shared across workspaces)"
+Write-Host "Optional: run 'detritus --init' in a repo if you specifically want repo-local prompt files."
 Write-Host "Reload VS Code window (Ctrl+Shift+P > Developer: Reload Window) to activate."

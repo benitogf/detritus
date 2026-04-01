@@ -145,7 +145,64 @@ echo "Restart Windsurf to activate."
 
 # Auto-configure VS Code
 # VS Code uses "servers" (not "mcpServers") in mcp.json
-# Prompt files (slash commands) are workspace-level — use 'detritus --init' per repo
+# Prompt files (slash commands) are loaded from one shared folder to avoid duplicates in multi-root workspaces
+
+vscode_alias_for_doc() {
+  local name="$1"
+  local leaf="${name##*/}"
+  case "$name" in
+    plan/analyze)         echo "plan" ;;
+    plan/export)          echo "plan-export" ;;
+    plan/diagrams)        echo "diagrams" ;;
+    testing/index)        echo "testing" ;;
+    testing/go-backend-*) echo "testing-${leaf}" ;;
+    ooo/*)                echo "ooo-${leaf}" ;;
+    *)                    echo "$leaf" ;;
+  esac
+}
+
+generate_shared_prompts() {
+  local SHARED_PROMPTS_DIR="$HOME/.copilot/prompts"
+  local GENERATED_LIST="${TMP}/generated_prompts.txt"
+  mkdir -p "$SHARED_PROMPTS_DIR"
+  : > "$GENERATED_LIST"
+
+  tab=$(printf '\t')
+  while IFS="$tab" read -r name desc; do
+    [ -z "$name" ] && continue
+    local alias
+    alias=$(vscode_alias_for_doc "$name")
+    local filename="${alias}.prompt.md"
+    local file="${SHARED_PROMPTS_DIR}/${filename}"
+
+    cat > "$file" <<EOF
+---
+description: ${desc}
+agent: agent
+tools: ["detritus/*"]
+---
+
+Call kb_get(name="${name}") and follow the instructions in the returned document.
+EOF
+    echo "$filename" >> "$GENERATED_LIST"
+  done << DOCLIST
+$($BINARY_PATH --list 2>/dev/null)
+DOCLIST
+
+  # Remove stale detritus-generated prompts (preserve user prompts that are unrelated)
+  for f in "$SHARED_PROMPTS_DIR"/*.prompt.md; do
+    [ -f "$f" ] || continue
+    base=$(basename "$f")
+    if grep -qx "$base" "$GENERATED_LIST"; then
+      continue
+    fi
+    if grep -q 'kb_get(name="' "$f" 2>/dev/null; then
+      rm -f "$f"
+    fi
+  done
+
+  echo "Shared VS Code prompts: ${SHARED_PROMPTS_DIR}/"
+}
 
 configure_vscode_mcp() {
   local VSCODE_DIR="$1"
@@ -185,6 +242,44 @@ EOF
     echo "Created ${VSCODE_MCP}"
   fi
 
+  # Configure a single prompt source to avoid duplicate slash commands in multi-root workspaces.
+  local VSCODE_SETTINGS="${VSCODE_DIR}/settings.json"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - <<PY
+import json, os
+path = os.path.expanduser("$VSCODE_SETTINGS")
+data = {}
+if os.path.exists(path):
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception:
+        data = {}
+locs = data.get('chat.promptFilesLocations')
+if not isinstance(locs, dict):
+    locs = {}
+locs['.github/prompts'] = False
+locs['~/.copilot/prompts'] = True
+data['chat.promptFilesLocations'] = locs
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(data, f, indent=2)
+print(f'Updated {path} (chat.promptFilesLocations)')
+PY
+  elif [ ! -f "$VSCODE_SETTINGS" ]; then
+    cat > "$VSCODE_SETTINGS" <<EOF
+{
+  "chat.promptFilesLocations": {
+    ".github/prompts": false,
+    "~/.copilot/prompts": true
+  }
+}
+EOF
+    echo "Created ${VSCODE_SETTINGS}"
+  else
+    echo "Warning: python3 not found, could not update ${VSCODE_SETTINGS}."
+    echo "Please set chat.promptFilesLocations manually to use ~/.copilot/prompts."
+  fi
+
   # Clean up old user-level prompt files (no longer used — prompts are workspace-level now)
   local OLD_PROMPTS="${VSCODE_DIR}/prompts"
   if [ -d "$OLD_PROMPTS" ]; then
@@ -200,6 +295,8 @@ EOF
   echo "VS Code MCP config: ${VSCODE_MCP}"
 }
 
+generate_shared_prompts
+
 # Linux/macOS VS Code locations
 if [ "$OS" = "linux" ]; then
   configure_vscode_mcp "$HOME/.config/Code/User"
@@ -212,5 +309,6 @@ elif [ "$OS" = "windows" ]; then
 fi
 
 echo ""
-echo "VS Code slash commands: run 'detritus --init' in each project to generate .github/prompts/"
+echo "VS Code slash commands: loaded from ~/.copilot/prompts/ (shared across workspaces)"
+echo "Optional: run 'detritus --init' in a repo if you specifically want repo-local prompt files."
 echo "Reload VS Code window (Developer: Reload Window) to activate."
