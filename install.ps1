@@ -442,8 +442,50 @@ function Configure-Verdent {
         [System.IO.File]::WriteAllLines($verdentRules, $ruleBlock, [System.Text.UTF8Encoding]::new($false))
     }
 
+    # Generate Verdent skills for slash-command support
+    $skillsDir = Join-Path $verdentDir "skills"
+    New-Item -ItemType Directory -Path $skillsDir -Force | Out-Null
+
+    $generatedSkills = @{}
+    $listOutput2 = & $binaryPath --list 2>$null
+    foreach ($line in $listOutput2) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $parts = $line -split "`t", 2
+        if ($parts.Count -lt 1 -or [string]::IsNullOrWhiteSpace($parts[0])) { continue }
+        $name = $parts[0]
+        $desc = if ($parts.Count -ge 2) { $parts[1] } else { "Detritus knowledge base document: $name" }
+        $alias = Get-VSCodeAliasForDoc $name
+        $generatedSkills[$alias] = $true
+
+        $skillDir = Join-Path $skillsDir $alias
+        New-Item -ItemType Directory -Path $skillDir -Force | Out-Null
+        $skillFile = Join-Path $skillDir "SKILL.md"
+        $skillContent = @"
+---
+name: $alias
+description: $desc
+---
+
+Call the detritus MCP tool ``kb_get`` with name="$name" and follow the instructions in the returned document.
+"@
+        [System.IO.File]::WriteAllText($skillFile, $skillContent, [System.Text.UTF8Encoding]::new($false))
+    }
+
+    # Remove stale detritus-generated skills
+    if (Test-Path $skillsDir) {
+        Get-ChildItem $skillsDir -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            if (-not $generatedSkills.ContainsKey($_.Name)) {
+                $sf = Join-Path $_.FullName "SKILL.md"
+                if ((Test-Path $sf) -and ((Get-Content $sf -Raw) -match 'kb_get')) {
+                    Remove-Item $_.FullName -Recurse -Force
+                }
+            }
+        }
+    }
+
     Write-Host "Verdent MCP config: $verdentMcp"
     Write-Host "Verdent rules: $verdentRules"
+    Write-Host "Verdent skills: $skillsDir"
 }
 
 function Configure-VSCodeMcp {
@@ -576,10 +618,16 @@ if (Test-ContinueInstalled) {
 if (Test-VerdentInstalled) {
     $verdentMcp = Join-Path $env:USERPROFILE ".verdent\mcp.json"
     $verdentRules = Join-Path $env:USERPROFILE ".verdent\VERDENT.md"
+    $verdentSkills = Join-Path $env:USERPROFILE ".verdent\skills"
     if ((Test-Path $verdentMcp) -and (Test-Path $verdentRules)) {
         Write-Host "  [PASS] Verdent MCP/rules"
     } else {
         Write-Host "  [WARN] Verdent MCP/rules"
+    }
+    if ((Test-Path $verdentSkills) -and (Get-ChildItem $verdentSkills -Directory -ErrorAction SilentlyContinue)) {
+        Write-Host "  [PASS] Verdent skills"
+    } else {
+        Write-Host "  [WARN] Verdent skills"
     }
 }
 
@@ -625,6 +673,6 @@ Write-Host "VS Code slash commands: loaded from ~/.copilot/prompts/ (shared acro
 Write-Host "Inline detritus tokens: use multiple commands anywhere in one message (example: '/truthseeker ... /plan')."
 Write-Host "Continue integration: if Continue is installed, installer writes ~/.continue/mcpServers + ~/.continue/prompts."
 Write-Host "Cursor integration: MCP config written to Cursor User directory."
-Write-Host "Verdent integration: if Verdent is installed, installer writes ~/.verdent/mcp.json + ~/.verdent/VERDENT.md."
+Write-Host "Verdent integration: if Verdent is installed, installer writes ~/.verdent/mcp.json + ~/.verdent/VERDENT.md + ~/.verdent/skills/."
 Write-Host "Optional: run 'detritus --init' in a repo if you specifically want repo-local prompt files."
 Write-Host "Reload VS Code window (Ctrl+Shift+P > Developer: Reload Window) to activate."

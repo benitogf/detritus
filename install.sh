@@ -436,8 +436,48 @@ configure_verdent() {
     cp "$RULE_BLOCK_FILE" "$VERDENT_RULES"
   fi
 
+  # Generate Verdent skills for slash-command support
+  local SKILLS_DIR="${VERDENT_DIR}/skills"
+  mkdir -p "$SKILLS_DIR"
+
+  local GENERATED_SKILLS="${TMP}/generated_verdent_skills.txt"
+  : > "$GENERATED_SKILLS"
+
+  tab=$(printf '\t')
+  "$BINARY_PATH" --list 2>/dev/null | while IFS="$tab" read -r name desc; do
+    [ -z "$name" ] && continue
+    local alias
+    alias=$(vscode_alias_for_doc "$name")
+    echo "$alias" >> "$GENERATED_SKILLS"
+    [ -z "$desc" ] && desc="Detritus knowledge base document: ${name}"
+
+    local skill_dir="${SKILLS_DIR}/${alias}"
+    mkdir -p "$skill_dir"
+    cat > "${skill_dir}/SKILL.md" <<SKILLEOF
+---
+name: ${alias}
+description: ${desc}
+---
+
+Call the detritus MCP tool \`\`kb_get\`\` with name="${name}" and follow the instructions in the returned document.
+SKILLEOF
+  done
+
+  # Remove stale detritus-generated skills
+  for d in "$SKILLS_DIR"/*/; do
+    [ -d "$d" ] || continue
+    local skill_name
+    skill_name=$(basename "$d")
+    if ! grep -qx "$skill_name" "$GENERATED_SKILLS" 2>/dev/null; then
+      if [ -f "${d}SKILL.md" ] && grep -q 'kb_get' "${d}SKILL.md" 2>/dev/null; then
+        rm -rf "$d"
+      fi
+    fi
+  done
+
   echo "Verdent MCP config: ${VERDENT_MCP}"
   echo "Verdent rules: ${VERDENT_RULES}"
+  echo "Verdent skills: ${SKILLS_DIR}"
 }
 
 configure_vscode_mcp() {
@@ -527,6 +567,11 @@ if verdent_is_installed; then
   else
     echo "  [WARN] Verdent MCP/rules"
   fi
+  if [ -d "$HOME/.verdent/skills" ] && [ "$(ls -A "$HOME/.verdent/skills" 2>/dev/null)" ]; then
+    echo "  [PASS] Verdent skills"
+  else
+    echo "  [WARN] Verdent skills"
+  fi
 fi
 
 # Linux/macOS VS Code locations
@@ -569,6 +614,6 @@ echo "VS Code slash commands: loaded from ~/.copilot/prompts/ (shared across wor
 echo "Inline detritus tokens: use multiple commands anywhere in one message (example: '/truthseeker ... /plan')."
 echo "Continue integration: if Continue is installed, installer writes ~/.continue/mcpServers + ~/.continue/prompts."
 echo "Cursor integration: MCP config written to Cursor User directory."
-echo "Verdent integration: if Verdent is installed, installer writes ~/.verdent/mcp.json + ~/.verdent/VERDENT.md."
+echo "Verdent integration: if Verdent is installed, installer writes ~/.verdent/mcp.json + ~/.verdent/VERDENT.md + ~/.verdent/skills/."
 echo "Optional: run 'detritus --init' in a repo if you specifically want repo-local prompt files."
 echo "Reload VS Code window (Developer: Reload Window) to activate."
