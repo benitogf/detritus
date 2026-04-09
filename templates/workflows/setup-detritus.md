@@ -66,6 +66,7 @@ The install script also:
 If Verdent is installed, the install script configures:
 - `~/.verdent/mcp.json` with a `detritus` MCP server entry
 - `~/.verdent/VERDENT.md` with a detritus-managed curated rules block (always-on guidance)
+- `~/.verdent/skills/<alias>/SKILL.md` for each detritus document (enables `/truthseeker`, `/plan`, etc. as Verdent slash commands)
 
 Read and verify `~/.verdent/mcp.json` includes:
 
@@ -243,7 +244,7 @@ Tell the user to **reload the VS Code window**: press `Ctrl+Shift+P` (or `Cmd+Sh
 After reload, users can include multiple detritus command tokens anywhere in one message (for example: `/truthseeker ... /plan ... /testing`) and the inline router instructions will map them to multiple `kb_get` calls.
 
 ### Verdent
-Tell the user to restart Verdent (or reopen the project) so MCP servers and rule files are reloaded from `~/.verdent/`.
+Tell the user to restart Verdent (or reopen the project) so MCP servers, rule files, and skill files are reloaded from `~/.verdent/`. After restart, detritus slash commands (`/truthseeker`, `/plan`, etc.) will appear in Verdent's skill list.
 
 ## Optional: repo-specific Copilot instructions
 
