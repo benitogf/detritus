@@ -14,6 +14,11 @@ triggers:
   - require.Eventually
   - Eventually
   - polling
+  - test is flaky
+  - test hangs
+  - test times out
+  - test passes sometimes
+  - sleep in test
 when: Writing tests with async operations, WaitGroup patterns, subscription tests, fixing flaky tests
 related:
   - testing/index

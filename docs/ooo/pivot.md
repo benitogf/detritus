@@ -16,6 +16,12 @@ triggers:
   - partition
   - leader
   - follower
+  - multiple servers
+  - sync data between servers
+  - high availability
+  - replicate data across machines
+  - run on multiple machines
+  - failover
 when: Distributed systems, multi-node setup, cluster configuration, sync issues between instances
 related:
   - ooo/package

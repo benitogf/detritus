@@ -11,6 +11,10 @@ triggers:
   - WriteFilter enforcement
   - filters gate writes
   - filters read-side
+  - filter not working
+  - data bypasses filter
+  - why is my filter ignored
+  - writes not going through filter
 when: Agent is reasoning about whether filters apply to direct storage operations, or claiming filters prevent/gate storage writes
 related:
   - ooo/package

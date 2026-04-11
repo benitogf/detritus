@@ -12,6 +12,14 @@ triggers:
   - token
   - tokenAuth
   - Bearer
+  - login
+  - sign in
+  - protect endpoint
+  - require authentication
+  - user access control
+  - password
+  - secure API
+  - who can access
 when: Simple JWT auth, basic token auth without policies
 related:
   - ooo/package

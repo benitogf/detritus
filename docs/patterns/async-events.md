@@ -12,6 +12,12 @@ triggers:
   - polling
   - callback
   - event ordering
+  - events not arriving
+  - callback not firing
+  - things happening out of order
+  - unpredictable behavior
+  - data arrives late
+  - missed events
 when: Working with async events, callbacks, subscriptions, event-driven architectures, or debugging race conditions
 related:
   - testing/go-backend-async

@@ -12,6 +12,11 @@ triggers:
   - fake
   - stub
   - boundary
+  - what should I mock
+  - mocking too much
+  - test real behavior
+  - how to structure mocks
+  - external dependency in test
 when: Deciding what to mock, how to structure mocks, avoiding over-mocking
 related:
   - testing/index

@@ -28,6 +28,17 @@ triggers:
   - WebSocket
   - subscription
   - endpoint
+  - read data from endpoint
+  - display data from server
+  - save data to server
+  - live updates
+  - real-time changes
+  - data changes automatically
+  - limit number of entries
+  - restrict access to endpoint
+  - expire old entries
+  - create an API
+  - serve data over HTTP
   - CRUD
   - NoopFilter
   - NoopHook

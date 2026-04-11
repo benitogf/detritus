@@ -14,6 +14,12 @@ triggers:
   - analytics
   - logs
   - audit trail
+  - store old data
+  - keep records over time
+  - query by date range
+  - large dataset
+  - data retention policy
+  - archive data
 when: Long-term historical data, millions of records, time-range queries, analytics, audit trails — used alongside ooo, not as a replacement
 related:
   - ooo/package

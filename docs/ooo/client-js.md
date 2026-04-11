@@ -18,6 +18,12 @@ triggers:
   - publish
   - unpublish
   - JSON Patch
+  - show data in browser
+  - display data from server in UI
+  - data updates automatically in frontend
+  - connect frontend to backend
+  - react component with live data
+  - listen for changes
 when: Frontend integration, React apps, JavaScript WebSocket client, browser-side subscriptions
 related:
   - ooo/package

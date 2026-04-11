@@ -10,6 +10,10 @@ triggers:
   - consolidated test
   - single test
   - coverage
+  - test full flow
+  - comprehensive test
+  - test the whole thing
+  - too many small tests
 when: Structuring tests, deciding between many small tests vs one comprehensive test, testing state machines
 related:
   - testing/index

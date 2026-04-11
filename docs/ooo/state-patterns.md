@@ -10,6 +10,11 @@ triggers:
   - ooo.Set state
   - pending reset
   - metrics tick
+  - track state on server
+  - reset a counter
+  - schedule action for later
+  - deferred action
+  - count things on server
 when: Managing server-side state (metrics, flags, scheduled actions) through ooo's typed CRUD helpers
 related:
   - ooo/package
