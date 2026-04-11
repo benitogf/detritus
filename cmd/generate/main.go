@@ -191,7 +191,19 @@ func buildToolDescription(docs []chunk.Doc) string {
 		var parts []string
 		for _, doc := range catDocs {
 			triggers := strings.Join(doc.Frontmatter.Triggers, ", ")
-			parts = append(parts, fmt.Sprintf("%s (%s)", doc.Name, triggers))
+			// Include section headings for richer keyword matching
+			var sectionNames []string
+			for _, s := range doc.Sections {
+				if s.Heading != "" {
+					sectionNames = append(sectionNames, s.Heading)
+				}
+			}
+			entry := doc.Name
+			if len(sectionNames) > 0 {
+				entry += " [" + strings.Join(sectionNames, ", ") + "]"
+			}
+			entry += " (" + triggers + ")"
+			parts = append(parts, entry)
 		}
 		fmt.Fprintf(&b, "%s: %s\n", label, strings.Join(parts, " | "))
 	}
