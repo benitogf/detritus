@@ -20,7 +20,7 @@ related:
 > ## THIS COMMAND IMPLEMENTS DIRECTLY
 >
 > Unlike /grow and /plan, /optimize may edit files immediately.
-> It targets only the local detritus clone (docs/, templates/, main.go).
+> It targets only the local detritus clone (docs/).
 > All changes aim to improve how reliably the agent detects and applies KB guidance.
 
 ---
@@ -33,12 +33,7 @@ Search workspace roots for a local detritus clone:
 - If NOT found:
   - Output warning:
     ```
-    ⚠️ /optimize requires a local clone of the detritus MCP knowledge base.
-    
-    This command audits and improves KB docs so the agent can detect and apply
-    guidance more reliably during tasks. Without a local clone, no changes can
-    be made.
-    
+    /optimize requires a local clone of the detritus MCP knowledge base.
     Repository: https://github.com/benitogf/detritus
     ```
   - STOP. Do not proceed.
@@ -57,7 +52,7 @@ description: [one-line, keyword-rich]
 category: [core|storage|testing|patterns|principles|meta|planning]
 triggers: [list of keywords/phrases that should cause this doc to be consulted]
 when: [one sentence: under what task conditions this doc applies]
-related: [list of other doc names]
+related: [list of other doc names, using full paths like meta/truthseeker]
 ---
 ```
 
@@ -73,56 +68,48 @@ For each doc, check:
 | Check | Pass Criteria |
 |-------|--------------|
 | frontmatter complete | all required fields present and non-empty |
-| triggers comprehensive | includes API names, error keywords, common misspellings, related concepts |
+| triggers comprehensive | includes API names, error keywords, related concepts |
 | description keyword-dense | contains the top 3-5 terms someone would use when needing this doc |
 | anti-patterns present | at least one concrete "don't do X" with example |
 | detection cues near top | first 20 lines contain enough keywords for kb_search to match |
 | cross-references correct | related docs exist and reference back |
 | no dead references | all mentioned doc names / paths are valid |
-| content agent-optimized | structured as rules/tables, not prose paragraphs; "if X then Y" format preferred |
+| content agent-optimized | structured as rules/tables, not prose paragraphs |
+
+Note: trigger keywords are also auto-enriched at build time via TF-IDF (see `cmd/generate/main.go`). Manual triggers in frontmatter should focus on domain-specific terms that TF-IDF might miss.
 
 ---
 
-## Step 2: Audit main.go kb_get Description
-
-The `kb_get` tool description is the **primary discovery mechanism** — it's what the LLM sees in its tool list to decide whether to call `kb_get`.
+## Step 2: Cross-Reference Integrity
 
 Check that:
-- Every doc in `docs/` has a corresponding entry in the description string
-- Each entry contains the doc's top trigger keywords
-- New docs added since last optimization are included
-- Keywords match what actually appears in conversations (not just technical terms)
+- Every `related:` entry uses a full doc path (e.g. `meta/truthseeker`, not just `truthseeker`)
+- Every `related:` entry points to a doc that actually exists in `docs/`
+- Related docs reference back bidirectionally where it makes sense
 
 ---
 
-## Step 3: Audit templates/.windsurfrules
-
-Check that:
-- The Workflows table includes all docs that are meant to be user-invokable commands
-- The Foundational Principles section references the correct doc name
-- No stale references to renamed/deleted docs
-
----
-
-## Step 4: Implement Improvements
+## Step 3: Implement Improvements
 
 For each issue found:
-1. Edit the file directly (docs, main.go, or templates)
+1. Edit the file directly in `docs/`
 2. Keep changes minimal and focused
 3. Preserve existing content — add structure, don't rewrite meaning
 4. After all edits, output a summary of what changed and why
 
 ---
 
-## Step 5: Rebuild Guidance
+## Step 4: Rebuild
 
-After making changes, remind the user:
+After making changes:
 ```
-Changes made to the local detritus clone. To activate:
-1. Rebuild: cd <detritus_path> && go build -o detritus .
-2. Install: cp detritus /usr/local/bin/detritus
-3. Restart Windsurf for the MCP server to reload
+cd <detritus_path>
+go generate ./...
+go build -o detritus .
+detritus --setup
 ```
+
+Or if updating a released version, commit, push, and tag a new release.
 
 ---
 
@@ -130,6 +117,6 @@ Changes made to the local detritus clone. To activate:
 
 - **Agent-first**: these docs exist for the agent to read, not humans. Optimize for keyword density and rule clarity.
 - **Detection over explanation**: a doc that gets found and applied beats a doc that explains beautifully but never gets consulted.
-- **Triggers are the index**: the frontmatter `triggers` list and the `kb_get` description string are the two primary ways docs get discovered. They must be comprehensive.
+- **Triggers are the index**: the frontmatter `triggers` list and the auto-generated TF-IDF keywords are the primary ways docs get discovered. Manual triggers should cover domain terms that content analysis misses.
 - **Anti-patterns prevent recurrence**: every time /grow identifies a failure mode, /optimize should ensure the relevant doc's anti-patterns section covers it.
 - **Minimal prose**: prefer tables, bullet lists, "if X then Y" rules. Reduce paragraphs to single-line rules where possible.

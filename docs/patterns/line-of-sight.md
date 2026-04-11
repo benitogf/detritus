@@ -14,8 +14,8 @@ triggers:
   - err != nil
   - error checking
 related:
-  - go-modern
-  - truthseeker
+  - patterns/go-modern
+  - meta/truthseeker
 ---
 
 # Line of Sight

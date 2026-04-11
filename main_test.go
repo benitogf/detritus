@@ -140,7 +140,7 @@ func TestMCPServer(t *testing.T) {
 		{"_truthseeker", "Foundational"},     // old _alias -> meta/truthseeker
 		{"truthseeker", "Foundational"},      // bare alias -> meta/truthseeker
 		{"/truthseeker", "Foundational"},     // slash-prefixed -> meta/truthseeker
-		{"plan", ""},                         // alias -> plan/analyze (just check no error)
+		{"plan", ""},                         // alias -> plan/index (just check no error)
 		{"ooo-package", ""},                  // hyphen alias -> ooo/package
 		{"meta/truthseeker", "Foundational"}, // canonical name still works
 		{"testing-go-backend-mock", ""},      // compound alias -> testing/go-backend-mock
@@ -232,8 +232,8 @@ func TestMCPServer(t *testing.T) {
 		t.Fatal("kb_search state-patterns:", err)
 	}
 	stateSearchText := stateSearch.Content[0].(*mcp.TextContent).Text
-	if !contains(stateSearchText, "ooo/state-patterns") {
-		t.Fatal("kb_search didn't find ooo/state-patterns for 'MetricsTick pending reset'")
+	if !contains(stateSearchText, "patterns/state-management") && !contains(stateSearchText, "ooo/state-patterns") {
+		t.Fatal("kb_search didn't find state-management docs for 'MetricsTick pending reset'")
 	}
 }
 
@@ -269,7 +269,7 @@ func TestListFlag(t *testing.T) {
 		seen[name] = desc
 	}
 
-	for _, required := range []string{"ooo/package", "ooo/filters-internals", "ooo/state-patterns", "meta/grow", "meta/truthseeker", "meta/research-first", "plan/analyze", "patterns/async-events", "patterns/line-of-sight"} {
+	for _, required := range []string{"ooo/package", "ooo/filters-internals", "ooo/state-patterns", "meta/grow", "meta/truthseeker", "meta/research-first", "plan/index", "patterns/async-events", "patterns/line-of-sight"} {
 		if _, ok := seen[required]; !ok {
 			t.Errorf("--list missing required doc: %s", required)
 		}

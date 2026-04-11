@@ -11,7 +11,7 @@ triggers:
   - bias
   - honesty
   - challenge
-when: Always active via .windsurfrules. Manual invocation forces elevated rigor on the current task.
+when: Always active. Manual invocation forces elevated rigor on the current task.
 related:
   - meta/grow
   - testing/go-backend-async

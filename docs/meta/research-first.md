@@ -10,7 +10,7 @@ triggers:
   - asking user to confirm
 when: Agent is uncertain about how something works and is about to ask the user instead of researching
 related:
-  - truthseeker
+  - meta/truthseeker
 ---
 
 # Research First — Never Ask What You Can Look Up

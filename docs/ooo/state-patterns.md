@@ -19,13 +19,13 @@ related:
 
 # Server-Side State with ooo
 
-This doc covers how to apply state mutation patterns (see `patterns/state-management`) using ooo's typed CRUD helpers. ooo storage paths act as persistent key-value state, and `ooo.Get`/`ooo.Set`/`ooo.Delete` provide the typed access layer.
+Applies the patterns from `patterns/state-management` (single-writer, no wasted writes, persistent flags) using ooo's typed CRUD helpers. Read that doc first for the general principles.
 
 ---
 
 ## Typed State Access
 
-Use generic helpers instead of raw JSON to avoid marshal/unmarshal boilerplate:
+Use generic helpers instead of raw JSON:
 
 ```go
 // Read typed state
@@ -40,42 +40,6 @@ ooo.Delete(server, "metrics/myservice")
 
 ---
 
-## Metrics Tick Pattern
-
-A common pattern: on each tick, check for a pending reset flag before incrementing. One function owns the decision.
-
-```go
-const pendingKey = "pending/reset/metrics/myservice"
-
-func MetricsTick(server *ooo.Server, increment bool) {
-    _, err := ooo.Get[PendingReset](server, pendingKey)
-    if err == nil {
-        ResetMetrics(server)
-    }
-    if increment {
-        metrics, _ := ooo.Get[Metrics](server, "metrics/myservice")
-        metrics.Count++
-        ooo.Set(server, "metrics/myservice", metrics)
-    }
-}
-
-func ResetMetrics(server *ooo.Server) {
-    ooo.Set(server, "metrics/myservice", Metrics{})
-    ooo.Delete(server, pendingKey)
-}
-
-func ScheduleResetMetrics(server *ooo.Server) {
-    ooo.Set(server, pendingKey, PendingReset{Pending: true})
-}
-```
-
-Key points:
-- `MetricsTick` is the single writer — callers don't decide what to write
-- `ResetMetrics` deletes the pending flag to prevent double-reset
-- `ScheduleResetMetrics` is idempotent — setting the flag twice is harmless
-
----
-
 ## Conditional Writes
 
 Avoid writing to ooo storage when the value hasn't changed:
@@ -84,7 +48,7 @@ Avoid writing to ooo storage when the value hasn't changed:
 func UpdateStatus(server *ooo.Server, status string) {
     current, err := ooo.Get[Status](server, "status")
     if err == nil && current.Value == status {
-        return // no-op
+        return
     }
     ooo.Set(server, "status", Status{Value: status})
 }
@@ -92,9 +56,7 @@ func UpdateStatus(server *ooo.Server, status string) {
 
 ---
 
-## Path Conventions for State
-
-ooo paths serve as the key namespace. Use consistent conventions:
+## Path Conventions
 
 | State type | Path pattern | Example |
 |-----------|-------------|---------|
@@ -102,4 +64,4 @@ ooo paths serve as the key namespace. Use consistent conventions:
 | Domain state | `{domain}/{service}` | `metrics/myservice` |
 | Settings | `settings` | `settings` |
 
-All paths used for state should have appropriate filters registered (see `ooo/package` for `OpenFilter`, `WriteFilter`, etc.).
+All paths used for state should have appropriate filters registered (see `ooo/package`).

@@ -261,10 +261,8 @@ func aliasForDoc(name string) string {
 	parts := strings.SplitN(name, "/", 2)
 	leaf := parts[len(parts)-1]
 	switch {
-	case name == "plan/analyze":
-		return "plan"
-	case name == "testing/index":
-		return "testing"
+	case leaf == "index" && len(parts) == 2:
+		return parts[0] // testing/index -> testing, plan/index -> plan
 	case strings.HasPrefix(name, "testing/go-backend-"):
 		return "testing-" + leaf
 	case strings.HasPrefix(name, "ooo/"):

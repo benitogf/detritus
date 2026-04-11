@@ -13,7 +13,7 @@ triggers:
   - filters read-side
 when: Agent is reasoning about whether filters apply to direct storage operations, or claiming filters prevent/gate storage writes
 related:
-  - ooo-package
+  - ooo/package
 ---
 
 # ooo Filters Internals

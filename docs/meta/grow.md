@@ -16,7 +16,7 @@ when: User invokes /grow after correcting agent behavior, or wants to check last
 related:
   - meta/truthseeker
   - meta/optimize
-  - plan/analyze
+  - plan/index
 ---
 
 # /grow — Conversation-Driven KB Improvement
