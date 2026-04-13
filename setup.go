@@ -68,7 +68,7 @@ func RunSetup(binaryPath string, dryRun bool) error {
 	setupCursor(home, binaryPath, dryRun)
 
 	// Claude Code
-	setupClaudeCode(home, binaryPath, dryRun)
+	setupClaudeCode(home, binaryPath, docs, dryRun)
 
 	// Verdent
 	if verdentDetected(home) {
@@ -296,18 +296,36 @@ func setupCursor(home, binaryPath string, dryRun bool) {
 
 // ---- Claude Code -------------------------------------------------------------
 
-func setupClaudeCode(home, binaryPath string, dryRun bool) {
-	cfgFile := filepath.Join(home, ".claude", "mcp.json")
+func setupClaudeCode(home, binaryPath string, docs []docEntry, dryRun bool) {
+	cfgFile := filepath.Join(home, ".claude.json")
 	if dryRun {
 		fmt.Printf("[dry-run] Would upsert detritus into %s (mcpServers)\n", cfgFile)
-		return
-	}
-	if err := os.MkdirAll(filepath.Dir(cfgFile), 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: claude config dir: %v\n", err)
+		fmt.Printf("[dry-run] Would write %d skill files to %s\n", len(docs), filepath.Join(home, ".claude", "skills"))
 		return
 	}
 	upsertMCP(cfgFile, "mcpServers", binaryPath)
 	fmt.Printf("Claude Code MCP config: %s\n", cfgFile)
+
+	generateClaudeSkills(home, docs)
+}
+
+func generateClaudeSkills(home string, docs []docEntry) {
+	skillsDir := filepath.Join(home, ".claude", "skills")
+	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: claude skills dir: %v\n", err)
+		return
+	}
+	for _, doc := range docs {
+		skillDir := filepath.Join(skillsDir, doc.alias)
+		_ = os.MkdirAll(skillDir, 0o755)
+		desc := doc.desc
+		if desc == "" {
+			desc = "Detritus knowledge base document: " + doc.name
+		}
+		content := fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\nCall kb_get with name=\"%s\" and follow the instructions in the returned document.\n", doc.alias, desc, doc.name)
+		_ = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644)
+	}
+	fmt.Printf("Claude Code skills: %s\n", skillsDir)
 }
 
 // ---- Verdent ----------------------------------------------------------------
@@ -506,11 +524,17 @@ func printVerification(home string) {
 	}
 
 	// Claude Code
-	claudeFile := filepath.Join(home, ".claude", "mcp.json")
+	claudeFile := filepath.Join(home, ".claude.json")
 	if fileContains(claudeFile, `"detritus"`) {
 		fmt.Println("  [PASS] Claude Code MCP entry")
 	} else {
 		fmt.Println("  [WARN] Claude Code MCP entry not found")
+	}
+	skillsDir := filepath.Join(home, ".claude", "skills")
+	if entries, err := os.ReadDir(skillsDir); err == nil && len(entries) > 0 {
+		fmt.Println("  [PASS] Claude Code skills")
+	} else {
+		fmt.Println("  [WARN] Claude Code skills not found")
 	}
 }
 
