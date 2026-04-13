@@ -67,6 +67,9 @@ func RunSetup(binaryPath string, dryRun bool) error {
 	// Cursor
 	setupCursor(home, binaryPath, dryRun)
 
+	// Claude Code
+	setupClaudeCode(home, binaryPath, dryRun)
+
 	// Verdent
 	if verdentDetected(home) {
 		setupVerdent(home, binaryPath, docs, dryRun)
@@ -291,6 +294,22 @@ func setupCursor(home, binaryPath string, dryRun bool) {
 	}
 }
 
+// ---- Claude Code -------------------------------------------------------------
+
+func setupClaudeCode(home, binaryPath string, dryRun bool) {
+	cfgFile := filepath.Join(home, ".claude", "mcp.json")
+	if dryRun {
+		fmt.Printf("[dry-run] Would upsert detritus into %s (mcpServers)\n", cfgFile)
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(cfgFile), 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: claude config dir: %v\n", err)
+		return
+	}
+	upsertMCP(cfgFile, "mcpServers", binaryPath)
+	fmt.Printf("Claude Code MCP config: %s\n", cfgFile)
+}
+
 // ---- Verdent ----------------------------------------------------------------
 
 func verdentDetected(home string) bool {
@@ -484,6 +503,14 @@ func printVerification(home string) {
 		} else {
 			fmt.Println("  [WARN] Verdent skills")
 		}
+	}
+
+	// Claude Code
+	claudeFile := filepath.Join(home, ".claude", "mcp.json")
+	if fileContains(claudeFile, `"detritus"`) {
+		fmt.Println("  [PASS] Claude Code MCP entry")
+	} else {
+		fmt.Println("  [WARN] Claude Code MCP entry not found")
 	}
 }
 

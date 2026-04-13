@@ -276,7 +276,7 @@ func aliasForDoc(name string) string {
 // and writes it back. Creates the file if it doesn't exist.
 func upsertMCP(file, parentKey, command string) {
 	data := map[string]any{}
-	if raw, err := os.ReadFile(file); err == nil {
+	if raw, err := os.ReadFile(file); err == nil && len(raw) > 0 {
 		if err := json.Unmarshal(raw, &data); err != nil {
 			fmt.Fprintf(os.Stderr, "failed to parse %s: %v\n", file, err)
 			os.Exit(1)
