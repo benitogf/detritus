@@ -14,6 +14,19 @@ triggers:
 
 Generate a personalized Claude Code configuration by analyzing the user's actual environment, projects, and working patterns — not hardcoded templates.
 
+## Phase 0: Platform Detection
+
+Before anything else, detect the OS. Run `uname -s 2>/dev/null || echo Windows` to determine the platform.
+
+- **Linux/macOS/WSL**: Hook scripts use bash (`.sh`)
+- **Native Windows** (no WSL/Git Bash): Hook scripts use PowerShell (`.ps1`)
+
+Detect WSL by checking for `/proc/version` containing "microsoft" — WSL counts as Linux for hook purposes.
+
+Also check if `~/.claude/settings.json` exists and is valid JSON. If it exists but fails to parse, **fix it first** before proceeding:
+- If empty or corrupt, replace with `{"permissions":{"allow":[],"deny":[]}}`
+- If it has a structure error (e.g. missing arrays), repair the specific field
+
 ## Phase 1: Discovery
 
 Gather facts before generating anything. Run these checks silently (don't dump raw output to user):
@@ -40,26 +53,56 @@ Generate rules ONLY for languages/frameworks actually found:
 - **Show-reasoning rule**: Always include — makes Claude cite `[rule: file#section]` when rules shape decisions.
 - **Update-context rule**: Always include — keeps CLAUDE.md current after changes.
 
-### Hooks (`~/.claude/hooks/detritus-*.sh` + merge into `settings.json`)
+### Hooks (merge into `settings.json`)
 
-Only generate hooks for tools confirmed installed:
+Only generate hooks for tools confirmed installed.
+
+#### Hook types to generate:
 
 - **Auto-format** (PostToolUse, matcher: `Edit|Write`): Run the detected formatter after file edits. gofmt for Go, prettier for JS/TS, black for Python, rustfmt for Rust, etc. Script must check file extension before formatting.
 - **Session context** (SessionStart): Inject working directory, branch, language versions, running containers — but only for tools that are installed.
 - **Task completion** (Stop): Prompt-based hook that verifies tests ran and build was checked for code changes. Adapt the check to the user's actual test/build commands.
 - **Context preservation** (PreCompact): If the user has infrastructure (servers, deploy targets), preserve those details during compaction. Ask the user before including any IPs, hostnames, or credentials.
 
-When merging into `settings.json`:
+#### Platform-specific hook scripts:
+
+**Linux/macOS/WSL** — generate `~/.claude/hooks/detritus-*.sh` (bash):
+- Use `sed` not `grep -P` (macOS has no PCRE grep)
+- Use POSIX test `[ ]` syntax where possible
+- Use `2>/dev/null` on optional tools
+- Make scripts executable (`chmod +x`)
+- Reference in settings.json as: `"command": "bash ~/.claude/hooks/detritus-gofmt.sh"`
+
+**Native Windows** — generate `~/.claude/hooks/detritus-*.ps1` (PowerShell):
+- Use `$input | ConvertFrom-Json` to parse hook event JSON from stdin
+- Use `Where-Object`, `Select-String` for filtering
+- Use `2>$null` or `-ErrorAction SilentlyContinue` on optional tools
+- Reference in settings.json as: `"command": "powershell -ExecutionPolicy Bypass -File ~/.claude/hooks/detritus-gofmt.ps1"`
+
+Example gofmt hook for PowerShell:
+```powershell
+$event = $input | ConvertFrom-Json
+$filePath = $event.tool_input.file_path
+if ($filePath -and $filePath.EndsWith('.go') -and (Test-Path $filePath)) {
+    gofmt -w $filePath 2>$null
+}
+```
+
+Example session context hook for PowerShell:
+```powershell
+$branch = git rev-parse --abbrev-ref HEAD 2>$null
+if (-not $branch) { $branch = "no-git" }
+$goVer = (go version 2>$null) -replace 'go version ',''
+if (-not $goVer) { $goVer = "not found" }
+Write-Output "{`"hookSpecificOutput`":{`"additionalContext`":`"Session environment:\\n- Working dir: $PWD\\n- Branch: $branch\\n- Go: $goVer`"}}"
+```
+
+#### When merging into `settings.json`:
 - Read existing file, parse as JSON
+- If the file is empty, missing, or invalid, create a valid base: `{"permissions":{"allow":[],"deny":[]}}`
 - Only replace entries containing `detritus-` in commands or `DETRITUS` in prompts
 - Preserve ALL user-defined hooks
 - Write back with proper JSON formatting
-
-Hook scripts must be portable:
-- Use `sed` not `grep -P` (macOS has no PCRE grep)
-- Use POSIX test `[ ]` syntax where possible
-- Use `2>/dev/null` on optional tools (docker, etc.)
-- Make scripts executable (chmod +x)
 
 ### Skills
 
@@ -102,14 +145,18 @@ Always add these destructive command blocks. Merge with any existing deny entrie
   "Bash(shutdown*)", "Bash(reboot*)", "Bash(init 0*)", "Bash(halt*)", "Bash(poweroff*)",
   "Bash(crontab -r)", "Bash(> /var/log/*)", "Bash(truncate -s 0 /var/log/*)", "Bash(shred *)",
   "Bash(curl * | bash)", "Bash(curl * | sh)", "Bash(wget * | bash)", "Bash(wget * | sh)",
-  "Bash(cat /etc/shadow)", "Bash(cat ~/.ssh/id_*)"
+  "Bash(cat /etc/shadow)", "Bash(cat ~/.ssh/id_*)",
+  "Bash(Remove-Item -Recurse -Force C:\\*)", "Bash(Remove-Item -Recurse -Force ~\\*)",
+  "Bash(Format-Volume*)", "Bash(Stop-Service sshd)", "Bash(Stop-Computer*)",
+  "Bash(Restart-Computer*)"
 ]
 ```
 
 #### Status line
 
-Always add a status line showing current directory and git branch:
+Always add a status line showing current directory and git branch. Do NOT overwrite if the user already has a custom `statusLine` configured.
 
+**Linux/macOS/WSL:**
 ```json
 "statusLine": {
   "type": "command",
@@ -118,7 +165,14 @@ Always add a status line showing current directory and git branch:
 }
 ```
 
-Do NOT overwrite if the user already has a custom `statusLine` configured.
+**Native Windows:**
+```json
+"statusLine": {
+  "type": "command",
+  "command": "powershell -Command \"$b = git rev-parse --abbrev-ref HEAD 2>$null; if(-not $b){$b='no-git'}; $d = Split-Path -Leaf (Get-Location); Write-Output \\\"$d [$b]\\\"\"",
+  "refreshInterval": 30
+}
+```
 
 #### Effort and thinking
 
