@@ -15,29 +15,40 @@ Merge baseline settings into `~/.claude/settings.json`. This skill ONLY touches 
 
 For personalized rules and hooks, run the separate `setup-extra-rules` skill (opt-in).
 
-## Phase 0: Validate settings.json
+## Phase 0: Detect OS
+
+Detect the OS first: `uname -s 2>/dev/null || echo Windows`.
+
+- **Linux/macOS/WSL** (POSIX-style): use the bash status-line variant in Phase 4.
+- **Native Windows** (no WSL/Git Bash): use the PowerShell status-line variant in Phase 4.
+- WSL counts as Linux (check `/proc/version` for "microsoft").
+
+Hold the OS choice in mind — it affects only the `statusLine` variant chosen in Phase 4.
+
+## Phase 1: Validate settings.json
 
 Check that `~/.claude/settings.json` exists and is valid JSON.
 
-- If missing or empty: create `{"permissions":{"allow":[],"deny":[]}}`.
-- If invalid JSON: repair the specific structural error before merging. Do not overwrite valid user content.
+- **Missing or empty**: create a minimal stub `{"permissions":{"allow":[],"deny":[]}}` and continue — Phases 3-4 will fill in deny list, status line (correct OS variant from Phase 0), effort/thinking, autoMode.
+- **Invalid JSON**: do NOT overwrite. Try to repair only the specific structural error (e.g. trailing comma, missing closing brace). If it's truly unrecoverable, back the file up to `~/.claude/settings.json.broken-<timestamp>` and create a fresh stub as above. Tell the user what was backed up and why.
+- **Valid JSON**: proceed straight to Phase 2.
 
-## Phase 1: Merge baseline settings
+## Phase 2: Merge baseline settings
 
-Apply each section below using the merge semantics in Phase 2. Sections:
+Apply each section below using the merge semantics in Phase 3. Sections:
 
 - Deny list (`permissions.deny`)
-- Status line (`statusLine`)
+- Status line (`statusLine`) — pick the variant matching the OS detected in Phase 0
 - Effort and thinking (`effortLevel`, `alwaysThinkingEnabled`, `showThinkingSummaries`)
 - Auto mode environment (`autoMode.environment`)
 
-## Phase 2: Merge semantics — add what's missing, never duplicate
+## Phase 3: Merge semantics — add what's missing, never duplicate
 
 - **Array entries** (`permissions.deny`, `autoMode.environment`): check string equality, append only missing values, never re-append existing ones. Never reorder or deduplicate user-defined entries.
 - **Scalar entries** (`effortLevel`, `alwaysThinkingEnabled`, `showThinkingSummaries`, `statusLine`): set only if absent. If the user already has a value, leave it alone.
 - **Nested objects**: recurse with the same rules.
 
-## Phase 3: Settings content
+## Phase 4: Settings content
 
 ### Deny list (`permissions.deny`)
 
@@ -120,7 +131,7 @@ Append entries describing the user's setup. Detect languages/tools quickly (run 
 
 Do NOT include credentials, IPs, or hostnames in `autoMode.environment` without explicit user approval.
 
-## Phase 4: Report
+## Phase 5: Report
 
 Concise summary:
 
