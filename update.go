@@ -9,8 +9,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"time"
 )
 
@@ -60,7 +62,23 @@ func RunUpdate(currentBinary string, dryRun bool) error {
 
 	fmt.Printf("Updated to %s\n", latest)
 	fmt.Println("Running --setup...")
-	return RunSetup(currentBinary, false)
+	// Exec the NEW binary so --setup uses the new embedded docs
+	// (the running process still holds the old binary's docsFS in memory).
+	return execNewBinarySetup(currentBinary)
+}
+
+// execNewBinarySetup runs `<binary> --setup` using the new binary on disk.
+// On Unix it replaces the current process via syscall.Exec so the user sees
+// the new binary's output directly. On Windows it spawns a child and exits.
+func execNewBinarySetup(binary string) error {
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command(binary, "--setup")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+		return cmd.Run()
+	}
+	return syscall.Exec(binary, []string{binary, "--setup"}, os.Environ())
 }
 
 type githubRelease struct {
