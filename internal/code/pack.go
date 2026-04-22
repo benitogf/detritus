@@ -130,9 +130,9 @@ func Pack(name string, roots []string, opts Options) (*PackStats, error) {
 	currentIDs := map[string]struct{}{}
 	for _, f := range walkRes.Files {
 		id := f.ID()
-		currentIDs[id] = struct{}{}
 		if !fullRebuild {
 			if p, ok := previous[id]; ok && p.size == f.Size && p.mtime == f.MTime.Unix() {
+				currentIDs[id] = struct{}{}
 				stats.Unchanged++
 				stats.Files++
 				stats.Bytes += f.Size
@@ -141,8 +141,10 @@ func Pack(name string, roots []string, opts Options) (*PackStats, error) {
 		}
 		content, err := os.ReadFile(filepath.Join(f.Root, f.PathRel))
 		if err != nil {
+			walkRes.Skipped = append(walkRes.Skipped, Skipped{Path: f.PathRel, Reason: "read error: " + err.Error()})
 			continue
 		}
+		currentIDs[id] = struct{}{}
 		doc := buildDoc(f, content)
 		if err := batch.Index(id, doc); err != nil {
 			return nil, fmt.Errorf("batch index: %w", err)
@@ -381,11 +383,14 @@ func countLines(b []byte) int {
 	if len(b) == 0 {
 		return 0
 	}
-	n := 1
+	n := 0
 	for _, c := range b {
 		if c == '\n' {
 			n++
 		}
+	}
+	if b[len(b)-1] != '\n' {
+		n++
 	}
 	return n
 }
@@ -416,9 +421,9 @@ func PackForCWD(cwd string) (string, error) {
 	return best, nil
 }
 
-// CleanContent applies lossless cleanup to file content:
+// CleanContent applies cheap cleanup to file content:
 // - strip trailing whitespace on every line
-// - collapse 3+ consecutive blank lines to 1.
+// - collapse runs of blank lines to a single blank line.
 func CleanContent(content []byte) string {
 	lines := strings.Split(string(content), "\n")
 	for i, ln := range lines {

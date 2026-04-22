@@ -11,12 +11,15 @@ import (
 // runPack handles `detritus --pack [name] [root...]`.
 //
 //	detritus --pack                       → pack CWD as pack named <basename>
-//	detritus --pack <name>                → refresh <name>, or pack CWD as <name>
+//	detritus --pack <name>                → refresh <name>, or create over CWD (announced)
 //	detritus --pack <name> <root>...      → create/refresh <name> with those roots
 func runPack(args []string) error {
-	name, roots, err := resolvePackArgs(args)
+	name, roots, announceCreate, err := resolvePackArgs(args)
 	if err != nil {
 		return err
+	}
+	if announceCreate {
+		fmt.Fprintf(os.Stderr, "pack %q does not exist; creating over %s\n", name, roots[0])
 	}
 	stats, err := code.Pack(name, roots, code.Options{DetritusVersion: version})
 	if err != nil {
@@ -28,22 +31,27 @@ func runPack(args []string) error {
 	return nil
 }
 
-func resolvePackArgs(args []string) (string, []string, error) {
+// resolvePackArgs parses the CLI args.
+// Returns (name, roots, announceCreate, err). announceCreate is true only
+// when the user gave a single arg (--pack <name>) that didn't match an
+// existing pack — in that case we fall back to CWD but tell the user we
+// did, so a mistyped refresh doesn't silently create a duplicate.
+func resolvePackArgs(args []string) (string, []string, bool, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", nil, err
+		return "", nil, false, err
 	}
 	switch len(args) {
 	case 0:
-		return filepath.Base(cwd), []string{cwd}, nil
+		return filepath.Base(cwd), []string{cwd}, false, nil
 	case 1:
 		name := args[0]
 		if _, err := code.LoadManifest(name); err == nil {
-			return name, nil, nil
+			return name, nil, false, nil
 		}
-		return name, []string{cwd}, nil
+		return name, []string{cwd}, true, nil
 	default:
-		return args[0], args[1:], nil
+		return args[0], args[1:], false, nil
 	}
 }
 
