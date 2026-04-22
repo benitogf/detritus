@@ -5,7 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sync"
 )
+
+var dataDirWarnOnce sync.Once
 
 var validPackName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
@@ -35,13 +38,15 @@ func DataDir() string {
 	if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
 		return filepath.Join(xdg, "detritus")
 	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".detritus")
-	} else {
+	home, err := os.UserHomeDir()
+	if err != nil {
 		fallback := filepath.Join(os.TempDir(), "detritus")
-		fmt.Fprintf(os.Stderr, "detritus: could not resolve home directory (%v); falling back to %s. Set DETRITUS_HOME to configure.\n", err, fallback)
+		dataDirWarnOnce.Do(func() {
+			fmt.Fprintf(os.Stderr, "detritus: could not resolve home directory (%v); falling back to %s. Set DETRITUS_HOME to configure.\n", err, fallback)
+		})
 		return fallback
 	}
+	return filepath.Join(home, ".detritus")
 }
 
 // PacksDir returns the directory under which all packs live.

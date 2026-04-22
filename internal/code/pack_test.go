@@ -85,9 +85,16 @@ func TestPackIncremental(t *testing.T) {
 		t.Fatalf("newmarker pre-modify: got %d hits want 0", n)
 	}
 
-	// Modify main.go → should show modified:1
-	time.Sleep(10 * time.Millisecond) // ensure mtime ticks
-	writeFile(t, filepath.Join(src, "main.go"), "package main\n\nfunc Hello() string { return \"newmarker\" }\n")
+	// Modify main.go → should show modified:1.
+	// Set an explicit future mtime instead of sleeping: slow filesystems
+	// and mtime granularity (1s on some ext4 configs, 2s on FAT) make a
+	// real sleep flaky.
+	mainPath := filepath.Join(src, "main.go")
+	writeFile(t, mainPath, "package main\n\nfunc Hello() string { return \"newmarker\" }\n")
+	future := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(mainPath, future, future); err != nil {
+		t.Fatal(err)
+	}
 	stats, err = Pack("test", nil, Options{DetritusVersion: "test"})
 	if err != nil {
 		t.Fatalf("modify pack: %v", err)
