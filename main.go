@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/benitogf/detritus/internal/code"
 	"github.com/benitogf/detritus/internal/search"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -78,6 +79,30 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "--pack":
+			if err := runPack(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
+		case "--packs":
+			if err := runPacks(); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
+		case "--refresh":
+			if err := runRefresh(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
+		case "--unpack":
+			if err := runUnpack(os.Args[2:]); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
 		case "--help", "-h":
 			fmt.Println("detritus " + version)
 			fmt.Println("MCP knowledge base server (stdio transport)")
@@ -90,6 +115,10 @@ func main() {
 			fmt.Println("  detritus --update [--dry-run]                         Self-update to latest release")
 			fmt.Println("  detritus --upsert-mcp <file> <key> <cmd>              Upsert MCP config entry")
 			fmt.Println("  detritus --upsert-vscode-settings <file>              Upsert VS Code settings")
+			fmt.Println("  detritus --pack [name] [root...]                      Create/refresh a workspace pack")
+			fmt.Println("  detritus --packs                                      List all packs")
+			fmt.Println("  detritus --refresh <name>                             Refresh an existing pack")
+			fmt.Println("  detritus --unpack <name>                              Delete a pack")
 			fmt.Println("  detritus --help                                       Print this help")
 			return
 		default:
@@ -115,6 +144,10 @@ func main() {
 		Name:    "detritus",
 		Version: version,
 	}, nil)
+
+	codeRegistry := code.NewRegistry()
+	defer codeRegistry.Close()
+	code.RegisterTools(server, codeRegistry, version)
 
 	type ListArgs struct{}
 	mcp.AddTool(server, &mcp.Tool{

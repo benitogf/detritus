@@ -43,14 +43,17 @@ func TestMCPServer(t *testing.T) {
 	if err != nil {
 		t.Fatal("ListTools:", err)
 	}
-	if len(tools.Tools) != 4 {
-		t.Fatalf("expected 4 tools, got %d", len(tools.Tools))
+	if len(tools.Tools) != 10 {
+		t.Fatalf("expected 10 tools, got %d", len(tools.Tools))
 	}
 	toolNames := map[string]bool{}
 	for _, tool := range tools.Tools {
 		toolNames[tool.Name] = true
 	}
-	for _, name := range []string{"kb_list", "kb_get", "kb_search", "kb_sections"} {
+	for _, name := range []string{
+		"kb_list", "kb_get", "kb_search", "kb_sections",
+		"code_list", "code_tree", "code_search", "code_get", "code_outline", "code_pack",
+	} {
 		if !toolNames[name] {
 			t.Errorf("missing tool: %s", name)
 		}
