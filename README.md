@@ -48,6 +48,8 @@ detritus --setup
 detritus --update
 ```
 
+Or, from an AI assistant with detritus skills installed, invoke `/detritus-update`.
+
 ## Development
 
 ```bash
