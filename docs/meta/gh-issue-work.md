@@ -1,5 +1,5 @@
 ---
-description: Take a GitHub issue end-to-end — branch, fix, test, commit, push, open PR with a product-focused summary and the Claude Code attribution footer.
+description: Take a GitHub issue end-to-end — branch, fix, test, commit, push, self-review the diff, confirm with the user, then open PR with a product-focused summary and the Claude Code attribution footer.
 category: meta
 triggers:
   - gh-issue-work
@@ -14,9 +14,9 @@ related:
   - meta/gh-feedback-work
 ---
 
-# /gh-issue-work — Issue → Branch → Fix → PR
+# /gh-issue-work — Issue → Branch → Fix → Self-Review → PR
 
-Take a GitHub issue end-to-end: branch from the default base, implement the fix, run tests, commit with a proper attribution footer, push, and open a PR whose body is product-focused (no code identifiers). Always append the Claude Code attribution footer on the PR body so reviewers can tell it was filed by an agent on the user's behalf.
+Take a GitHub issue end-to-end: branch from the default base, implement the fix, run tests, commit, push, self-review the diff and confirm with the user, then open a PR whose body is product-focused (no code identifiers). Always append the Claude Code attribution footer on the PR body so reviewers can tell it was filed by an agent on the user's behalf.
 
 ## Posting to GitHub as the user
 
@@ -37,7 +37,7 @@ This applies to PR bodies, issue bodies, comment bodies, release notes. It does 
 
 ## Phase 0: Track progress
 
-Initialize a `TodoWrite` list mirroring phases 1–8 so the user can see where the flow is at a glance. Update in real time — mark in-progress before starting each phase, completed immediately after. Skip this only if the entire flow will finish in under two tool calls (rare).
+Initialize a `TodoWrite` list mirroring phases 1–9 so the user can see where the flow is at a glance. Update in real time — mark in-progress before starting each phase, completed immediately after. Skip this only if the entire flow will finish in under two tool calls (rare).
 
 ## Phase 1: Fetch issue
 
@@ -113,7 +113,30 @@ One logical change per commit. Stage specific files (`git add <path> ...`), not 
 git push -u origin <branch>
 ```
 
-## Phase 8: Open PR
+## Phase 8: Self-review + confirm
+
+Before opening the PR, review the diff yourself and surface findings to the user. This is the symmetric gate to `gh-issue-create`'s confirm-before-post step.
+
+Inspect what's about to be proposed:
+```
+git log origin/<default_branch>..HEAD --oneline
+git diff origin/<default_branch>...HEAD --stat
+git diff origin/<default_branch>...HEAD
+```
+
+Read the full diff, then produce a short review:
+- **What changed** — 2–4 bullets describing the behavior change the PR lands, not a file-by-file recap.
+- **Findings** — anything noteworthy in the diff: files touched outside the issue's scope, TODOs or debug leftovers, missing tests, generated artifacts that don't match the hand-written edits, formatting noise, commented-out code, config drift.
+- Say "nothing to flag" explicitly when the diff is clean. Don't invent concerns.
+
+Then ask via `AskUserQuestion`:
+- **Open PR as-is** — proceed to the next phase.
+- **Edit first** — stop, collect the user's notes, amend or add commits on the branch, then re-enter this phase from the top (re-run the diff, re-summarize, re-ask).
+- **Cancel** — stop. The branch stays pushed; no PR is opened.
+
+Never open the PR without an explicit "Open PR as-is".
+
+## Phase 9: Open PR
 
 Title: conventional-commits style, ≤70 chars.
 
@@ -143,11 +166,11 @@ EOF
 
 `gh pr create` may print a Projects-classic GraphQL warning on some repos but the PR still gets created; capture the returned URL from stdout.
 
-## Phase 9: Report back
+## Phase 10: Report back
 
 Print the PR URL on its own line, then a one-sentence summary of what was done. No emoji elsewhere in the reply.
 
-## Phase 10: Handle chat follow-up
+## Phase 11: Handle chat follow-up
 
 After the PR is open, the user may give additional input in the same chat session (not as a GitHub review comment). Handle it based on scope:
 
@@ -160,6 +183,7 @@ GitHub-review-comment feedback (posted on the PR itself) is handled by `/gh-feed
 ## Guardrails
 
 - Don't reference code paths, symbols, or line numbers in the PR body. That belongs in the diff. The body is for the non-technical reader.
+- Don't open the PR without an explicit "Open PR as-is" from the user in Phase 8. A pushed branch is recoverable; an open PR pings reviewers.
 - Don't force-push, don't rebase shared branches, don't skip hooks.
 - Don't post issue/PR comments from this skill — the PR body carries all narrative.
 - Don't include the attribution footer on commits (`Co-Authored-By:` already handles commits). Footer is GitHub-UI-only.
