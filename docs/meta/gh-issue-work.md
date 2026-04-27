@@ -12,6 +12,7 @@ when: User invokes /gh-issue-work with a GitHub issue URL or number and wants th
 related:
   - meta/gh-issue-create
   - meta/gh-feedback-work
+  - meta/gh-self-review
 ---
 
 # /gh-issue-work — Issue → Branch → Fix → Self-Review → PR
@@ -116,6 +117,8 @@ git push -u origin <branch>
 ## Phase 8: Self-review + confirm
 
 Before opening the PR, review the diff yourself and surface findings to the user. This is the symmetric gate to `gh-issue-create`'s confirm-before-post step.
+
+For non-trivial diffs, run `/gh-self-review` first for a deep audit and address blockers before continuing here. The lightweight summary below is sufficient for small, scoped changes.
 
 Inspect what's about to be proposed:
 ```

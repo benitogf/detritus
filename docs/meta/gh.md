@@ -14,11 +14,12 @@ related:
   - meta/gh-issue-create
   - meta/gh-issue-work
   - meta/gh-feedback-work
+  - meta/gh-self-review
 ---
 
 # /gh — Router for GitHub Issue & PR Workflows
 
-One entry point for the three `gh-*` skills. Reads the conversation + any arguments, decides which sub-skill fits, and hands off. The three sub-skills stay focused; this file is the dispatcher and the home for cross-skill conventions so they live in one place.
+One entry point for the four `gh-*` skills. Reads the conversation + any arguments, decides which sub-skill fits, and hands off. The sub-skills stay focused; this file is the dispatcher and the home for cross-skill conventions so they live in one place.
 
 ## Cross-skill conventions (inherited by all three sub-skills)
 
@@ -63,6 +64,7 @@ Apply the first matching rule:
 | URL / ref resolves to an **open PR** with no post-last-commit comments | STOP and report "No feedback posted since the last commit — nothing to address." Offer `gh-feedback-work` anyway if the user insists. |
 | URL / ref resolves to an **open issue** | `gh-issue-work` |
 | URL / ref resolves to a **closed issue or merged/closed PR** | STOP and ask the user whether to reopen, reference it in a new issue, or abandon. Do not silently dispatch. |
+| Free-text asking for a self-review / preflight / audit of the **current local diff** (no PR opened yet) — phrases like "audit my changes", "review my diff", "check before PR" | `gh-self-review` |
 | Free-text problem description, no existing issue referenced | `gh-issue-create` — then offer to chain into `gh-issue-work` after posting |
 | Free-text + user references a past commit / regression | `gh-issue-create` with the `## Context` SHA-citation path activated |
 | Conversation contains neither a clear problem nor a GitHub reference | Ask via `AskUserQuestion`: "Create new issue / work existing issue / address PR feedback / cancel?" |
