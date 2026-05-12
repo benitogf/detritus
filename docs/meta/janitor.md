@@ -68,6 +68,8 @@ The interval means "wake and keep the janitor loop alive." It does not mean "sta
 
 Always speak to the user in human terms (`every 30 minutes`, `overnight`, `weeknights`). Translate to whatever the scheduler underneath requires — cron strings, automation cadence enums, etc. — without showing them to the user unless asked.
 
+If the chosen platform adapter has a minimum interval higher than the requested cadence, the adapter rounds up to that minimum without asking and reports the effective cadence in the initial run report. Do not block the user with a clarifying question for the common case of a small-default-vs-large-minimum mismatch.
+
 ## Platform Adapter
 
 After resolving target, topics, and interval, load `meta/janitor-platforms` and choose the adapter for the detected or requested platform. The adapter decides how to schedule the loop and how to translate the user's human cadence into the platform's scheduler.
