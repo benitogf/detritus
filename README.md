@@ -54,6 +54,24 @@ detritus --setup
 Codex displays plugin commands with the plugin namespace, for example
 `/detritus:plan`.
 
+### GitHub workflow family
+
+The `gh-*` skills are a coordinated set dispatched by the `/gh` router. The router classifies the input (URL, ref, or free text) and hands off to one of the sub-skills.
+
+| Command | Doc |
+|---------|-----|
+| `/gh` | Router for the family — picks a sub-skill from context |
+| `/gh-issue-create` | Draft a GitHub issue from conversation, post with attribution footer |
+| `/gh-issue-work` | Take an issue end-to-end: branch, fix, test, commit, push, self-review, open PR |
+| `/gh-feedback-work` | Address open review feedback on a PR; updates PR body in place, never posts comments |
+| `/gh-self-review` | Pre-flight self-audit of pending local changes — **delegated to a fresh sub-agent** so the review runs without the conversational context that produced the code |
+| `/gh-pr` | Hard-review someone else's PR; posts an APPROVE or REQUEST_CHANGES review via `gh api` |
+
+Two patterns hold the family together:
+
+- **`meta/review-rigor`** (category: `principles`, do-not-invoke-directly) is the shared analysis checklist that both `/gh-pr` and `/gh-self-review` follow. Tightening the review bar happens in one place; both skills inherit. Treat it like `truthseeker` — loaded by other skills via `kb_get`, never a standalone slash command.
+- **Fresh-agent delegation in `/gh-self-review`**: the wrapping skill collects scope + diff + intent signals, then spawns a sub-agent via the `Agent` tool to do the actual review. The sub-agent has no prior conversation context, so the audit isn't biased by the discussion that produced the code. This doesn't eliminate the shared-training blind spot, but eliminates the conversational bias — the largest source of self-review false negatives.
+
 ## Update
 
 ```bash
