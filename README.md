@@ -47,6 +47,7 @@ detritus --setup
 | `/testing` | Testing decision table |
 | `/grow` | KB improvement from corrections |
 | `/optimize` | KB retrieval optimization |
+| `/janitor` | Recurring safe codebase maintenance |
 | `/coding-style` | Naming, error handling, commits |
 | `/go-modern` | Modern Go idioms (1.22+) |
 | `/line-of-sight` | Flat code, early returns |
