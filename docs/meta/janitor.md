@@ -13,6 +13,7 @@ when: User invokes /janitor to schedule recurring non-feature codebase maintenan
 related:
   - meta/gh
   - meta/gh-self-review
+  - meta/janitor-platforms
   - meta/truthseeker
   - testing/index
 ---
@@ -21,7 +22,7 @@ related:
 
 Create a recurring scheduled automation that uses otherwise idle agent quota to improve a codebase without changing product features or intended behavior.
 
-`/janitor` is the single source of truth for the maintenance loop. Platform-specific behavior is limited to choosing the best available scheduler and launch mode.
+`/janitor` is the single source of truth for the maintenance loop. Platform-specific behavior lives in `meta/janitor-platforms`; do not duplicate scheduler instructions in this core workflow.
 
 ## Inputs
 
@@ -61,100 +62,25 @@ Examples of valid topic hints include flaky tests, dead code, duplicate setup, a
 
 ### Interval
 
-Default: `5min` on heartbeat-style platforms (Codex thread automations); `30min` on platforms where each tick is a full fresh-agent run (Claude Code routines, GitHub Actions, generic cron). The interval means "wake and keep the janitor loop alive." It does not mean "start a separate new audit every interval."
+Default: `5min`.
+
+The interval means "wake and keep the janitor loop alive." It does not mean "start a separate new audit every interval."
 
 Always speak to the user in human terms (`every 30 minutes`, `overnight`, `weeknights`). Translate to whatever the scheduler underneath requires — cron strings, automation cadence enums, etc. — without showing them to the user unless asked.
 
-## Platform Scheduling
+## Platform Adapter
 
-Keep this section as the only platform-specific part of the command.
+After resolving target, topics, and interval, load `meta/janitor-platforms` and choose the adapter for the detected or requested platform. The adapter decides how to schedule the loop and how to translate the user's human cadence into the platform's scheduler.
 
-### `--platform auto`
+The adapter must return:
 
-Detect the current host when possible and choose the closest supported behavior:
+- The scheduler mode being used.
+- The effective human cadence.
+- Whether the first tick can run immediately.
+- Any platform limitation that materially changes the requested behavior.
+- The management URL or command, if the platform exposes one.
 
-1. Codex app: prefer a thread heartbeat for short intervals such as `5min`.
-2. Codex app with hourly/weekly cadence: use a cron/worktree automation when the requested schedule fits detached work.
-3. Claude Code: use the first-party `/schedule` routine primitive. Never expose cron, the headless CLI, or session IDs to the user.
-4. GitHub Actions: create or recommend a scheduled workflow only when repository-hosted CI automation is acceptable.
-5. Cursor or Windsurf: install the reusable command/workflow instructions, then require that recurrence be driven by the platform UI or an external scheduler if no native recurring scheduler is available.
-6. Generic: provide a scheduler-ready prompt and leave recurrence to cron, launchd, systemd timers, Windows Task Scheduler, or the host orchestrator.
-
-If the requested interval is unsupported on the detected platform, choose the nearest safe scheduler and say what changed.
-
-### Codex
-
-Use the app automation API.
-
-- For `5min` and other short intervals: create a heartbeat automation attached to the current thread. This preserves continuity and lets each wake continue pending work.
-- For hourly, daily, or weekly detached maintenance: use a cron automation, preferably in a worktree execution environment when available.
-- Start one run immediately after creating the schedule so the user can confirm it works.
-- The automation prompt must include the full janitor loop contract, target, topics, verification expectations, and concise reporting requirements.
-
-### Claude Code
-
-Claude Code ships a first-party recurring agent primitive — **`/schedule`** (cloud routines). Use it. The user must never see cron strings, lock files, the headless CLI, `--permission-mode` flags, or session IDs. Scheduling is the agent's job; the user's job is to type `/janitor`.
-
-When `/janitor` is invoked inside Claude Code:
-
-1. Resolve target, topics, and interval per the Inputs section.
-2. Compose a **self-contained janitor prompt**. Routines accept only free text — they cannot invoke other slash commands. The prompt must inline everything the routine needs to act without further context:
-   - The target (absolute repo path or workspace identifier — not "the current workspace").
-   - The topic list, or "use the /gh-self-review rubric as the audit lens" if none.
-   - The full Janitor Loop steps from this doc, copied verbatim.
-   - The Audit Agent Contract, Main Agent Contract, and Safety Boundaries sections, copied verbatim.
-   - An explicit instruction to route delivery through `/gh` (which the routine's agent will have available because it's a fresh Claude Code session, even though `/schedule` itself doesn't expand slash commands).
-3. Invoke `/schedule` with that prompt and a cron expression derived internally from the human interval (`every 30 minutes` → `*/30 * * * *`, `overnight` → e.g. `0 2 * * *` in the user's stated timezone, `weeknights` → `0 22 * * 1-5`). Do not show the cron string in the user-facing report.
-4. Trigger one immediate "Run now" on the routine so the user sees a first tick complete in the same conversation flow.
-5. Report in human terms: target, topics, cadence as a sentence (not a cron), first-tick outcome, and the routines management URL (`https://claude.ai/code/routines`) so the user can pause / edit / delete later via UI.
-
-Non-overlap on Claude Code routines is **not** automatic — the platform may fire overlapping ticks if a previous tick is still running. This is handled by the Janitor Loop itself, not by the scheduler: step 2 of the loop ("Check whether previous janitor work for the same target is still running or unfinished") inspects open branches, draft PRs, and open issues on the target before doing anything else. That is why the loop's State And Non-Overlap contract is target-scoped (branches/PRs/issues) rather than session-scoped — it survives across fresh routine runs that share no in-memory state.
-
-Cross-tick continuation works the same way: each routine fire is a fresh agent with no memory of prior ticks. Continuation comes from reading the GitHub state for the target, not from resuming a session.
-
-Claude Code hooks (Setup `maintenance` matcher, Stop hooks) remain useful for in-tick lifecycle but are not the source of recurrence.
-
-#### Fallback when `/schedule` is unavailable
-
-If the user's plan or build does not expose `/schedule`, the agent — not the user — should set up the equivalent locally. Generate a `flock`-guarded entry that invokes `claude -p --maintenance --permission-mode bypassPermissions --session-id <stable-id> --output-format json "<janitor prompt>"` on the user's OS scheduler (cron, launchd, or Task Scheduler), wire it for them when permitted, and then report in human terms exactly as the `/schedule` path would. Cron syntax, lock files, and CLI flags stay internal unless the user asks how it works.
-
-### GitHub Actions
-
-Use only when repository-hosted automation is acceptable and the work can run unattended in CI.
-
-- Scheduled workflows use cron syntax and can be set as frequently as every 5 minutes, but GitHub Actions cron is best-effort and runs may be delayed or skipped under runner contention. Treat the interval as a floor, not a guarantee.
-- Add `workflow_dispatch` so developers can start a tick manually.
-- Use one concurrency group per target branch or workspace and set `cancel-in-progress: false` to avoid overlapping janitor runs.
-- Prefer opening issues or PRs over pushing directly to protected branches.
-- Treat secrets and permissions narrowly. Grant only the permissions required to create branches, issues, or PRs.
-
-GitHub Actions is best for remote, auditable janitor ticks. It is a poor fit for interactive local context, local-only files, or IDE-specific state.
-
-### Cursor
-
-Use Cursor background agents for long asynchronous work when available.
-
-- Start a background agent with the janitor prompt and target.
-- Use an external scheduler or platform UI support for recurrence if available.
-- Preserve the same janitor loop contract in the prompt; do not duplicate platform-specific logic outside this section.
-- Require branch/PR review before merging any changes.
-
-### Windsurf
-
-Use a Windsurf workflow for the reusable janitor procedure.
-
-- Store the workflow as `/janitor` instructions.
-- Windsurf workflows are manually invoked; use an external scheduler or platform support for recurrence if available.
-- Keep the workflow body platform-neutral and refer back to this janitor loop.
-
-### Generic
-
-Use the host's scheduler to run the agent CLI, SDK, or automation entry point.
-
-- Linux/macOS: cron, launchd, or systemd timers.
-- Windows: Task Scheduler.
-- CI/orchestrators: scheduled pipeline, queue worker, or durable job runner.
-- Always configure a non-overlap lock and a durable workspace state file.
+Keep all platform-specific APIs, cron syntax, CLI flags, and management URLs in `meta/janitor-platforms`.
 
 ## Janitor Loop
 
