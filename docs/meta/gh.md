@@ -1,5 +1,5 @@
 ---
-description: Router for GitHub issue/PR workflows — reads conversation context and dispatches to gh-issue-create, gh-issue-work, or gh-feedback-work.
+description: Router for GitHub issue/PR workflows — reads conversation context and dispatches to gh-issue-create, gh-issue-work, gh-feedback-work, gh-self-review, or gh-pr.
 category: meta
 triggers:
   - gh
@@ -15,11 +15,12 @@ related:
   - meta/gh-issue-work
   - meta/gh-feedback-work
   - meta/gh-self-review
+  - meta/gh-pr
 ---
 
 # /gh — Router for GitHub Issue & PR Workflows
 
-One entry point for the four `gh-*` skills. Reads the conversation + any arguments, decides which sub-skill fits, and hands off. The sub-skills stay focused; this file is the dispatcher and the home for cross-skill conventions so they live in one place.
+One entry point for the five `gh-*` skills. Reads the conversation + any arguments, decides which sub-skill fits, and hands off. The sub-skills stay focused; this file is the dispatcher and the home for cross-skill conventions so they live in one place.
 
 ## Cross-skill conventions (inherited by all three sub-skills)
 
@@ -32,7 +33,7 @@ These apply to every sub-skill this router dispatches to. The sub-skill docs als
    ```
    NOT on commit messages (`Co-Authored-By:` handles commits) and NOT on raw git output.
 2. **Use `gh api` for reads and writes, not `gh issue view` / `gh pr view` / `gh pr edit`.** The `gh` subcommands can surface the Projects-classic GraphQL deprecation as a failure on some repos even when the underlying REST call would succeed. `gh api repos/<owner>/<repo>/...` is the stable path.
-3. **Product-focused bodies.** Issue bodies, PR bodies, and body rewrites in feedback flow contain no code identifiers / file paths / line numbers / function names. The diff is the technical record; the body is for non-technical reviewers. The one exception: a short SHA in a `## Context` section of an issue body when citing regression causation (`gh-issue-create` handles this).
+3. **Product-focused bodies.** Issue bodies, PR bodies, and body rewrites in feedback flow contain no code identifiers / file paths / line numbers / function names. The diff is the technical record; the body is for non-technical reviewers. Two exceptions: (a) a short SHA in a `## Context` section of an issue body when citing regression causation (`gh-issue-create` handles this); (b) `gh-pr` review bodies, which are *for* the author and benefit from file:line refs — that skill explicitly opts out of the product-focused constraint.
 4. **The GitHub body is the single source of truth.** The issue body describes the ask; the PR body describes the final state; neither is a changelog. Chat follow-ups edit the relevant body in place via `PATCH`, not via comments. Comments exist only when there is an open question or decision that can't live in the body.
 5. **One issue, one PR.** If related work is spotted mid-flow, open a separate issue — don't expand the current one. This applies equally when creating, working, or handling feedback.
 6. **Branch from the fetched default, never from the current working branch.** Applies to `gh-issue-work` specifically but is worth restating every time.
@@ -61,14 +62,15 @@ Apply the first matching rule:
 
 | Input | Route to |
 |---|---|
-| URL / ref resolves to an **open PR** with comments posted after the PR's last commit | `gh-feedback-work` |
-| URL / ref resolves to an **open PR** with no post-last-commit comments | STOP and report "No feedback posted since the last commit — nothing to address." Offer `gh-feedback-work` anyway if the user insists. |
+| URL / ref resolves to an **open PR**, AND user text suggests reviewing it — phrases like "review pr", "review this pr", "code review", "hard review", "review pull request" | `gh-pr` |
+| URL / ref resolves to an **open PR** with comments posted after the PR's last commit, no review-intent text | `gh-feedback-work` |
+| URL / ref resolves to an **open PR** with no post-last-commit comments and no review-intent text | Ask: review the PR with `gh-pr`, force-run `gh-feedback-work` anyway, or cancel. |
 | URL / ref resolves to an **open issue** | `gh-issue-work` |
 | URL / ref resolves to a **closed issue or merged/closed PR** | STOP and ask the user whether to reopen, reference it in a new issue, or abandon. Do not silently dispatch. |
 | Free-text asking for a self-review / preflight / audit of the **current local diff** (no PR opened yet) — phrases like "audit my changes", "review my diff", "check before PR" | `gh-self-review` |
 | Free-text problem description, no existing issue referenced | `gh-issue-create` — then offer to chain into `gh-issue-work` after posting |
 | Free-text + user references a past commit / regression | `gh-issue-create` with the `## Context` SHA-citation path activated |
-| Conversation contains neither a clear problem nor a GitHub reference | Ask via `AskUserQuestion`: "Create new issue / work existing issue / address PR feedback / cancel?" |
+| Conversation contains neither a clear problem nor a GitHub reference | Ask via `AskUserQuestion`: "Create new issue / work existing issue / review PR / address PR feedback / cancel?" |
 
 Resolution helpers:
 
