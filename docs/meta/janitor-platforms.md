@@ -42,7 +42,7 @@ Detect the current host when possible and choose the closest supported behavior:
 
 1. Codex app: prefer a thread heartbeat for short intervals such as `5min`.
 2. Codex app with hourly/weekly cadence: use a cron/worktree automation when the requested schedule fits detached work.
-3. Claude Code: default to Cloud Routines via `/schedule` — they run on Anthropic infrastructure and survive without the user's machine, which is the typical fit for a janitor. Use Desktop Routines only when the target genuinely needs uncommitted local state or local-only MCP tools AND the user confirms the Desktop app will be open during wake windows; Desktop Routines do not fire while the Desktop app is closed.
+3. Claude Code: default to **Desktop Routines** via `/schedule` when the user can keep the Desktop app open during wake windows, or to the **external scheduler fallback** (`claude -p` triggered by cron / launchd / systemd / Task Scheduler) when always-on durability is required. Both run against the actual local checkout and can read/write the gitignored scratchpad — matching `/janitor`'s workspace-scoped intent. Use **Cloud Routines** only when the janitor is explicitly opting into GitHub-state-only operation against a remote repository, not the user's workspace; Cloud Routines clone the repo fresh per tick and cannot see local state.
 4. GitHub Actions: create or recommend a scheduled workflow only when repository-hosted CI automation is acceptable.
 5. Cursor or Windsurf: install the reusable command/workflow instructions, then require that recurrence be driven by platform UI support or an external scheduler if no native recurring scheduler is available.
 6. Generic: provide a scheduler-ready prompt and leave recurrence to cron, launchd, systemd timers, Windows Task Scheduler, or the host orchestrator.
@@ -64,37 +64,44 @@ Use the Codex app automation API.
 
 Claude Code Routines are the first-party scheduling primitive. Two variants share the same `/schedule` entry point:
 
-- Claude Code execution modes map to *Durability* in `meta/janitor` (under *Durable Cross-Tick State*): Desktop Routines and the external scheduler fallback are durable; Cloud Routines are disposable (each tick clones the repository fresh, so the gitignored scratchpad does not persist). At setup, if the loop depends on the scratchpad (rolling metrics, multi-tick narrative, hazards queue), prefer Desktop Routines or the external scheduler. Otherwise Cloud Routines proceed under durability mode 2 (GitHub-state-only).
-- **Cloud Routines** (`/schedule` → Routines → Cloud): run on Anthropic-managed infrastructure, clone the selected repository at the start of each run, and survive without the user's machine. Minimum interval is **1 hour**; cron expressions evaluating to a sub-hour cadence are rejected at routine-creation time. This is the **default** for `/janitor` — the work is GitHub-backed, runs unattended, and matches the "idle / non-office hours" intent.
-- **Desktop Routines** (`/schedule` → Routines → Local): run locally and only fire while the Claude Code Desktop app is running. Minimum interval is 1 minute. Use only when the target genuinely needs uncommitted local state or local-only MCP tools AND the user confirms the Desktop app will be open during wake windows.
+- Default for `/janitor` on Claude Code is **Desktop Routines** when the user can keep the Desktop app open during wake windows, or the **external scheduler fallback** (`claude -p` triggered by cron / launchd / systemd / Task Scheduler) for always-on durability. Both run against the user's actual local checkout and can read/write the gitignored scratchpad — matching `/janitor`'s workspace-scoped intent. Cloud Routines clone the repo fresh per tick and only see GitHub-side state; they are an explicit opt-in for janitors operating in *Durability* mode 2 (GitHub-state-only) against a remote repository, not the workspace.
+- **Desktop Routines** (`/schedule` → Routines → Local): run locally against the actual workspace checkout. Minimum interval is 1 minute. Default for `/janitor` when the user keeps the Desktop app open during wake windows. Desktop Routines do not fire while the app is closed — if the user needs always-on durability, use the external scheduler fallback instead.
+- **External scheduler plus Claude Code CLI** (cron / launchd / systemd / Task Scheduler driving `claude -p`): durable sibling to Desktop Routines — fires regardless of Desktop app state, against the same local checkout. Default for `/janitor` when the user wants always-on durability without keeping the Desktop app open, or when first-party Routines are unavailable.
+- **Cloud Routines** (`/schedule` → Routines → Cloud): run on Anthropic-managed infrastructure, clone the selected repository at the start of each run, and survive without the user's machine. Minimum interval is **1 hour**; cron expressions evaluating to a sub-hour cadence are rejected at routine-creation time. Opt-in for `/janitor` when the loop is explicitly GitHub-state-only — no workspace, no local scratchpad, no rolling metric history beyond what survives in issue / PR bodies.
 - **`/loop`**: session-scoped polling inside the current conversation; stops when the session ends. Not suitable for unattended or non-office-hour work.
-- **External scheduler plus Claude Code CLI**: fallback when first-party Routines are unavailable on the user's plan or when the user explicitly wants local OS control.
 
-### Cloud Routines (default path)
+### Desktop Routines (default for workspace janitors)
 
-1. Resolve target, topics, and interval from the core janitor Inputs section.
-2. Compose a self-contained janitor prompt. Routines run as fresh sessions, so the prompt must inline the target, topics or default review rubric, full janitor loop, audit-agent contract, main-agent contract, state/non-overlap rule, safety boundaries, verification expectations, and `/gh` delivery rule. Routines do not expand slash commands inside the prompt.
-3. Invoke `/schedule` to create the routine. `/schedule` will prompt for repository access; pass the resolved target so the selection is pre-filled when possible.
-4. If the requested cadence is below the 1-hour minimum, round up to 1 hour, create the routine, and state the effective cadence in the report. Do not fall through to Desktop Routines silently — Desktop requires the Desktop app open, which is a behavior change the user must confirm.
-5. Trigger one immediate "Run now" so the user sees a first tick in the same conversation.
-6. Report the effective cadence in human terms and include the routines management URL (`https://claude.ai/code/routines`) so the user can pause / edit / delete later via the UI.
+Default Claude Code path for `/janitor` when the user keeps the Desktop app open during wake windows.
 
-Non-overlap on Cloud Routines is not automatic — the platform may fire overlapping ticks. The janitor loop handles this by inspecting open branches, draft PRs, and open issues on the target at every wake (loop step 3), since each run is a fresh session with no in-memory state from prior ticks.
+1. Resolve target, topics, interval, and scratchpad slug from the core janitor Inputs section. The scratchpad lives at `.janitor/<slug>.md` in the resolved invocation root.
+2. Compose a self-contained janitor prompt. Routines run as fresh sessions, so the prompt must inline the target, topics or default review rubric, the full janitor loop (including the step 2 scratchpad read), audit-agent contract, main-agent contract, state/non-overlap rule, durability mode (mode 1 — durable), safety boundaries, verification expectations, and `/gh` delivery rule. Routines do not expand slash commands inside the prompt.
+3. Invoke `/schedule` → Routines → Local. Confirm the user will keep the Desktop app open during the requested wake windows. If they cannot, route to the external scheduler fallback below — Desktop Routines silently skip ticks while the app is closed.
+4. Trigger one immediate "Run now" so the user sees a first tick in the same conversation.
+5. Report the effective cadence in human terms and include the routines management URL (`https://claude.ai/code/routines`) so the user can pause / edit / delete later.
 
-### Desktop Routines (opt-in only)
+Non-overlap is platform-managed by Claude Code: only one routine fires at a time per target.
 
-Use only when both conditions hold:
+### External scheduler (default for always-on durability)
 
-- The target needs uncommitted local state or local-only MCP tools that Cloud Routines cannot reach.
-- The user confirms the Claude Code Desktop app will be running during the requested wake windows.
+Default Claude Code path when the user wants durability without the Desktop-app-open constraint. The agent — not the user — sets up the equivalent locally: generate a `flock`-guarded entry that invokes `claude -p --maintenance --permission-mode bypassPermissions --session-id <stable-id> --output-format json "<janitor prompt>"` on the user's OS scheduler (cron, launchd, systemd timers, or Windows Task Scheduler), wire it for them when permitted, and report in human terms exactly as the Desktop Routines path would. Cron syntax, lock files, and CLI flags stay internal unless the user asks how it works.
 
-Otherwise route to Cloud Routines. Desktop Routines that fire while the app is closed are silently skipped.
-
-### External scheduler fallback
-
-When Routines are unavailable, the agent — not the user — sets up the equivalent locally. Generate a `flock`-guarded entry that invokes `claude -p --maintenance --permission-mode bypassPermissions --session-id <stable-id> --output-format json "<janitor prompt>"` on the user's OS scheduler (cron, launchd, or Task Scheduler), wire it for them when permitted, and report in human terms exactly as the Cloud Routines path would. Cron syntax, lock files, and CLI flags stay internal unless the user asks how it works.
+Same durability characteristics as Desktop Routines (mode 1) — runs against the actual local checkout, can read/write the scratchpad on disk. Difference is the lifecycle: external scheduler fires regardless of whether the Claude Code Desktop app is running.
 
 Claude Code hooks are useful for lifecycle behavior inside a tick (Setup `maintenance` matcher, Stop hooks), but hooks are not the source of recurrence.
+
+### Cloud Routines (GitHub-state-only opt-in)
+
+Use only when the user explicitly opts into a janitor that operates without local workspace state — for example, a maintenance bot on a GitHub repo the user does not have checked out locally.
+
+1. Resolve target, topics, and interval from the core janitor Inputs section. The scratchpad does not persist on this path; the loop operates under *Durability* mode 2 (GitHub-state-only).
+2. Compose a self-contained janitor prompt. Routines run as fresh sessions, so the prompt must inline the target, topics or default review rubric, full janitor loop, audit-agent contract, main-agent contract, state/non-overlap rule, durability mode (mode 2 — GitHub-state-only; no scratchpad), safety boundaries, verification expectations, and `/gh` delivery rule.
+3. Invoke `/schedule` → Routines → Cloud. The platform will prompt for repository access; pass the resolved target so the selection is pre-filled when possible.
+4. If the requested cadence is below the 1-hour minimum, round up to 1 hour and state the effective cadence in the report.
+5. Trigger one immediate "Run now" so the user sees a first tick in the same conversation.
+6. Report the effective cadence in human terms and include the routines management URL (`https://claude.ai/code/routines`).
+
+Non-overlap on Cloud Routines is not automatic — the platform may fire overlapping ticks. The janitor loop handles this by inspecting open branches, draft PRs, and open issues on the target at every wake (loop step 3), since each run is a fresh session with no in-memory state from prior ticks. Hazards and rolling state that would have lived in the scratchpad live in issue or PR bodies instead.
 
 ## GitHub Actions
 

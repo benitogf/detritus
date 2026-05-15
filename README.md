@@ -75,7 +75,7 @@ Two patterns hold the family together:
 
 ### Janitor — recurring safe maintenance
 
-`/janitor` schedules a recurring code-maintenance loop that uses idle agent quota to run safe audits, apply small fixes, verify, and ship through `/gh`. The command picks the scheduler that fits the host platform (Cloud Routine, Codex automation, GitHub Actions, external cron) and adapts to its durability characteristics — durable runners get a gitignored scratchpad at `.janitor/<slug>.md` that carries plan-state across cold ticks; disposable runners fall back to GitHub-state-only operation, reconstructing in-flight state from open branches, PRs, and issues on every wake.
+`/janitor` schedules a recurring code-maintenance loop that uses idle agent quota to run safe audits, apply small fixes, verify, and ship through `/gh`. The command runs against the actual workspace or repo the user is in — Desktop Routines or an external scheduler (cron, launchd, systemd, Task Scheduler) by default on Claude Code, with equivalent local-checkout schedulers on other platforms. A gitignored scratchpad at `.janitor/<slug>.md` carries plan-state across cold ticks. Opt-in GitHub-state-only modes (Cloud Routines, Codex `worktree`, GitHub Actions) exist for maintaining a remote repo without a local checkout.
 
 A few example invocations:
 
