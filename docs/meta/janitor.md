@@ -215,6 +215,18 @@ The State block is the only mutable section. Every tick overwrites it. Required 
 
 Sub-agents return findings as a per-tick file at `.janitor/<slug>-tick-N.md` in the target root, not inline. This keeps the main thread free of raw audit output while preserving the detail until fold-in. The main agent reads the file, folds the summary into the scratchpad's tick log and State block, then deletes the per-tick file. Keep the file only if the user explicitly asks.
 
+### Durability
+
+The scratchpad pattern assumes `.janitor/<slug>.md` persists on disk between ticks. On runners that meet that assumption — Desktop Routines, an external scheduler running CLI tools, Codex `local` execution, GitHub Actions with workspace caching — the scratchpad carries plan-state across cold starts as designed.
+
+On **disposable runners** that discard the workspace between ticks — Codex `worktree` execution, Claude Code Cloud Routines (each tick clones the repository fresh), stateless GitHub Actions runners — the gitignored scratchpad does not survive. Each platform adapter must declare how it handles this in one of three modes:
+
+1. **Use a durable execution mode** for that platform when one exists (e.g. Codex `local` instead of `worktree`; Claude Code Desktop Routines or the external scheduler fallback instead of Cloud).
+2. **Operate GitHub-state-only.** The loop reconstructs everything it needs from open branches, draft PRs, and open issues every tick. No cross-tick scratchpad; the State block lives in the issue or PR bodies the loop maintains, hazards become open issues, the tick log becomes commit history. Acceptable for narrow janitors that don't need rolling metric history or per-tick narrative.
+3. **Report the incompatibility at setup.** If neither option fits, the adapter reports that the requested scheduling mode cannot persist the scratchpad and asks the user to choose between a durable mode, stateless mode, or a different platform.
+
+Per-tick report files inherit the same rule. On disposable runners they must be folded into the scratchpad — or into GitHub-side state under mode 2 — synchronously within the same tick, before the wake ends.
+
 ### Pruning
 
 The tick log is append-only across the session, but older entries should be summarized into a single "cumulative since tick N" block when the user signals a phase or cluster is closed, OR the log exceeds roughly thirty entries. The thirty is soft guidance — the goal is to keep the scratchpad readable across context resets, not to grow unbounded.
