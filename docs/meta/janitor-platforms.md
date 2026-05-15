@@ -52,9 +52,12 @@ Detect the current host when possible and choose the closest supported behavior:
 Use the Codex app automation API.
 
 - For `5min` and other short intervals, create a heartbeat automation attached to the current thread. This preserves continuity and lets each wake continue pending work.
-- For hourly, daily, or weekly detached maintenance, use a cron automation, preferably in a worktree execution environment when available.
+- For hourly, daily, or weekly detached maintenance, use a cron automation only when the janitor can run from a durable workspace. Prefer `local` execution against the resolved checkout when the loop needs gitignored `.janitor/` state across cold starts.
+- Use `worktree` execution only for janitors that can fully reconstruct state from GitHub-side branches, issues, PRs, and the automation prompt. Do not assume uncommitted or gitignored `.janitor/` files from a previous worktree tick will exist on the next tick.
 - Start one run immediately after creating the schedule so the user can confirm it works.
 - The automation prompt must include the full janitor loop contract, target, topics, verification expectations, and concise reporting requirements.
+- The runtime-derived scratchpad slug comes from the invocation root and topic, not from the Codex thread or automation id. Heartbeat and local cron ticks should read and update `.janitor/<slug>.md` in that resolved root; detached worktree ticks must either use a durable local checkout or report that the scratchpad cannot be persisted under the requested execution mode.
+- Per-tick report files follow the same durability rule as the scratchpad: they are temporary handoff files inside `.janitor/`, and the main tick must fold them into the scratchpad before the wake ends. Worktree ticks that cannot preserve `.janitor/` between runs must not leave the only copy of audit detail in a disposable worktree.
 
 ## Claude Code
 
