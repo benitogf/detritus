@@ -73,6 +73,23 @@ Two patterns hold the family together:
 - **`meta/review-rigor`** (category: `principles`, do-not-invoke-directly) is the shared analysis checklist that both `/gh-pr` and `/gh-self-review` follow. Tightening the review bar happens in one place; both skills inherit. Treat it like `truthseeker` — loaded by other skills via `kb_get`, never a standalone slash command.
 - **Fresh-agent delegation in `/gh-self-review`**: the wrapping skill collects scope + diff + intent signals, then spawns a sub-agent via the `Agent` tool to do the actual review. The sub-agent has no prior conversation context, so the audit isn't biased by the discussion that produced the code. This doesn't eliminate the shared-training blind spot, but eliminates the conversational bias — the largest source of self-review false negatives.
 
+### Janitor — recurring safe maintenance
+
+`/janitor` schedules a recurring code-maintenance loop that uses idle agent quota to run safe audits, apply small fixes, verify, and ship through `/gh`. The command picks the scheduler that fits the host platform (Cloud Routine, Codex automation, GitHub Actions, external cron) and adapts to its durability characteristics — durable runners get a gitignored scratchpad at `.janitor/<slug>.md` that carries plan-state across cold ticks; disposable runners fall back to GitHub-state-only operation, reconstructing in-flight state from open branches, PRs, and issues on every wake.
+
+A few example invocations:
+
+```
+/janitor                                       # whole-repo, default rubric, short interval
+/janitor flaky tests                           # topic-focused
+/janitor get test wall time under 145s         # primary metric with goal
+/janitor weeknights                            # perpetual living-maintenance; skip-streak guardrail catches drift
+```
+
+Mid-loop pivots are handled in chat — saying *"please nudge the loop to focus on perf only"* updates the scratchpad's *Current orientation* field (after a truthseeker pause) and the next tick honors the new focus without re-invocation.
+
+See `meta/janitor` for the loop contract (audit-to-verify cadence, truthseeker pause on user critique, honest regression reporting, primary-metric tracking, optional loop-end criteria with skip-streak guardrail, hazards queue). Adapter-specific scheduling lives in `meta/janitor-platforms`.
+
 ## Update
 
 ```bash
