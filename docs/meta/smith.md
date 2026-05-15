@@ -11,7 +11,7 @@ triggers:
 when: User invokes /smith with a feature description to build. The first tick passes through /plan to settle scope and acceptance criteria with the user; subsequent ticks run autonomously toward the agreed checklist, then transition to a maintenance audit phase on the changed code.
 related:
   - meta/loop-core
-  - meta/plan
+  - plan/index
   - meta/janitor
   - meta/gh
   - meta/gh-self-review

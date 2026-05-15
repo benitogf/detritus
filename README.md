@@ -93,6 +93,7 @@ Example invocations:
 /janitor                                                # whole-repo maintenance, default rubric
 /janitor flaky tests                                    # topic-focused maintenance
 /janitor get test wall time under 145s                  # maintenance with a measurable goal
+/janitor weeknights                                     # perpetual living-maintenance; skip-streak guardrail catches drift
 /smith add typed cancellation to subscribe-list         # feature loop; first tick is /plan
 /smith add SSE fallback to the live worker overnight    # feature loop with cadence hint
 ```

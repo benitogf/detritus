@@ -70,7 +70,7 @@ Every scratchpad shares a common spine. Each consuming command (`/janitor`, `/sm
 - **Tick log** — append-only, dated entries. One section per tick.
 - **State block** (last section, overwritten each tick) — see below.
 
-Each command lists its specific sections above the tick log in its own doc (e.g. /janitor adds *North-star goal*, *User-stated rules*, *Primary metric*, *Loop-end criteria*; /smith adds *Feature spec*, *Acceptance criteria*, *Current phase*).
+Each command lists its specific sections above the tick log in its own doc (e.g. /janitor adds *North-star goal*, *User-stated rules*, *Primary metric*, *Loop-end criteria*; /smith adds *Feature spec*, *User-stated rules*, *Acceptance criteria*, *Current phase*).
 
 ### State block
 
@@ -122,6 +122,7 @@ These rules apply to every audit sub-agent spawned by a recurring-loop command. 
 
 - Return findings as a per-tick report file at `<loop>/<slug>-tick-N.md`, not as inline output. The main agent reads, folds, and deletes.
 - Describe conditions, not root-cause hypotheses. Stating a suspected cause up front biases what the audit verifies; let the audit reproduce the condition and report what it actually found.
+- Do not return broad themes without evidence. Every finding cites a file path (and line when applicable), a caller, or a concrete reproduction; "the auth code feels fragile" is noise, not a finding.
 - Do not edit files, stage, commit, push, or open PRs.
 - Do not dump long logs.
 
