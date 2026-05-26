@@ -49,12 +49,21 @@ The first invocation of `/smith` does **not** schedule the loop. It dispatches t
 2. The user answers `/plan`'s questions. The conversation iterates until `/plan` has a settled implementation plan with concrete steps and no open questions.
 3. The user explicitly approves (`yes go`, `proceed`, `implement`, etc.) — this is `/plan`'s standard pre-implementation gate.
 4. `/smith` **captures the settled state**: it reads the latest Plan section from `/plan`'s output, lists each step as an acceptance item in the scratchpad, copies the user's relevant constraints verbatim into the scratchpad's *User-stated rules*, and notes any risks from `/plan`'s Insights into the scratchpad's *Hazards / Deferred*.
-5. `/smith` then loads the platform adapter (`meta/janitor-platforms`) and schedules the recurring loop with the same cadence/durability handling as `/janitor`.
+5. `/smith` then loads the platform adapter (`meta/janitor-platforms`) and schedules the recurring loop. Cadence handling is the same as `/janitor`; durability is **not** — the build phase requires a durable runner (see *Build Phase Durability* below).
 6. The first scheduled tick begins the build phase.
 
 `/plan` runs only at first invocation. Subsequent scheduled ticks read the captured spec from the scratchpad — no interactive `/plan` inside autonomous ticks, since fresh-session schedulers have no user to converse with.
 
 If `/plan` reaches a settled state but the user pushes back on scope or risk afterward, that's a mid-loop pivot via chat (`meta/loop-core` → *Shared Main Agent Rules*) — the truthseeker pause applies before rewriting the scratchpad's spec, and the next scheduled tick honors the revised state.
+
+## Build Phase Durability
+
+The build phase requires a durable runner (`meta/loop-core` → *Durability* mode 1). Disposable runners (Cloud Routines, Codex `worktree`, stateless GitHub Actions) cannot host build-phase state under either fallback mode:
+
+- **Mode 2 (GitHub-state-only) does not apply.** The mode-2 fallback puts the State block "in the issue or PR bodies the loop maintains." `/smith`'s build phase opens no PR until every acceptance item ticks green — there is nothing to write the State block into between ticks. A long-lived tracking issue isn't a /gh-router convention (issues describe problems, not loop state); using one anyway would create a documentation trail outside the established flow.
+- **Mode 3 (report incompatibility) is the right fallback.** The platform adapter must check at setup that the selected scheduler is durable; if not, report the incompatibility and ask the user to pick a durable scheduler (Desktop Routines, external scheduler, Codex `local`) or a different platform. Do not silently fall through to mode 2.
+
+The audit phase, which opens **after** the build-phase PR merges, has no such constraint — it inherits `/janitor`'s full durability handling and can run on any of the three modes per the changed-files scope.
 
 ## Scratchpad — smith-specific sections
 
@@ -167,6 +176,7 @@ Build phase — not allowed:
 - Dependency additions not in the spec. If the spec implies a new dependency, name it in a hazard and ask before adding.
 - Skipping verification. A build-phase tick that doesn't verify green does not commit.
 - Opening a PR before all acceptance items are checked.
+- Scheduling the build phase on a disposable runner. See *Build Phase Durability* above — mode 2 has no PR body to host the State block until acceptance items tick, and mode 3 (report incompatibility) is the required fallback.
 
 Audit phase — allowed / not allowed: same as `/janitor` → *Safety Boundaries*. The audit phase is `/janitor` mode with a scoped target.
 
