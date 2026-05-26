@@ -14,16 +14,18 @@ triggers:
   - github actions janitor
 when: /janitor needs to create a recurring schedule on a specific platform or explain the nearest supported scheduler behavior.
 related:
+  - meta/loop-core
   - meta/janitor
+  - meta/smith
   - meta/gh
   - meta/gh-self-review
 ---
 
-# /janitor Platform Adapters
+# Loop Platform Adapters
 
-This document owns platform-specific scheduling behavior for `/janitor`. Do not duplicate these details in `meta/janitor`.
+This document owns platform-specific scheduling behavior for the recurring-loop commands (`/janitor` and `/smith`). Do not duplicate these details in `meta/loop-core`, `meta/janitor`, or `meta/smith`.
 
-The core janitor workflow supplies the target, topics, requested cadence, loop contract, audit-agent contract, safety boundaries, verification rules, and `/gh` delivery rule. The adapter's job is only to schedule that loop on the host platform.
+The shared loop fundamentals (scratchpad layout, durability rule, target-scoped state, cadence guideline, skip-streak guardrail, `/gh` delivery) live in `meta/loop-core`. Each command's own doc supplies its specific loop steps, audit-agent contract, safety boundaries, and report shape. The adapter's job is only to schedule the loop on the host platform.
 
 ## Shared Adapter Rules
 
@@ -51,7 +53,7 @@ Detect the current host when possible and choose the closest supported behavior:
 
 Use the Codex app automation API.
 
-- Codex execution modes map to *Durability* in `meta/janitor` (under *Durable Cross-Tick State*): `local` is durable; `worktree` is disposable. The specifics for each Codex automation type follow.
+- Codex execution modes map to *Durability* in `meta/loop-core` (under *Durable Cross-Tick State*): `local` is durable; `worktree` is disposable. The specifics for each Codex automation type follow.
 - For `5min` and other short intervals, create a heartbeat automation attached to the current thread. This preserves continuity and lets each wake continue pending work.
 - For hourly, daily, or weekly detached maintenance, use a cron automation only when the janitor can run from a durable workspace. Prefer `local` execution against the resolved checkout when the loop needs gitignored `.janitor/` state across cold starts.
 - Use `worktree` execution only for janitors that can fully reconstruct state from GitHub-side branches, issues, PRs, and the automation prompt. Do not assume uncommitted or gitignored `.janitor/` files from a previous worktree tick will exist on the next tick.
