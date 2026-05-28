@@ -198,13 +198,35 @@ func generateInlineCommandInstructions(home string, docs []docEntry, dryRun bool
 	sb.WriteString("2. Support multiple tokens in one message; process all of them (deduplicated) in order of appearance.\n")
 	sb.WriteString("3. For each detected token, call kb_get(name=\"...\") with the mapped doc name before producing the final answer.\n")
 	sb.WriteString("4. If no token is present, do not force a kb_get call from this instruction alone.\n\n")
+	sb.WriteString("5. If a slash command token appears but is not in the mapping, call kb_search(query=\"<token-without-slash>\") and then kb_get the best match before answering.\n\n")
 	sb.WriteString("Token to doc mapping:\n")
+	commandAliases := listCommandAliases()
 	for _, doc := range docs {
+		if !commandAliases[doc.alias] {
+			continue
+		}
 		fmt.Fprintf(&sb, "- /%s -> %s\n", doc.alias, doc.name)
 	}
 
 	_ = os.WriteFile(instrFile, []byte(sb.String()), 0o644)
 	fmt.Printf("VS Code shared instructions: %s\n", instrFile)
+}
+
+// listCommandAliases returns slash-command aliases by reading embedded
+// command shim filenames under commands/*.md.
+func listCommandAliases() map[string]bool {
+	out := map[string]bool{}
+	_ = fs.WalkDir(commandsFS, "commands", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+		base := strings.TrimSuffix(filepath.Base(path), ".md")
+		if base != "" {
+			out[base] = true
+		}
+		return nil
+	})
+	return out
 }
 
 func generateAgentFile(home string, dryRun bool) {

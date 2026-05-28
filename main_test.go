@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -287,4 +288,38 @@ func TestListFlag(t *testing.T) {
 
 func contains(s, substr string) bool {
 	return len(s) > 0 && len(substr) > 0 && strings.Contains(s, substr)
+}
+
+func TestListCommandAliasesIncludesJanitor(t *testing.T) {
+	aliases := listCommandAliases()
+	if !aliases["janitor"] {
+		t.Fatal("expected janitor alias in command shim list")
+	}
+	if !aliases["truthseeker"] {
+		t.Fatal("expected truthseeker alias in command shim list")
+	}
+}
+
+func TestGenerateInlineCommandInstructionsUsesCommandOnlyMap(t *testing.T) {
+	home := t.TempDir()
+	docs := listDocEntries()
+
+	generateInlineCommandInstructions(home, docs, false)
+
+	path := filepath.Join(home, ".copilot", "instructions", "detritus.instructions.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read generated instructions: %v", err)
+	}
+	text := string(data)
+
+	if !strings.Contains(text, "- /janitor -> meta/janitor") {
+		t.Fatal("expected /janitor mapping in generated instructions")
+	}
+	if strings.Contains(text, "- /loop-core -> meta/loop-core") {
+		t.Fatal("unexpected /loop-core mapping; non-command docs should not appear")
+	}
+	if !strings.Contains(text, "If a slash command token appears but is not in the mapping") {
+		t.Fatal("expected unmapped slash fallback rule")
+	}
 }
