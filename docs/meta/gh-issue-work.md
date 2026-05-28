@@ -166,6 +166,13 @@ Once the sub-agent returns its triage block, surface the full findings to the us
 
 Never open the PR without an explicit "Open PR as-is" and no unresolved blockers.
 
+**Do not re-ask when the user already directed PR creation.** If the user's latest message in the same flow explicitly told you to open / push / create the PR, and:
+- the diff has not changed since they said so,
+- an issue already exists and is linked, and
+- the sub-agent returned no blockers,
+
+then proceed straight to Phase 9. The user's directive IS the confirmation. The Phase 8 question exists for cases where the user has not yet stated intent; do not reproduce it when they already have. Asking the user to confirm what they just told you to do is the failure mode this phase exists to prevent, not to create.
+
 ## Phase 9: Open PR
 
 Title: conventional-commits style, ≤70 chars.

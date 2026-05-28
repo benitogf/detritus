@@ -26,8 +26,13 @@ related:
 > When `/grow` is invoked:
 > 1. **DO NOT** call file editing tools (edit, multi_edit, write_to_file)
 > 2. **DO NOT** run commands that modify the codebase
-> 3. **ONLY** produce: Extraction, Compliance Check, Proposed KB Deltas, Questions
-> 4. **ALWAYS** end with questions and wait for user confirmation before implementing
+> 3. **ONLY** produce: Extraction, Compliance Check, Proposed KB Deltas, and, when the correction is already clear and approved, the implementation plan
+> 4. **ASK QUESTIONS ONLY WHEN NEEDED.** If the user has already confirmed the correction or the KB delta is unambiguous, do not stop for another confirmation loop; proceed to implement the minimal KB change.
+>
+> **Decision rule for re-confirmation:**
+> - The user's correction in the triggering message IS the confirmation. Treat it as the instruction.
+> - Re-ask ONLY when (a) the correction is genuinely ambiguous, (b) it would touch >1 doc in non-obvious ways, or (c) it conflicts with an existing KB rule.
+> - When the correction is a single rule-tightening on a doc already in scope, implement it directly — no second "do you want me to do this?" loop. Asking the user to confirm what they just told you to do is the failure mode `/grow` exists to fix; do not reproduce it.
 
 ---
 
@@ -143,10 +148,14 @@ For each failure mode identified:
 
 ## Step 5: Wait for Confirmation
 
-**DO NOT implement changes.** Present the plan and wait for user to:
+**DO NOT implement changes unless the correction is already clear and approved.**
+
+Present the plan and wait for user to:
 - Approve all changes
 - Approve selectively
 - Request modifications
 - Reject and explain why
 
-Only after explicit approval, implement changes in the local detritus clone.
+If the user has already approved the direction in the conversation and there is no ambiguity, skip the extra confirmation turn and implement the minimal KB delta directly.
+
+Only after explicit approval, or when the correction is already explicit and unambiguous, implement changes in the local detritus clone.
