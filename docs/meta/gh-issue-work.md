@@ -67,6 +67,18 @@ No new abstractions unless the issue explicitly demands one. No cleanup drive-by
 
 ## Phase 4: Branch from the default base
 
+**Pre-flight: detect wrong-branch state.** Before branching, check whether the current branch is the default branch AND has commits not yet in a PR:
+```
+current=$(git rev-parse --abbrev-ref HEAD)
+default=$(gh api repos/<owner>/<repo> --jq .default_branch)
+if [ "$current" = "$default" ]; then
+  ahead=$(git rev-list origin/$default..HEAD --count)
+  # if ahead > 0, we are on the default branch with unpushed or already-pushed
+  # commits that bypassed the PR flow — this is the recovery scenario
+fi
+```
+If on the default branch with commits ahead of `origin/<default>` (or recently pushed directly): **STOP**. State the situation to the user, and require them to move the work onto a feature branch before any more changes are made. Do not silently branch from a dirty default.
+
 Read the default branch:
 ```
 gh api repos/<owner>/<repo> --jq .default_branch
@@ -107,6 +119,17 @@ EOF
 ```
 
 One logical change per commit. Stage specific files (`git add <path> ...`), not `git add -A`.
+
+Pre-commit branch check (mandatory):
+
+```
+current=$(git branch --show-current)
+default=$(gh api repos/<owner>/<repo> --jq .default_branch)
+if [ "$current" = "$default" ]; then
+  STOP — you are on the default branch. Do not commit.
+  Return to Phase 4, create a feature branch, and re-apply the changes there.
+fi
+```
 
 ## Phase 7: Push
 

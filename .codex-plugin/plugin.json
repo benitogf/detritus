@@ -1,39 +1,39 @@
 {
-  "name": "detritus",
-  "version": "3.14.1",
-  "description": "Knowledge base MCP server for coding patterns, testing workflows, Go guidance, and ooo ecosystem documentation.",
-  "author": {
-    "name": "benitogf",
-    "url": "https://github.com/benitogf"
-  },
-  "homepage": "https://github.com/benitogf/detritus#readme",
-  "repository": "https://github.com/benitogf/detritus",
-  "license": "MIT",
-  "keywords": [
-    "mcp",
-    "knowledge-base",
-    "coding-patterns",
-    "testing",
-    "go"
-  ],
-  "skills": "./skills/",
-  "mcpServers": "./.mcp.json",
-  "interface": {
-    "displayName": "Detritus",
-    "shortDescription": "Coding knowledge base served over MCP",
-    "longDescription": "Detritus exposes a local knowledge base of software engineering patterns, testing workflows, Go guidance, and ooo ecosystem documentation through MCP tools for Codex.",
-    "developerName": "benitogf",
-    "category": "Engineering",
-    "capabilities": [
-      "Read"
+    "name": "detritus",
+    "version": "3.15.0",
+    "description": "Knowledge base MCP server for coding patterns, testing workflows, Go guidance, and ooo ecosystem documentation.",
+    "author": {
+        "name": "benitogf",
+        "url": "https://github.com/benitogf"
+    },
+    "homepage": "https://github.com/benitogf/detritus#readme",
+    "repository": "https://github.com/benitogf/detritus",
+    "license": "MIT",
+    "keywords": [
+        "mcp",
+        "knowledge-base",
+        "coding-patterns",
+        "testing",
+        "go"
     ],
-    "websiteURL": "https://github.com/benitogf/detritus",
-    "defaultPrompt": [
-      "Search detritus for testing guidance",
-      "Use detritus to plan this change",
-      "Find the Go style guidance"
-    ],
-    "brandColor": "#305C7A",
-    "screenshots": []
-  }
+    "skills": "./skills/",
+    "mcpServers": "./.mcp.json",
+    "interface": {
+        "displayName": "Detritus",
+        "shortDescription": "Coding knowledge base served over MCP",
+        "longDescription": "Detritus exposes a local knowledge base of software engineering patterns, testing workflows, Go guidance, and ooo ecosystem documentation through MCP tools for Codex.",
+        "developerName": "benitogf",
+        "category": "Engineering",
+        "capabilities": [
+            "Read"
+        ],
+        "websiteURL": "https://github.com/benitogf/detritus",
+        "defaultPrompt": [
+            "Search detritus for testing guidance",
+            "Use detritus to plan this change",
+            "Find the Go style guidance"
+        ],
+        "brandColor": "#305C7A",
+        "screenshots": []
+    }
 }
