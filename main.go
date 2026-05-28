@@ -23,6 +23,9 @@ var version = "dev"
 //go:embed docs
 var docsFS embed.FS
 
+//go:embed commands
+var commandsFS embed.FS
+
 //go:embed generated/data.gob
 var dataFS embed.FS
 
