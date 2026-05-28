@@ -36,6 +36,8 @@ This applies to PR bodies, issue bodies, comment bodies, release notes. It does 
 - Full issue URL — parsed to `<owner>/<repo>#<n>`.
 - Bare `#<n>` — valid only when cwd is already inside the target repo.
 
+This skill is issue-only. If the request does not already include an issue reference, stop and route to `gh-issue-create` first. Do not draft or open a PR from free-form work without an issue linked to it.
+
 ## Phase 0: Track progress
 
 Initialize a `TodoWrite` list mirroring phases 1–9 so the user can see where the flow is at a glance. Update in real time — mark in-progress before starting each phase, completed immediately after. Skip this only if the entire flow will finish in under two tool calls (rare).
