@@ -127,6 +127,9 @@ Pre-commit branch check (mandatory):
 ```
 current=$(git branch --show-current)
 default=$(gh api repos/<owner>/<repo> --jq .default_branch)
+if [ -z "$current" ]; then
+  STOP — detached HEAD. Do not commit. Return to Phase 4 and check out a named feature branch.
+fi
 if [ "$current" = "$default" ]; then
   STOP — you are on the default branch. Do not commit.
   Return to Phase 4, create a feature branch, and re-apply the changes there.
@@ -166,6 +169,8 @@ Launch a sub-agent (`Explore` or equivalent) with a prompt that includes:
 - Instruction NOT to write code, NOT to post anywhere — output only
 
 Surface the full triage block to the user. If there are blockers, stop and return to Phase 6 to fix them; do not proceed to 8b.
+
+**The triage is INTERNAL. Never post it as a PR comment, PR review, or issue comment.** This is the key difference from `/gh-pr`: `/gh-pr` reviews someone else's PR and posts an APPROVE / REQUEST_CHANGES verdict; `/gh-self-review` (and this Phase 8a, which embeds it) reviews your own pending change and feeds the findings back into your own work. Posting your own triage to the PR pollutes the review surface with author noise that real reviewers must wade through, and it conflates self-audit (drives edits before the PR settles) with peer-review (the verdict on a settled PR). Use the triage to drive fixes — amend commits, add new commits, or annotate non-blockers in the PR body if relevant — then re-run 8a on the updated diff. Never `gh api ... comments` or `gh pr review` from this phase.
 
 ### 8b. Confirmation gate
 
