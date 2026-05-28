@@ -46,8 +46,9 @@ Detect the current host when possible and choose the closest supported behavior:
 2. Codex app with hourly/weekly cadence: use a cron/worktree automation when the requested schedule fits detached work.
 3. Claude Code: default to **Desktop Routines** via `/schedule` when the user can keep the Desktop app open during wake windows, or to the **external scheduler fallback** (`claude -p` triggered by cron / launchd / systemd / Task Scheduler) when always-on durability is required. Both run against the actual local checkout and can read/write the gitignored scratchpad — matching `/janitor`'s workspace-scoped intent. Use **Cloud Routines** only when the janitor is explicitly opting into GitHub-state-only operation against a remote repository, not the user's workspace; Cloud Routines clone the repo fresh per tick and cannot see local state.
 4. GitHub Actions: create or recommend a scheduled workflow only when repository-hosted CI automation is acceptable.
-5. Cursor or Windsurf: install the reusable command/workflow instructions, then require that recurrence be driven by platform UI support or an external scheduler if no native recurring scheduler is available.
-6. Generic: provide a scheduler-ready prompt and leave recurrence to cron, launchd, systemd timers, Windows Task Scheduler, or the host orchestrator.
+5. **GitHub Copilot (VS Code)**: `/janitor` and `/smith` are **not supported** — see the Copilot section below before proceeding.
+6. Cursor or Windsurf: install the reusable command/workflow instructions, then require that recurrence be driven by platform UI support or an external scheduler if no native recurring scheduler is available.
+7. Generic: provide a scheduler-ready prompt and leave recurrence to cron, launchd, systemd timers, Windows Task Scheduler, or the host orchestrator.
 
 ## Codex
 
@@ -133,6 +134,25 @@ Use a Windsurf workflow for the reusable janitor procedure.
 - Store the workflow as `/janitor` instructions.
 - Windsurf workflows are manually invoked; use an external scheduler or platform support for recurrence if available.
 - Keep the workflow body platform-neutral and refer back to the core janitor loop.
+
+## GitHub Copilot (VS Code)
+
+**`/janitor` and `/smith` are not supported on GitHub Copilot.**
+
+Both commands require *session-continuation* between ticks: each tick must be the same logical agent reading the scratchpad from the prior tick, accumulating context, and picking up where it left off. GitHub Copilot (VS Code) has no mechanism for this:
+
+- There is no `/schedule`, no Routines API, no heartbeat mechanism.
+- The `copilot` shim in the VS Code extension path is not a standalone session-resuming CLI.
+- An external cron job would start a fresh, disconnected session with no context from previous ticks — that is the Generic adapter, not the loop model.
+- The loop only advances when the user explicitly sends a message in the same conversation.
+
+**What Copilot can do within the janitor scope:**
+- Execute a single tick on demand — audit, fix, test, and route to `/gh`. All the code-work steps function correctly.
+- Persist the `.janitor/<slug>.md` scratchpad across user-triggered conversations (the user must re-enter the same chat thread or reference the scratchpad explicitly).
+- Run the full `/gh` delivery flow end-to-end within a single session.
+
+**What to tell the user when asked to start `/janitor` on Copilot:**
+State clearly that the recurring loop is not supported. Offer to run one tick now. If the user wants automation, recommend Claude Code (Desktop Routines or external scheduler) or GitHub Actions instead.
 
 ## Generic
 

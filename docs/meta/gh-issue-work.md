@@ -116,28 +116,30 @@ git push -u origin <branch>
 
 ## Phase 8: Self-review + confirm
 
-Before opening the PR, review the diff yourself and surface findings to the user. This is the symmetric gate to `gh-issue-create`'s confirm-before-post step.
+Before opening the PR, delegate the review to a **fresh sub-agent** so the audit runs without the conversational context that produced the code. This mirrors how `/gh-self-review` and `/gh-pr` work — the author's blind spots stay with the author; the sub-agent sees only the diff and the stated intent.
 
-For non-trivial diffs, run `/gh-self-review` first for a deep audit and address blockers before continuing here. The lightweight summary below is sufficient for small, scoped changes.
-
-Inspect what's about to be proposed:
+Collect the full brief (the sub-agent has no conversation context — it must be self-contained):
 ```
 git log origin/<default_branch>..HEAD --oneline
 git diff origin/<default_branch>...HEAD --stat
-git diff origin/<default_branch>...HEAD
+git diff origin/<default_branch>...HEAD        # full diff
 ```
+Also fetch the issue body if available: `gh api repos/<owner>/<repo>/issues/<n> --jq '{title, body}'`.
 
-Read the full diff, then produce a short review:
-- **What changed** — 2–4 bullets describing the behavior change the PR lands, not a file-by-file recap.
-- **Findings** — anything noteworthy in the diff: files touched outside the issue's scope, TODOs or debug leftovers, missing tests, generated artifacts that don't match the hand-written edits, formatting noise, commented-out code, config drift.
-- Say "nothing to flag" explicitly when the diff is clean. Don't invent concerns.
+Launch a sub-agent (`Explore` or equivalent) with a prompt that includes:
+- The full diff text
+- The issue title + body
+- The branch name and commit messages
+- Instruction to load `meta/review-rigor` via `kb_get` and apply it end-to-end
+- Instruction to return a triage block: **blockers** (must fix before PR) and **non-blockers** (nice-to-have or future work)
+- Instruction NOT to write code, NOT to post anywhere — output only
 
-Then ask via `AskUserQuestion`:
-- **Open PR as-is** — proceed to the next phase.
-- **Edit first** — stop, collect the user's notes, amend or add commits on the branch, then re-enter this phase from the top (re-run the diff, re-summarize, re-ask).
+Once the sub-agent returns its triage block, surface the full findings to the user. Then ask via `AskUserQuestion`:
+- **Open PR as-is** — proceed to the next phase (only valid when no blockers remain).
+- **Edit first** — stop, collect the user's notes, amend or add commits on the branch, then re-enter this phase from the top.
 - **Cancel** — stop. The branch stays pushed; no PR is opened.
 
-Never open the PR without an explicit "Open PR as-is".
+Never open the PR without an explicit "Open PR as-is" and no unresolved blockers.
 
 ## Phase 9: Open PR
 
