@@ -70,8 +70,8 @@ Apply the first matching rule:
 | URL / ref resolves to an **open issue** | `gh-issue-work` |
 | URL / ref resolves to a **closed issue or merged/closed PR** | STOP and ask the user whether to reopen, reference it in a new issue, or abandon. Do not silently dispatch. |
 | Free-text asking for a self-review / preflight / audit of the **current local diff** (no PR opened yet) — phrases like "audit my changes", "review my diff", "check before PR" | `gh-self-review` |
-| Free-text problem description, no existing issue referenced | `gh-issue-create` — then offer to chain into `gh-issue-work` after posting |
 | Free-text request to work code and open a PR, but no issue is referenced | `gh-issue-create` first, then `gh-issue-work` after the issue exists |
+| Free-text problem description, no existing issue referenced | `gh-issue-create` — then offer to chain into `gh-issue-work` after posting |
 | Free-text + user references a past commit / regression | `gh-issue-create` with the `## Context` SHA-citation path activated |
 | Conversation contains neither a clear problem nor a GitHub reference | Ask via `AskUserQuestion`: "Create new issue / work existing issue / review PR / address PR feedback / cancel?" |
 
