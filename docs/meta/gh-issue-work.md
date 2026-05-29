@@ -170,7 +170,7 @@ Launch a sub-agent (`Explore` or equivalent) with a prompt that includes:
 
 Surface the full triage block to the user. If there are blockers, stop and return to Phase 6 to fix them; do not proceed to 8b.
 
-**The triage is INTERNAL. Never post it as a PR comment, PR review, or issue comment.** This is the key difference from `/gh-pr`: `/gh-pr` reviews someone else's PR and posts an APPROVE / REQUEST_CHANGES verdict; `/gh-self-review` (and this Phase 8a, which embeds it) reviews your own pending change and feeds the findings back into your own work. Posting your own triage to the PR pollutes the review surface with author noise that real reviewers must wade through, and it conflates self-audit (drives edits before the PR settles) with peer-review (the verdict on a settled PR). Use the triage to drive fixes — amend commits, add new commits, or annotate non-blockers in the PR body if relevant — then re-run 8a on the updated diff. Never `gh api ... comments` or `gh pr review` from this phase.
+**The triage is INTERNAL. Never post it as a PR comment, PR review, or issue comment.** This is the key difference from `/gh-pr`: `/gh-pr` reviews someone else's PR and posts an APPROVE / REQUEST_CHANGES verdict; `/gh-self-review` (and this Phase 8a, which embeds it) reviews your own pending change and feeds the findings back into your own work. Posting your own triage to the PR pollutes the review surface with author noise that real reviewers must wade through, and it conflates self-audit (drives edits before the PR settles) with peer-review (the verdict on a settled PR). Use the triage to drive fixes — amend commits, add new commits, or, for non-blockers that real reviewers should still know about, fold them into the PR body as a "Known non-blockers" section (this is the only sanctioned channel; never a comment or review). Then re-run 8a on the updated diff. Never `gh api ... comments` or `gh pr review` from this phase. See [/gh-self-review](gh-self-review.md) for the full self-review-vs-/gh-pr contract.
 
 ### 8b. Confirmation gate
 
@@ -180,12 +180,12 @@ Default behavior — ask via `AskUserQuestion`:
 - **Cancel** — stop. The branch stays pushed; no PR is opened.
 
 **Skip 8b only when ALL of the following hold:**
-- 8a has run and returned no blockers, AND
-- The user's latest message in the same flow explicitly told you to open / push / create the PR, AND
-- The diff has not changed since they said so, AND
+- 8a has run on the *current* diff and returned no blockers, AND
+- The user's latest message — in the same conversation, with no `/clear` and no re-entry through `/gh` since — explicitly told you to open / push / create the PR, AND
+- The diff has not changed since that directive (no new commits, no amends, no fixes from 8a's findings), AND
 - An issue already exists and is linked.
 
-When all four hold, proceed straight to Phase 9. Otherwise ask. Asking the user to confirm what they just told you to do is the failure mode 8b's escape exists to prevent — but the escape applies only to 8b. Never open the PR with unresolved blockers, and never skip 8a.
+If 8a forced any amendments (even non-blocker fixes the user is unaware of), the user's prior "open it" is stale — re-ask. When all four hold, proceed straight to Phase 9. Otherwise ask. Asking the user to confirm what they just told you to do is the failure mode 8b's escape exists to prevent — but the escape applies only to 8b. Never open the PR with unresolved blockers, and never skip 8a.
 
 ## Phase 9: Open PR
 
