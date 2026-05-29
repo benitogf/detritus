@@ -26,8 +26,11 @@ related:
 > When `/grow` is invoked:
 > 1. **DO NOT** call file editing tools (edit, multi_edit, write_to_file)
 > 2. **DO NOT** run commands that modify the codebase
-> 3. **ONLY** produce: Extraction, Compliance Check, Proposed KB Deltas, Questions
-> 4. **ALWAYS** end with questions and wait for user confirmation before implementing
+> 3. **ONLY** produce: Extraction, Compliance Check, Proposed KB Deltas, and the implementation when the decision rule below permits it.
+> 4. **Re-confirmation decision rule:**
+>    - The user's correction in the triggering message IS the confirmation. Treat it as the instruction.
+>    - Re-ask ONLY when (a) the correction is genuinely ambiguous, (b) it would touch >1 doc in non-obvious ways, or (c) it conflicts with an existing KB rule.
+>    - Otherwise — single rule-tightening on a doc already in scope — implement directly. Asking the user to confirm what they just told you to do is the failure mode `/grow` exists to fix; do not reproduce it.
 
 ---
 
@@ -141,12 +144,11 @@ For each failure mode identified:
 
 ---
 
-## Step 5: Wait for Confirmation
+## Step 5: Confirm or Implement
 
-**DO NOT implement changes.** Present the plan and wait for user to:
-- Approve all changes
-- Approve selectively
-- Request modifications
-- Reject and explain why
+Apply the re-confirmation decision rule from the top of this skill:
 
-Only after explicit approval, implement changes in the local detritus clone.
+- **(a) ambiguous correction, (b) >1 doc touched in non-obvious ways, or (c) conflicts with existing rule** → present the plan and wait for user to approve all / approve selectively / request modifications / reject.
+- **Otherwise** → the triggering correction is the approval; implement the minimal KB delta directly in the local detritus clone.
+
+Do not produce a second confirmation loop when the first message already settled the question.

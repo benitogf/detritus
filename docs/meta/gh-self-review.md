@@ -32,6 +32,17 @@ The analysis itself — principles, claim verification, second-pass checklist, c
 - Doesn't run tests or builds. The sub-agent reasons over the diff and the surrounding source; it doesn't compile or execute.
 - Doesn't post comments, create issues, or push. Output is a triage list the dev acts on.
 
+## Internal-only — never post the triage
+
+The triage produced by this skill (and by `gh-issue-work` Phase 8a, which embeds it) is **for the author's eyes**. It must never be posted to the PR or issue as a comment or review. This is the contract that separates self-review from `/gh-pr`:
+
+| Skill | Reviewer | Subject | Output destination |
+|---|---|---|---|
+| `/gh-self-review` (and `gh-issue-work` 8a) | You, on your own diff | Pre-merge mechanics | **Local triage → drives your own edits.** Never posted. |
+| `/gh-pr` | You, on someone else's PR | Settled PR | **`gh api ... /reviews` (APPROVE or REQUEST_CHANGES).** Posted. |
+
+Posting your own self-review to your own PR pollutes the review surface with author noise that real reviewers must filter past, and it conflates self-audit (drives fixes before the PR settles) with peer-review (the verdict on a settled PR). If the triage surfaces something a reviewer should know but you've chosen not to fix in this PR, fold it into the PR body as a "Known non-blockers" section instead — do not post it as a comment / review.
+
 ## Phase 1: Resolve scope
 
 Detect base (upstream tracking branch → `origin/HEAD` → `main`):

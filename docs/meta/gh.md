@@ -38,6 +38,8 @@ These apply to every sub-skill this router dispatches to. The sub-skill docs als
 5. **One issue, one PR.** If related work is spotted mid-flow, open a separate issue — don't expand the current one. This applies equally when creating, working, or handling feedback.
 6. **Branch from the fetched default, never from the current working branch.** Applies to `gh-issue-work` specifically but is worth restating every time.
 7. **Every issue posted carries the `plane` label.** The Plane management app mirrors GitHub issues based on this label. `gh-issue-create` owns applying it; this router just enforces that no other dispatch path bypasses it.
+8. **Never commit to or push from the default branch.** Before any `git commit`, verify the current branch is not the default branch. If it is, stop immediately and branch first. There is no valid case for committing directly to the default branch.
+9. **Never create a PR from a request that lacks an issue.** If the user asks to work on something and open a PR but does not specify an issue number, issue URL, or issue reference, route to `gh-issue-create` first. Only `gh-issue-work` may continue into PR creation, and only after an issue exists.
 
 ## Inputs
 
@@ -68,6 +70,7 @@ Apply the first matching rule:
 | URL / ref resolves to an **open issue** | `gh-issue-work` |
 | URL / ref resolves to a **closed issue or merged/closed PR** | STOP and ask the user whether to reopen, reference it in a new issue, or abandon. Do not silently dispatch. |
 | Free-text asking for a self-review / preflight / audit of the **current local diff** (no PR opened yet) — phrases like "audit my changes", "review my diff", "check before PR" | `gh-self-review` |
+| Free-text request to work code and open a PR, but no issue is referenced | `gh-issue-create` first, then `gh-issue-work` after the issue exists |
 | Free-text problem description, no existing issue referenced | `gh-issue-create` — then offer to chain into `gh-issue-work` after posting |
 | Free-text + user references a past commit / regression | `gh-issue-create` with the `## Context` SHA-citation path activated |
 | Conversation contains neither a clear problem nor a GitHub reference | Ask via `AskUserQuestion`: "Create new issue / work existing issue / review PR / address PR feedback / cancel?" |

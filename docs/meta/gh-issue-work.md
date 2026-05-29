@@ -36,6 +36,8 @@ This applies to PR bodies, issue bodies, comment bodies, release notes. It does 
 - Full issue URL — parsed to `<owner>/<repo>#<n>`.
 - Bare `#<n>` — valid only when cwd is already inside the target repo.
 
+This skill is issue-only. If the request does not already include an issue reference, stop and route to `gh-issue-create` first. Do not draft or open a PR from free-form work without an issue linked to it.
+
 ## Phase 0: Track progress
 
 Initialize a `TodoWrite` list mirroring phases 1–9 so the user can see where the flow is at a glance. Update in real time — mark in-progress before starting each phase, completed immediately after. Skip this only if the entire flow will finish in under two tool calls (rare).
@@ -66,6 +68,18 @@ Delegate broad exploration to an `Explore` subagent so the main context stays cl
 No new abstractions unless the issue explicitly demands one. No cleanup drive-bys.
 
 ## Phase 4: Branch from the default base
+
+**Pre-flight: detect wrong-branch state.** Before branching, check whether the current branch is the default branch AND has commits not yet in a PR:
+```
+current=$(git rev-parse --abbrev-ref HEAD)
+default=$(gh api repos/<owner>/<repo> --jq .default_branch)
+if [ "$current" = "$default" ]; then
+  ahead=$(git rev-list origin/$default..HEAD --count)
+  # if ahead > 0, we are on the default branch with unpushed or already-pushed
+  # commits that bypassed the PR flow — this is the recovery scenario
+fi
+```
+If on the default branch with commits ahead of `origin/<default>` (or recently pushed directly): **STOP**. State the situation to the user, and require them to move the work onto a feature branch before any more changes are made. Do not silently branch from a dirty default.
 
 Read the default branch:
 ```
@@ -108,6 +122,20 @@ EOF
 
 One logical change per commit. Stage specific files (`git add <path> ...`), not `git add -A`.
 
+Pre-commit branch check (mandatory):
+
+```
+current=$(git branch --show-current)
+default=$(gh api repos/<owner>/<repo> --jq .default_branch)
+if [ -z "$current" ]; then
+  STOP — detached HEAD. Do not commit. Return to Phase 4 and check out a named feature branch.
+fi
+if [ "$current" = "$default" ]; then
+  STOP — you are on the default branch. Do not commit.
+  Return to Phase 4, create a feature branch, and re-apply the changes there.
+fi
+```
+
 ## Phase 7: Push
 
 ```
@@ -116,7 +144,13 @@ git push -u origin <branch>
 
 ## Phase 8: Self-review + confirm
 
-Before opening the PR, delegate the review to a **fresh sub-agent** so the audit runs without the conversational context that produced the code. This mirrors how `/gh-self-review` and `/gh-pr` work — the author's blind spots stay with the author; the sub-agent sees only the diff and the stated intent.
+This phase has two sub-steps. **8a is unconditional and never skipped.** 8b is the only part that may be skipped by a prior user directive.
+
+### 8a. Sub-agent review — ALWAYS RUN
+
+Delegate the review to a **fresh sub-agent** so the audit runs without the conversational context that produced the code. This mirrors how `/gh-self-review` and `/gh-pr` work — the author's blind spots stay with the author; the sub-agent sees only the diff and the stated intent.
+
+**This step is non-negotiable.** The user directing PR creation does NOT remove it. "Open the PR" is a directive about 8b, not about 8a. Skipping the sub-agent review because the user said "open the PR" is the exact failure mode this phase exists to prevent — the whole point of the fresh-agent review is that the conversation does not influence it.
 
 Collect the full brief (the sub-agent has no conversation context — it must be self-contained):
 ```
@@ -134,12 +168,24 @@ Launch a sub-agent (`Explore` or equivalent) with a prompt that includes:
 - Instruction to return a triage block: **blockers** (must fix before PR) and **non-blockers** (nice-to-have or future work)
 - Instruction NOT to write code, NOT to post anywhere — output only
 
-Once the sub-agent returns its triage block, surface the full findings to the user. Then ask via `AskUserQuestion`:
+Surface the full triage block to the user. If there are blockers, stop and return to Phase 6 to fix them; do not proceed to 8b.
+
+**The triage is INTERNAL. Never post it as a PR comment, PR review, or issue comment.** This is the key difference from `/gh-pr`: `/gh-pr` reviews someone else's PR and posts an APPROVE / REQUEST_CHANGES verdict; `/gh-self-review` (and this Phase 8a, which embeds it) reviews your own pending change and feeds the findings back into your own work. Posting your own triage to the PR pollutes the review surface with author noise that real reviewers must wade through, and it conflates self-audit (drives edits before the PR settles) with peer-review (the verdict on a settled PR). Use the triage to drive fixes — amend commits, add new commits, or, for non-blockers that real reviewers should still know about, fold them into the PR body as a "Known non-blockers" section (this is the only sanctioned channel; never a comment or review). Then re-run 8a on the updated diff. Never `gh api ... comments` or `gh pr review` from this phase. See [/gh-self-review](gh-self-review.md) for the full self-review-vs-/gh-pr contract.
+
+### 8b. Confirmation gate
+
+Default behavior — ask via `AskUserQuestion`:
 - **Open PR as-is** — proceed to the next phase (only valid when no blockers remain).
 - **Edit first** — stop, collect the user's notes, amend or add commits on the branch, then re-enter this phase from the top.
 - **Cancel** — stop. The branch stays pushed; no PR is opened.
 
-Never open the PR without an explicit "Open PR as-is" and no unresolved blockers.
+**Skip 8b only when ALL of the following hold:**
+- 8a has run on the *current* diff and returned no blockers, AND
+- The user's latest message — in the same conversation, with no `/clear` and no re-entry through `/gh` since — explicitly told you to open / push / create the PR, AND
+- The diff has not changed since that directive (no new commits, no amends, no fixes from 8a's findings), AND
+- An issue already exists and is linked.
+
+If 8a forced any amendments (even non-blocker fixes the user is unaware of), the user's prior "open it" is stale — re-ask. When all four hold, proceed straight to Phase 9. Otherwise ask. Asking the user to confirm what they just told you to do is the failure mode 8b's escape exists to prevent — but the escape applies only to 8b. Never open the PR with unresolved blockers, and never skip 8a.
 
 ## Phase 9: Open PR
 
