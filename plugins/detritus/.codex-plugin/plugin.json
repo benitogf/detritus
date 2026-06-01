@@ -1,6 +1,6 @@
 {
   "name": "detritus",
-  "version": "3.15.0",
+  "version": "3.16.0",
   "description": "Knowledge base MCP server for coding patterns, testing workflows, Go guidance, and ooo ecosystem documentation.",
   "author": {
     "name": "benitogf",
