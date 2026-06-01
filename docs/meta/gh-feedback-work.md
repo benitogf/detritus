@@ -72,7 +72,7 @@ For each post-last-commit feedback item, pick exactly one label:
 | Label | Meaning | Action |
 |---|---|---|
 | **actionable** | asks for a concrete code change | implement in Phase 3 |
-| **in-body** | question answerable by clarifying the PR body | answer in Phase 5 rewrite |
+| **in-body** | question answerable by clarifying the PR body | answer in Phase 6 rewrite |
 | **out-of-scope** | valid but belongs in a separate issue/PR | capture as a follow-up; offer to run `/gh-issue-create` afterwards |
 
 Present the classification to the user. If more than 2 items are **actionable**, WAIT for confirmation before touching code.
@@ -94,17 +94,19 @@ Commit convention:
 
 ## Phase 4: Self-review the fixes before pushing
 
-Invoke `/gh-self-review` against the working tree (committed scope). Follow its loop-until-clean semantics — fresh sub-agent per iteration, rigor checklist, up to 3 iterations or until the triage is empty.
+Invoke `/gh-self-review` **once** against the working tree (committed scope). The inner skill owns the loop: it spawns a fresh sub-agent per iteration, applies the rigor checklist, and exits on its own stop conditions (empty triage, all remaining items deferred by the dev, or 3 iterations exhausted).
 
 **Why this phase exists**: addressing review feedback can introduce regressions in code paths the feedback's tests don't exercise. The reviewer caught the original issue; their tests covered that. Your fix's tests cover the fix. Neither catches "did this fix break adjacent behavior?". A fresh sub-agent reading the post-fix diff catches that locally — saves a reviewer round-trip and avoids compounding regressions across review rounds.
 
-If `/gh-self-review` surfaces blockers:
+When `/gh-self-review` returns:
 
-- Return to Phase 3, address them, commit. Don't amend prior commits — they're already part of the feedback-fix story, additional commits are fine.
-- Re-run `/gh-self-review`. Same loop bound (3 iterations) applies to the combined flow, not just to the inner skill.
-- Push (Phase 5) only after `/gh-self-review` returns clean OR the dev explicitly accepts remaining items.
+- **Triage empty** → proceed to Phase 5.
+- **Blockers fixed inside the loop** → /gh-self-review already drove fix-and-re-audit until clean; proceed to Phase 5.
+- **Surviving items after 3 iterations** → /gh-self-review surfaces these to the dev per its own accept / defer / escalate exit. Resolve there. Proceed to Phase 5 only after the dev explicitly accepts the remaining items (folded into the PR body's "Known non-blockers" section per Phase 6) or escalates.
 
-**Composition**: this phase delegates entirely to `/gh-self-review` — do not re-implement scope detection, sub-agent spawning, or the rigor checklist here. The wrapping skill's job is to insert the call at the right point in the feedback-work flow; the review work itself lives in its own skill.
+This skill does NOT wrap `/gh-self-review` in a second outer loop — that would push past the inner cap and duplicate logic the inner skill already owns. Cap ownership lives in `/gh-self-review`; this phase is a single delegated call.
+
+**Composition**: this phase delegates entirely to `/gh-self-review` — do not re-implement scope detection, sub-agent spawning, the rigor checklist, or the iteration cap here. The wrapping skill's job is to insert the call at the right point in the feedback-work flow; the review work itself lives in its own skill.
 
 ## Phase 5: Push
 
