@@ -63,6 +63,7 @@ Scan the current conversation for these signal types:
 | **explicit_correction** | user says "no", "that's wrong", "don't do that", "stop", "I said", "not like that" |
 | **missed_existing** | user points to existing doc/workflow/rule that agent should have used: "already exists", "check the docs", "use /X", "kb_get" |
 | **rule_violation** | agent action contradicts established KB guidance (e.g., used sleep in tests, added backwards compat, skipped WaitGroup) |
+| **skill_invocation_ignored** | user typed `/<name>` in the triggering message — or in any user message earlier in the turn — but the agent did not invoke that skill. The base-prompt rule is unambiguous ("When users reference a slash command or /<something>, they are referring to a skill. Use this tool to invoke it"), but mid-prose mentions like "referencing /X /Y" or "see /X for the pattern" are easy to read as references-to-look-at instead of invoke-now. Default per the base prompt is INVOKE; reading-as-reference requires explicit "don't run X, just look at it" framing from the user. During Step 1 extraction, list every `/<name>` the user typed and verify a matching `Skill` tool call appears in the same turn. |
 | **implicit_redirect** | user silently fixes something agent did wrong (e.g., provides corrected code, rewrites a section) |
 | **scope_drift** | agent changed requirements without approval, added unrequested features, or deviated from the task |
 | **quality_bar** | user raises or clarifies quality expectations ("these docs are for you not humans", "optimize for retrieval") |

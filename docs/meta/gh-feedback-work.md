@@ -11,6 +11,7 @@ when: User invokes /gh-feedback-work on a PR with outstanding review comments or
 related:
   - meta/gh-issue-create
   - meta/gh-issue-work
+  - meta/gh-self-review
 ---
 
 # /gh-feedback-work — Address PR Feedback, Update PR Body In Place
@@ -38,7 +39,7 @@ This applies to PR bodies, issue bodies, comment bodies, release notes. It does 
 
 ## Phase 0: Track progress
 
-Initialize a `TodoWrite` list mirroring phases 1–6 so the user can see where the flow is at a glance. Update in real time — mark in-progress before starting each phase, completed immediately after.
+Initialize a `TodoWrite` list mirroring phases 1–7 so the user can see where the flow is at a glance. Update in real time — mark in-progress before starting each phase, completed immediately after.
 
 ## Phase 1: Collect feedback
 
@@ -91,7 +92,21 @@ Commit convention:
 - Conventional-commits message (`fix(<scope>): …`, `refactor(<scope>): …`).
 - `Co-Authored-By: Claude …` footer in every commit.
 
-## Phase 4: Push
+## Phase 4: Self-review the fixes before pushing
+
+Invoke `/gh-self-review` against the working tree (committed scope). Follow its loop-until-clean semantics — fresh sub-agent per iteration, rigor checklist, up to 3 iterations or until the triage is empty.
+
+**Why this phase exists**: addressing review feedback can introduce regressions in code paths the feedback's tests don't exercise. The reviewer caught the original issue; their tests covered that. Your fix's tests cover the fix. Neither catches "did this fix break adjacent behavior?". A fresh sub-agent reading the post-fix diff catches that locally — saves a reviewer round-trip and avoids compounding regressions across review rounds.
+
+If `/gh-self-review` surfaces blockers:
+
+- Return to Phase 3, address them, commit. Don't amend prior commits — they're already part of the feedback-fix story, additional commits are fine.
+- Re-run `/gh-self-review`. Same loop bound (3 iterations) applies to the combined flow, not just to the inner skill.
+- Push (Phase 5) only after `/gh-self-review` returns clean OR the dev explicitly accepts remaining items.
+
+**Composition**: this phase delegates entirely to `/gh-self-review` — do not re-implement scope detection, sub-agent spawning, or the rigor checklist here. The wrapping skill's job is to insert the call at the right point in the feedback-work flow; the review work itself lives in its own skill.
+
+## Phase 5: Push
 
 ```
 git push
@@ -99,7 +114,7 @@ git push
 
 The branch is already tracking upstream from `gh pr checkout`; no `-u` needed.
 
-## Phase 5: Rewrite PR body in place (not via comments)
+## Phase 6: Rewrite PR body in place (not via comments)
 
 Fetch the current body:
 ```
@@ -128,7 +143,7 @@ gh api --method PATCH repos/<owner>/<repo>/pulls/<pr> \
   --jq .html_url
 ```
 
-## Phase 6: Report back
+## Phase 7: Report back
 
 Print, in the terminal (not to GitHub):
 - PR URL on its own line.
