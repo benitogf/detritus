@@ -94,15 +94,16 @@ Commit convention:
 
 ## Phase 4: Self-review the fixes before pushing
 
-Invoke `/gh-self-review` **once** against the working tree (committed scope). The inner skill owns the loop: it spawns a fresh sub-agent per iteration, applies the rigor checklist, and exits on its own stop conditions (empty triage, all remaining items deferred by the dev, or 3 iterations exhausted).
+Invoke `/gh-self-review` **once** against the post-fix tree. The inner skill detects its own scope — normally committed-only at this point (Phase 3 commits each addressed item), but if uncommitted or untracked files remain it will surface them. The inner skill owns the loop: it spawns a fresh sub-agent per iteration (the dev addresses items between iterations; the skill re-audits), applies the rigor checklist, and exits on its own stop conditions (empty triage, all remaining items deferred by the dev, or 3 iterations exhausted).
 
 **Why this phase exists**: addressing review feedback can introduce regressions in code paths the feedback's tests don't exercise. The reviewer caught the original issue; their tests covered that. Your fix's tests cover the fix. Neither catches "did this fix break adjacent behavior?". A fresh sub-agent reading the post-fix diff catches that locally — saves a reviewer round-trip and avoids compounding regressions across review rounds.
 
-When `/gh-self-review` returns:
+**Push is gated on a clean exit from `/gh-self-review`.** Concretely:
 
 - **Triage empty** → proceed to Phase 5.
-- **Blockers fixed inside the loop** → /gh-self-review already drove fix-and-re-audit until clean; proceed to Phase 5.
-- **Surviving items after 3 iterations** → /gh-self-review surfaces these to the dev per its own accept / defer / escalate exit. Resolve there. Proceed to Phase 5 only after the dev explicitly accepts the remaining items (folded into the PR body's "Known non-blockers" section per Phase 6) or escalates.
+- **Blockers addressed across iterations** → the dev fixed items between fresh-sub-agent passes; the inner skill re-audited until clean. Proceed to Phase 5.
+- **Surviving items after 3 iterations** → the inner skill surfaces these per its own accept / defer / escalate exit. Resolve there. Proceed to Phase 5 only after the dev explicitly accepts the remaining items (folded into the PR body's "Known non-blockers" section per Phase 6) or escalates.
+- **None of the above** → do not push. Return to Phase 3.
 
 This skill does NOT wrap `/gh-self-review` in a second outer loop — that would push past the inner cap and duplicate logic the inner skill already owns. Cap ownership lives in `/gh-self-review`; this phase is a single delegated call.
 

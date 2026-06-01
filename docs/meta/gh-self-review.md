@@ -162,6 +162,8 @@ Stop conditions:
 
 Each iteration spawns a NEW `Agent` invocation — never reuse the prior sub-agent. The freshness contract (Phase 3) holds per-iteration; a carried-over agent would re-inherit its own prior reasoning and the loop loses its independence.
 
+**Iteration 2+ scope handling.** Phase 1 re-runs to pick up new commits the dev made between iterations — committed scope evolves naturally. Only re-prompt the dev about modified/untracked files if the set *changed* since the prior iteration (new untracked files appeared, or files in the prior in-scope set are no longer in the working tree). If the modified/untracked set is unchanged, carry the prior iteration's in-scope decision forward silently — don't re-ask the same question.
+
 ## Why hand off to a fresh agent
 
 Self-review by the author who wrote the change shares the author's blind spots — the same mental model that produced the bug fails to catch it. The conversation that led to the diff also carries justifications ("we agreed this was fine") that bias the audit toward acceptance. Delegating to a fresh sub-agent:
