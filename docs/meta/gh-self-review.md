@@ -150,6 +150,20 @@ The sub-agent returns the triage block. Don't re-edit it; the freshness is the p
 
 If the sub-agent returned with empty sections only ("nothing to flag"), report that — don't manufacture findings to fill space.
 
+## Phase 5: Loop until clean
+
+A single sub-agent pass can miss regressions a fix introduces. Fixing one blocker often perturbs adjacent code in ways the first review didn't flag — the canonical failure shape this loop exists to catch. After the dev addresses items from Phase 4, **re-run Phases 1–4 against the updated tree** with a fresh sub-agent (no carry-over context — each iteration is independent).
+
+Stop conditions:
+
+- Sub-agent's triage is empty.
+- All remaining items are non-blockers the dev explicitly defers — fold those into the PR body's "Known non-blockers" section.
+- Loop has run 3 iterations. A finding that survives three independent fresh-sub-agent passes is unlikely to be phantom; surface the persistence to the dev for accept / defer / escalate.
+
+Each iteration spawns a NEW `Agent` invocation — never reuse the prior sub-agent. The freshness contract (Phase 3) holds per-iteration; a carried-over agent would re-inherit its own prior reasoning and the loop loses its independence.
+
+**Iteration 2+ scope handling.** Phase 1 re-runs to pick up new commits the dev made between iterations — committed scope evolves naturally. Only re-prompt the dev about modified/untracked files if the set *changed* since the prior iteration (new untracked files appeared, or files in the prior in-scope set are no longer in the working tree). If the modified/untracked set is unchanged, carry the prior iteration's in-scope decision forward silently — don't re-ask the same question.
+
 ## Why hand off to a fresh agent
 
 Self-review by the author who wrote the change shares the author's blind spots — the same mental model that produced the bug fails to catch it. The conversation that led to the diff also carries justifications ("we agreed this was fine") that bias the audit toward acceptance. Delegating to a fresh sub-agent:

@@ -11,6 +11,7 @@ when: User invokes /gh-feedback-work on a PR with outstanding review comments or
 related:
   - meta/gh-issue-create
   - meta/gh-issue-work
+  - meta/gh-self-review
 ---
 
 # /gh-feedback-work — Address PR Feedback, Update PR Body In Place
@@ -38,7 +39,7 @@ This applies to PR bodies, issue bodies, comment bodies, release notes. It does 
 
 ## Phase 0: Track progress
 
-Initialize a `TodoWrite` list mirroring phases 1–6 so the user can see where the flow is at a glance. Update in real time — mark in-progress before starting each phase, completed immediately after.
+Initialize a `TodoWrite` list mirroring phases 1–7 so the user can see where the flow is at a glance. Update in real time — mark in-progress before starting each phase, completed immediately after.
 
 ## Phase 1: Collect feedback
 
@@ -71,7 +72,7 @@ For each post-last-commit feedback item, pick exactly one label:
 | Label | Meaning | Action |
 |---|---|---|
 | **actionable** | asks for a concrete code change | implement in Phase 3 |
-| **in-body** | question answerable by clarifying the PR body | answer in Phase 5 rewrite |
+| **in-body** | question answerable by clarifying the PR body | answer in Phase 6 rewrite |
 | **out-of-scope** | valid but belongs in a separate issue/PR | capture as a follow-up; offer to run `/gh-issue-create` afterwards |
 
 Present the classification to the user. If more than 2 items are **actionable**, WAIT for confirmation before touching code.
@@ -91,7 +92,24 @@ Commit convention:
 - Conventional-commits message (`fix(<scope>): …`, `refactor(<scope>): …`).
 - `Co-Authored-By: Claude …` footer in every commit.
 
-## Phase 4: Push
+## Phase 4: Self-review the fixes before pushing
+
+Invoke `/gh-self-review` **once** against the post-fix tree. The inner skill detects its own scope — normally committed-only at this point (Phase 3 commits each addressed item), but if uncommitted or untracked files remain it will surface them. The inner skill owns the loop: it spawns a fresh sub-agent per iteration (the dev addresses items between iterations; the skill re-audits), applies the rigor checklist, and exits on its own stop conditions (empty triage, all remaining items deferred by the dev, or 3 iterations exhausted).
+
+**Why this phase exists**: addressing review feedback can introduce regressions in code paths the feedback's tests don't exercise. The reviewer caught the original issue; their tests covered that. Your fix's tests cover the fix. Neither catches "did this fix break adjacent behavior?". A fresh sub-agent reading the post-fix diff catches that locally — saves a reviewer round-trip and avoids compounding regressions across review rounds.
+
+**Push is gated on a clean exit from `/gh-self-review`.** Concretely:
+
+- **Triage empty** → proceed to Phase 5.
+- **Blockers addressed across iterations** → the dev fixed items between fresh-sub-agent passes; the inner skill re-audited until clean. Proceed to Phase 5.
+- **Surviving items after 3 iterations** → the inner skill surfaces these per its own accept / defer / escalate exit. Resolve there. Proceed to Phase 5 only after the dev explicitly accepts the remaining items (folded into the PR body's "Known non-blockers" section per Phase 6) or escalates.
+- **None of the above** → do not push. Return to Phase 3.
+
+This skill does NOT wrap `/gh-self-review` in a second outer loop — that would push past the inner cap and duplicate logic the inner skill already owns. Cap ownership lives in `/gh-self-review`; this phase is a single delegated call.
+
+**Composition**: this phase delegates entirely to `/gh-self-review` — do not re-implement scope detection, sub-agent spawning, the rigor checklist, or the iteration cap here. The wrapping skill's job is to insert the call at the right point in the feedback-work flow; the review work itself lives in its own skill.
+
+## Phase 5: Push
 
 ```
 git push
@@ -99,7 +117,7 @@ git push
 
 The branch is already tracking upstream from `gh pr checkout`; no `-u` needed.
 
-## Phase 5: Rewrite PR body in place (not via comments)
+## Phase 6: Rewrite PR body in place (not via comments)
 
 Fetch the current body:
 ```
@@ -129,7 +147,7 @@ gh api --method PATCH repos/<owner>/<repo>/pulls/<pr> \
   --jq .html_url
 ```
 
-## Phase 6: Report back
+## Phase 7: Report back
 
 Print, in the terminal (not to GitHub):
 - PR URL on its own line.
