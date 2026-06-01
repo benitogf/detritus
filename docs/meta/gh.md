@@ -22,7 +22,7 @@ related:
 
 One entry point for the five `gh-*` skills. Reads the conversation + any arguments, decides which sub-skill fits, and hands off. The sub-skills stay focused; this file is the dispatcher and the home for cross-skill conventions so they live in one place.
 
-## Cross-skill conventions (inherited by all three sub-skills)
+## Cross-skill conventions (inherited by all sub-skills)
 
 These apply to every sub-skill this router dispatches to. The sub-skill docs also state them, but the router is the canonical place.
 
@@ -40,6 +40,7 @@ These apply to every sub-skill this router dispatches to. The sub-skill docs als
 7. **Every issue posted carries the `plane` label.** The Plane management app mirrors GitHub issues based on this label. `gh-issue-create` owns applying it; this router just enforces that no other dispatch path bypasses it.
 8. **Never commit to or push from the default branch.** Before any `git commit`, verify the current branch is not the default branch. If it is, stop immediately and branch first. There is no valid case for committing directly to the default branch.
 9. **Never create a PR from a request that lacks an issue.** If the user asks to work on something and open a PR but does not specify an issue number, issue URL, or issue reference, route to `gh-issue-create` first. Only `gh-issue-work` may continue into PR creation, and only after an issue exists.
+10. **Cross-repo references use explicit markdown links by default — never the bare `<owner>/<repo>#<n>` shortcut when an org slug contains another repo name in the same org as a substring.** GitHub's Markdown autolinker re-tokenizes inside rendered text and eagerly relinks any org-slug fragment that matches a different repo in the same org. The canonical failure: the `idnerdidx` org contains a repo named `idx`, so a ref like `idnerdidx/bulk#311` renders as a smear of nested autolinks running through the org slug (the autolinker matches the `idx` substring inside `idnerdidx` as a candidate cross-repo ref to the `idx` repo, on top of the outer `idnerdidx/bulk` link). GitHub itself produces the mangled HTML; downstream mirrors like Plane carry it verbatim, where it shows up as a smear of repeated label fragments before the `#<n>`. The fix is `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)` or `[<repo> #<n>](https://github.com/<owner>/<repo>/issues/<n>)`, with a label that contains **no `<owner>/<repo>` cross-repo pattern** the autolinker could re-match. Verifying that a given org has no substring trap requires knowing the org's full repo list, so default to the markdown-link form for any cross-repo ref — the extra characters are cheap insurance; check the rendered output before assuming a bare shortcut is safe. Same-repo refs (`#<n>` with no `<owner>/<repo>/` prefix) are always safe to leave bare.
 
 ## Inputs
 

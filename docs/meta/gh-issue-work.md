@@ -193,6 +193,8 @@ Title: conventional-commits style, ≤70 chars.
 
 Body — product-focused, no file paths / line numbers / function names / symbol names. Describe what a user / operator / dealer experiences that they didn't before.
 
+**Cross-repo refs** in the body default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `idnerdidx/bulk#311` smears into nested autolinks via the `idx` substring). Write `[bulk PR #311](https://github.com/idnerdidx/bulk/pull/311)`, keeping the `<owner>/<repo>` pattern out of the label. Same-repo `Closes #<n>` lines stay bare. See the cross-repo-refs convention in `meta/gh`.
+
 ```
 gh pr create \
   --repo <owner>/<repo> \
@@ -234,6 +236,7 @@ GitHub-review-comment feedback (posted on the PR itself) is handled by `/gh-feed
 ## Guardrails
 
 - Don't reference code paths, symbols, or line numbers in the PR body. That belongs in the diff. The body is for the non-technical reader.
+- Don't write bare `<owner>/<repo>#<n>` cross-repo shortcuts in the PR body when the org slug contains another repo name in the same org as a substring. Default to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)`, keeping the `<owner>/<repo>` pattern out of the label, or GitHub's autolinker will mangle the render. Same-repo `Closes #<n>` is unaffected.
 - Don't open the PR without an explicit "Open PR as-is" from the user in Phase 8. A pushed branch is recoverable; an open PR pings reviewers.
 - Don't force-push, don't rebase shared branches, don't skip hooks.
 - Don't post issue/PR comments from this skill — the PR body carries all narrative.

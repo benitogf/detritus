@@ -43,6 +43,7 @@ Anything else → ask the user which PR via `AskUserQuestion`. Do not guess.
 
   The footer goes **inside** the heredoc (see the post template in Phase 6). Do not append it after the heredoc closes — that introduces stray newlines and can land outside the body.
 - **Code refs are fine in review bodies** (unlike issue/PR bodies). File paths, line numbers, function names, specific symbols — include them so the author can act. This is the one carve-out from the otherwise product-focused-bodies rule the rest of the `gh-*` family follows.
+- **Cross-repo references** (citing a sibling repo's PR or issue) default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `idnerdidx/bulk#311` smears into nested autolinks via the `idx` substring). Write `[bulk PR #311](https://github.com/idnerdidx/bulk/pull/311)` with the `<owner>/<repo>` pattern kept out of the label. Same-repo bare `#<n>` is unaffected. See the cross-repo-refs convention in `meta/gh`.
 
 ## Phase 0: Track progress
 
