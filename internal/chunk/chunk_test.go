@@ -1,6 +1,7 @@
 package chunk
 
 import (
+	"strings"
 	"testing"
 	"testing/fstest"
 )
@@ -67,6 +68,35 @@ func TestParseDoc(t *testing.T) {
 	}
 	if doc.Sections[2].Heading != "Second Section" {
 		t.Fatalf("expected 'Second Section', got %q", doc.Sections[2].Heading)
+	}
+}
+
+func TestParseDocCRLF(t *testing.T) {
+	// A CRLF checkout must produce exactly the same parse as LF — no "\r" in
+	// section headings (which would break search.extractSection's trimmed match)
+	// and frontmatter still parsed (the "---\n" prefix check must survive CRLF).
+	crlf := strings.ReplaceAll(testDoc, "\n", "\r\n")
+	doc := ParseDoc("test/doc", crlf)
+
+	if doc.Frontmatter.Description != "Test doc description" {
+		t.Fatalf("CRLF frontmatter not parsed: description = %q", doc.Frontmatter.Description)
+	}
+	if len(doc.Frontmatter.Triggers) != 2 {
+		t.Fatalf("CRLF frontmatter triggers dropped: %v", doc.Frontmatter.Triggers)
+	}
+	if len(doc.Sections) != 3 {
+		t.Fatalf("expected 3 sections from CRLF doc, got %d", len(doc.Sections))
+	}
+	for _, s := range doc.Sections {
+		if strings.ContainsAny(s.Heading, "\r") {
+			t.Fatalf("section heading contains CR: %q", s.Heading)
+		}
+		if strings.Contains(s.Content, "\r") {
+			t.Fatalf("section content contains CR for heading %q", s.Heading)
+		}
+	}
+	if doc.Sections[1].Heading != "First Section" || doc.Sections[2].Heading != "Second Section" {
+		t.Fatalf("CRLF headings mismatch: %q, %q", doc.Sections[1].Heading, doc.Sections[2].Heading)
 	}
 }
 

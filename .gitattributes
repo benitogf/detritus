@@ -1,0 +1,8 @@
+# The generated search index is a binary artifact — never apply EOL conversion
+# to it (a stray CRLF would corrupt the gob byte stream).
+/generated/data.gob binary
+
+# Note: source docs do not need `eol=lf` pinning for index correctness — the
+# chunker (internal/chunk ParseDoc) normalizes CRLF before parsing, so
+# `go generate` produces a correct, line-ending-independent index on any
+# checkout (including Windows autocrlf working copies).
