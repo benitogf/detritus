@@ -43,6 +43,7 @@ Anything else → ask the user which PR via `AskUserQuestion`. Do not guess.
 
   The footer goes **inside** the heredoc (see the post template in Phase 6). Do not append it after the heredoc closes — that introduces stray newlines and can land outside the body.
 - **Code refs are fine in review bodies** (unlike issue/PR bodies). File paths, line numbers, function names, specific symbols — include them so the author can act. This is the one carve-out from the otherwise product-focused-bodies rule the rest of the `gh-*` family follows.
+- **Cross-repo references** (citing a sibling repo's PR or issue) default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `idnerdidx/bulk#311` smears into nested autolinks via the `idx` substring). Write `[bulk PR #311](https://github.com/idnerdidx/bulk/pull/311)` with the `<owner>/<repo>` pattern kept out of the label. Same-repo bare `#<n>` is unaffected. See the cross-repo-refs convention in `meta/gh`.
 
 ## Phase 0: Track progress
 
@@ -168,6 +169,8 @@ Skip nothing. If a subsection's scope didn't fire in the diff, note it didn't ap
 
 **Be terse.** Every point is a single short bullet — one sentence stating *what* and *where* (file:line). If the *why* isn't obvious, add one short sub-line; otherwise stop. No paragraphs. No "I checked X and verified Y by doing Z" prose. The author can read the diff — your job is to point at things, not explain them. If a finding needs more than two sentences to land, you haven't found the core of it yet.
 
+**Cross-repo refs in the review body** default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `idnerdidx/bulk#311` smears into nested autolinks via the `idx` substring). When citing a sibling repo's PR or issue from a review, write `[bulk PR #311](https://github.com/idnerdidx/bulk/pull/311)`, keeping the `<owner>/<repo>` pattern out of the label. File:line code refs and same-repo bare `#<n>` are unaffected. See the cross-repo-refs convention in `meta/gh`.
+
 Structure the body:
 
 1. **Lead** — one or two sentences. What the PR does, the verdict, and if blocking, the one-line summary of what's blocking. No more.
@@ -273,6 +276,7 @@ Then return the working tree to the repo's default branch so the user is left on
 - Never restate a point already made in the PR body, a prior review, a commit message, or the linked issue (Phase 4b).
 - Never omit the attribution footer.
 - Never quote secrets inline even when flagging — point at the line and describe the class.
+- Don't write bare `<owner>/<repo>#<n>` cross-repo shortcuts in the review body when the org slug contains another repo name in the same org as a substring. Default to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)`, keeping the `<owner>/<repo>` pattern out of the label, or GitHub's autolinker will mangle the render. File:line code refs and same-repo bare `#<n>` are unaffected.
 - Never ask the user something researchable. The repo, the KB, and the GitHub API are all reachable.
 - Never leave the user on the PR's branch when the skill ends if a plain `git checkout <default_branch>` would succeed. Don't stash, don't force — if git refuses, leave them put and report.
 - If `gh auth status` fails, surface the error and stop.

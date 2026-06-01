@@ -137,6 +137,7 @@ Rewrite, don't append. The PR body should read as if it always described the PR'
   ---
   🤖 Generated with [Claude Code](https://claude.com/claude-code)
   ```
+- **Cross-repo refs** in the rewritten body default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `idnerdidx/bulk#311` smears into nested autolinks via the `idx` substring). If the existing body still has bare cross-repo shortcuts, rewrite them to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)` form during this pass, keeping the `<owner>/<repo>` pattern out of the label. Same-repo `#<n>` references stay valid bare. See the cross-repo-refs convention in `meta/gh`.
 
 Write via the REST API — `gh pr edit` can surface the Projects-classic GraphQL deprecation as a failure on some repos even when the PATCH succeeds:
 
@@ -159,5 +160,6 @@ Print, in the terminal (not to GitHub):
 - Never post on the user's GitHub account without the attribution footer. (This skill doesn't post at all, but the rule stands for any future skill that borrows this workflow.)
 - If the user explicitly asks for a comment reply after the skill finishes, PRINT the intended text (including the footer) and let the user paste it themselves.
 - Don't resolve review conversations — only the reviewer can do that meaningfully. Pushing fixes + rewriting the body is enough signal.
+- Don't leave bare `<owner>/<repo>#<n>` cross-repo shortcuts in the rewritten PR body when the org slug contains another repo name in the same org as a substring. Replace with `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)`, keeping the `<owner>/<repo>` pattern out of the label, or GitHub's autolinker will mangle the render. Same-repo `#<n>` is unaffected.
 - Don't force-push, don't rebase, don't skip hooks.
 - If classification is uncertain or feedback is contradictory, ASK the user before implementing.
