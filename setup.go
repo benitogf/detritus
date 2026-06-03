@@ -80,6 +80,11 @@ func RunSetup(binaryPath string, dryRun bool) error {
 		fmt.Println("Verdent not detected; skipping Verdent setup.")
 	}
 
+	// Bootstrap cache: scripts/detritus-mcp.js re-downloads the binary only when
+	// the cached file is missing, so invalidate it here or the in-repo MCP server
+	// keeps serving the previous version after an update.
+	clearCodexCache(home, dryRun)
+
 	// Post-install verification
 	if !dryRun {
 		printVerification(home)
@@ -650,4 +655,57 @@ func fileExists(path string) bool {
 func fileContains(path, substr string) bool {
 	data, err := os.ReadFile(path)
 	return err == nil && strings.Contains(string(data), substr)
+}
+
+// codexCacheBinary returns the path to the cached MCP bootstrap binary that
+// scripts/detritus-mcp.js downloads. Mirrors the path resolution in that
+// script: DETRITUS_CACHE_DIR overrides everything, otherwise it is the
+// platform cache dir plus "detritus-codex".
+func codexCacheBinary(home string) string {
+	binName := "detritus"
+	if runtime.GOOS == "windows" {
+		binName = "detritus.exe"
+	}
+	if dir := os.Getenv("DETRITUS_CACHE_DIR"); dir != "" {
+		return filepath.Join(dir, binName)
+	}
+	return filepath.Join(platformCacheDir(home), "detritus-codex", binName)
+}
+
+// platformCacheDir mirrors defaultCacheDir() in scripts/detritus-mcp.js.
+func platformCacheDir(home string) string {
+	switch runtime.GOOS {
+	case "windows":
+		if appdata := os.Getenv("LOCALAPPDATA"); appdata != "" {
+			return appdata
+		}
+		return filepath.Join(home, "AppData", "Local")
+	case "darwin":
+		return filepath.Join(home, "Library", "Caches")
+	default:
+		if xdg := os.Getenv("XDG_CACHE_HOME"); xdg != "" {
+			return xdg
+		}
+		return filepath.Join(home, ".cache")
+	}
+}
+
+// clearCodexCache deletes the cached MCP bootstrap binary so the next launch of
+// scripts/detritus-mcp.js re-fetches the freshly installed version. The
+// bootstrap only re-downloads when the file is missing, so this is what makes
+// an update actually reach an MCP client whose cwd is the detritus repo.
+func clearCodexCache(home string, dryRun bool) {
+	binPath := codexCacheBinary(home)
+	if !fileExists(binPath) {
+		return
+	}
+	if dryRun {
+		fmt.Printf("[dry-run] Would clear stale MCP bootstrap cache %s\n", binPath)
+		return
+	}
+	if err := os.Remove(binPath); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not clear cached MCP binary %s: %v\n", binPath, err)
+		return
+	}
+	fmt.Printf("Cleared stale MCP bootstrap cache: %s\n", binPath)
 }

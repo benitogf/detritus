@@ -9,7 +9,11 @@ triggers:
   - upgrade detritus
   - latest detritus
   - latest detritus release
-when: User asks to update or upgrade detritus, or to pull the latest detritus release.
+  - mcp serving old version
+  - kb_get not found after update
+  - stale cached binary
+  - detritus-codex cache
+when: User asks to update or upgrade detritus, to pull the latest detritus release, or reports the MCP server still serving an old version (e.g. a known kb doc returns "not found") after an update.
 ---
 
 # /detritus-update — Update to the latest release
@@ -22,7 +26,17 @@ The binary handles everything: checks the latest release on GitHub, downloads th
 
 1. Run `detritus --update` via Bash. Stream its output to the user.
 2. If the command reports "Already up to date", stop. Nothing else to do.
-3. If it updated, the new binary has already re-run `--setup`. Surface the new version from the command output and let the user know to restart their MCP client (IDE / Claude Code) so it picks up the new binary.
+3. If it updated, the new binary has already re-run `--setup`. Surface the new version from the command output.
+4. **Invalidate the cached bootstrap binary.** The detritus repo's project-level `.mcp.json` runs `scripts/detritus-mcp.js`, which downloads the binary into the cache and re-downloads **only when that file is missing — it never version-checks**. So `detritus --update` replaces the installed binary but leaves this cache stale, and any MCP client whose `cwd` is the detritus repo keeps serving the old version. Remove it so the bootstrap re-fetches on next launch (harmless if absent):
+   ```bash
+   rm -f "${DETRITUS_CACHE_DIR:-$HOME/.cache}/detritus-codex/detritus"
+   ```
+   Cache location per platform: Linux `$DETRITUS_CACHE_DIR` or `~/.cache/detritus-codex/detritus`; macOS `~/Library/Caches/detritus-codex/detritus`; Windows `%LOCALAPPDATA%\detritus-codex\detritus.exe`.
+5. Tell the user to restart their MCP client (IDE / Claude Code) so it picks up the new binary — and, inside the detritus repo, re-fetches the bootstrap binary cleared in step 4. The running MCP server keeps the old binary loaded in memory until then.
+
+## Symptom: MCP still serving the old version after an update
+
+If a `kb_get`/`kb_list` call returns "not found" for a doc you know exists in this release (e.g. a newly added `meta/*` doc), or the MCP otherwise behaves like an older version right after `detritus --update`, the cause is almost always the stale cached bootstrap binary from step 4. Confirm with `"${DETRITUS_CACHE_DIR:-$HOME/.cache}/detritus-codex/detritus" --version`, then clear the cache and restart the client.
 
 ## Don't
 
