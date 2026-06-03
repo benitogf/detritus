@@ -13,6 +13,7 @@ when: User provides requirements, feature request, or asks for analysis/planning
 related:
   - meta/grow
   - meta/truthseeker
+  - meta/todo-import
 ---
 
 # Requirement Analysis Workflow
@@ -110,3 +111,37 @@ After outputting the analysis, plan, insights, and questions:
 > **Common failure mode**: User answers your questions. This is NOT confirmation to implement.
 > Their answers refine the plan. You must still explicitly ask "Shall I proceed with implementation?"
 > and wait for a clear "yes" / "go ahead" / "implement it".
+
+## On user confirmation: persist the plan as /todo items
+
+Once the user has explicitly confirmed implementation ("yes", "go ahead", "proceed", "implement it"), AND before the first implementation tool call, invoke `/todo-import` to persist the settled plan steps as cross-session todos. This makes the plan resumable if the implementation spans multiple sessions, and gives the user a checkbox view that's automatically synced to Claude Code's TodoWrite UI.
+
+Call shape (Shape B, structured — see `meta/todo-import`):
+
+```jsonc
+{
+  "group": "<short title derived from the plan's topic — e.g. 'Detritus todo skill', 'Trendboard SIGTERM fix'>",
+  "source": "plan",
+  "items": [
+    {
+      "title": "<one plan step, verbatim or lightly polished>",
+      "body": null,
+      "scope": { "repos": [...], "paths": [...], "concreteness": "concrete" },
+      "tags": ["plan"]
+    }
+  ]
+}
+```
+
+One item per plan step. Scope is filled in per step where you can — `/plan`'s analysis already named the files; reuse them. Items inherit the same group title (the plan's topic) so they cluster in `/todo-view`.
+
+**Skip the import** if any of these hold:
+- The plan has only one step (just do it; no need to track a singleton).
+- The user explicitly opts out (says "skip the todo", "no need to track").
+- The conversation is clearly a one-shot ("just answer this question", "explain X").
+
+If `/todo-import` reports duplicates (the plan re-introduces items already tracked), use its dedup confirmation flow — the user picks skip / add anyway / replace per duplicate.
+
+After the import returns, **then** proceed with implementation. Use `/todo-done <id>` after each meaningful chunk so the persistent view and the in-session TodoWrite UI both reflect progress.
+
+If `/todo-import` isn't available (older detritus build, no skill installed), fall back silently to implementing without persistence — note in the report that the plan wasn't persisted ("plan-import unavailable on this setup").

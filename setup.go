@@ -326,12 +326,18 @@ func setupClaudeCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 	if dryRun {
 		fmt.Printf("[dry-run] Would upsert detritus into %s (mcpServers)\n", cfgFile)
 		fmt.Printf("[dry-run] Would write %d skill files to %s\n", len(docs), filepath.Join(home, ".claude", "skills"))
+		setupClaudeTodoGuard(home, binaryPath, hasTodoDoc(docs), true)
 		return
 	}
 	upsertMCP(cfgFile, "mcpServers", binaryPath)
 	fmt.Printf("Claude Code MCP config: %s\n", cfgFile)
 
 	generateClaudeSkills(home, docs)
+
+	// Enforce meta/todo convention #13 when the /todo family ships: install the
+	// PreToolUse write-guard hook (idempotent). If a future build drops /todo,
+	// hasTodoDoc is false and any prior guard entry is removed instead.
+	setupClaudeTodoGuard(home, binaryPath, hasTodoDoc(docs), false)
 }
 
 func generateClaudeSkills(home string, docs []docEntry) {
@@ -611,6 +617,13 @@ func printVerification(home string) {
 		fmt.Println("  [PASS] Claude Code skills")
 	} else {
 		fmt.Println("  [WARN] Claude Code skills not found")
+	}
+	if fileExists(filepath.Join(skillsDir, "todo", "SKILL.md")) {
+		if fileContains(filepath.Join(home, ".claude", "settings.json"), todoGuardMarker) {
+			fmt.Println("  [PASS] Claude Code /todo write-guard hook")
+		} else {
+			fmt.Println("  [WARN] Claude Code /todo write-guard hook not found")
+		}
 	}
 
 	// Codex

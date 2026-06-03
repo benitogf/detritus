@@ -55,6 +55,14 @@ func ParseAll(docsFS fs.FS, root string) ([]Doc, error) {
 }
 
 func ParseDoc(name, content string) Doc {
+	// Normalize line endings first. A CRLF checkout (e.g. Windows autocrlf)
+	// otherwise leaves a trailing "\r" on every section heading and breaks the
+	// "---\n" frontmatter prefix check — embedding "\r" into section keys (which
+	// then never match the runtime-trimmed heading in search.extractSection) and
+	// silently dropping all curated frontmatter metadata. Normalizing here makes
+	// the generated index identical regardless of how the docs are checked out.
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.ReplaceAll(content, "\r", "\n")
 	fm, body := parseFrontmatter(content)
 	sections := parseSections(body)
 	return Doc{

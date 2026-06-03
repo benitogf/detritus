@@ -58,6 +58,12 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "--todo-guard":
+			// PreToolUse hook handler (installed by --setup for Claude Code).
+			// Reads the hook payload on stdin; denies main-session writes to the
+			// /todo cross-session store. Always exits 0 (fails open).
+			_ = runTodoGuard()
+			return
 		case "--upsert-mcp":
 			// detritus --upsert-mcp <file> <parent-key> <command-path>
 			if len(os.Args) != 5 {
@@ -116,6 +122,7 @@ func main() {
 			fmt.Println("  detritus --list                                       List embedded documents")
 			fmt.Println("  detritus --setup [--dry-run]                          Configure all detected IDEs")
 			fmt.Println("  detritus --update [--dry-run]                         Self-update to latest release")
+			fmt.Println("  detritus --todo-guard                                 PreToolUse hook handler (internal; installed by --setup)")
 			fmt.Println("  detritus --upsert-mcp <file> <key> <cmd>              Upsert MCP config entry")
 			fmt.Println("  detritus --upsert-vscode-settings <file>              Upsert VS Code settings")
 			fmt.Println("  detritus --pack [name] [root...]                      Create/refresh a workspace pack")
