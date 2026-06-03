@@ -351,7 +351,9 @@ func generateClaudeSkills(home string, docs []docEntry) {
 		fmt.Fprintf(os.Stderr, "warning: claude skills dir: %v\n", err)
 		return
 	}
+	generated := map[string]bool{}
 	for _, doc := range docs {
+		generated[doc.alias] = true
 		skillDir := filepath.Join(skillsDir, doc.alias)
 		_ = os.MkdirAll(skillDir, 0o755)
 		desc := doc.desc
@@ -360,6 +362,22 @@ func generateClaudeSkills(home string, docs []docEntry) {
 		}
 		content := fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\nCall kb_get with name=\"%s\" and follow the instructions in the returned document.\n", doc.alias, desc, doc.name)
 		_ = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644)
+	}
+	// Prune detritus-generated skills whose backing doc was removed in this
+	// release, so a deleted doc doesn't leave a dangling skill that kb_gets a
+	// missing document. Match only our own generated marker so hand-authored
+	// skills are never touched. Mirrors the stale-removal in generateCodexSkills
+	// and generateVerdentSkills.
+	entries, _ := os.ReadDir(skillsDir)
+	for _, e := range entries {
+		if !e.IsDir() || generated[e.Name()] {
+			continue
+		}
+		sf := filepath.Join(skillsDir, e.Name(), "SKILL.md")
+		data, err := os.ReadFile(sf)
+		if err == nil && strings.Contains(string(data), "Call kb_get with name=\"") {
+			os.RemoveAll(filepath.Join(skillsDir, e.Name()))
+		}
 	}
 	fmt.Printf("Claude Code skills: %s\n", skillsDir)
 }
