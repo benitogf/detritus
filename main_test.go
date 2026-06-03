@@ -323,3 +323,63 @@ func TestGenerateInlineCommandInstructionsUsesCommandOnlyMap(t *testing.T) {
 		t.Fatal("expected unmapped slash fallback rule")
 	}
 }
+
+func cacheBinName() string {
+	if runtime.GOOS == "windows" {
+		return "detritus.exe"
+	}
+	return "detritus"
+}
+
+func TestCodexCacheBinaryHonorsEnvOverride(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DETRITUS_CACHE_DIR", dir)
+
+	got := codexCacheBinary(t.TempDir())
+	want := filepath.Join(dir, cacheBinName())
+	if got != want {
+		t.Fatalf("codexCacheBinary = %q, want %q", got, want)
+	}
+}
+
+func TestCodexCacheBinaryDefaultPath(t *testing.T) {
+	t.Setenv("DETRITUS_CACHE_DIR", "")
+
+	got := codexCacheBinary(t.TempDir())
+	suffix := filepath.Join("detritus-codex", cacheBinName())
+	if !strings.HasSuffix(got, suffix) {
+		t.Fatalf("codexCacheBinary = %q, want suffix %q", got, suffix)
+	}
+}
+
+func TestClearCodexCacheRemovesStaleBinary(t *testing.T) {
+	// DETRITUS_CACHE_DIR overrides the home-derived path, so the home arg is irrelevant.
+	cacheDir := t.TempDir()
+	t.Setenv("DETRITUS_CACHE_DIR", cacheDir)
+	binPath := filepath.Join(cacheDir, cacheBinName())
+	if err := os.WriteFile(binPath, []byte("stale"), 0o755); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+
+	clearCodexCache(homeDir(), false)
+
+	if fileExists(binPath) {
+		t.Fatal("expected stale cached MCP binary to be removed so the bootstrap re-fetches")
+	}
+}
+
+func TestClearCodexCacheDryRunKeepsBinary(t *testing.T) {
+	// DETRITUS_CACHE_DIR overrides the home-derived path, so the home arg is irrelevant.
+	cacheDir := t.TempDir()
+	t.Setenv("DETRITUS_CACHE_DIR", cacheDir)
+	binPath := filepath.Join(cacheDir, cacheBinName())
+	if err := os.WriteFile(binPath, []byte("stale"), 0o755); err != nil {
+		t.Fatalf("seed cache: %v", err)
+	}
+
+	clearCodexCache(homeDir(), true)
+
+	if !fileExists(binPath) {
+		t.Fatal("dry-run must not remove the cached MCP binary")
+	}
+}

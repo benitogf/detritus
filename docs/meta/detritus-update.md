@@ -9,7 +9,11 @@ triggers:
   - upgrade detritus
   - latest detritus
   - latest detritus release
-when: User asks to update or upgrade detritus, or to pull the latest detritus release.
+  - mcp serving old version
+  - kb_get not found after update
+  - stale cached binary
+  - detritus-codex cache
+when: User asks to update or upgrade detritus, to pull the latest detritus release, or reports the MCP server still serving an old version (e.g. a known kb doc returns "not found") after an update.
 ---
 
 # /detritus-update — Update to the latest release
@@ -22,7 +26,18 @@ The binary handles everything: checks the latest release on GitHub, downloads th
 
 1. Run `detritus --update` via Bash. Stream its output to the user.
 2. If the command reports "Already up to date", stop. Nothing else to do.
-3. If it updated, the new binary has already re-run `--setup`. Surface the new version from the command output and let the user know to restart their MCP client (IDE / Claude Code) so it picks up the new binary.
+3. If it updated, the new binary has already re-run `--setup`, which also clears the cached bootstrap binary the detritus repo's project-level `.mcp.json` uses. (That bootstrap, `scripts/detritus-mcp.js`, re-downloads **only when the cached file is missing — it never version-checks**, so clearing it during `--setup` is what lets an update actually reach an MCP client whose `cwd` is the detritus repo.) You don't need to clear anything by hand. Surface the new version from the command output.
+4. Tell the user to restart their MCP client (IDE / Claude Code) so it picks up the new binary — and, inside the detritus repo, re-fetches the freshly-cleared bootstrap binary. The running MCP server keeps the old binary loaded in memory until then.
+
+## Symptom: MCP still serving the old version after an update
+
+If, after updating and restarting, a `kb_get`/`kb_list` call still returns "not found" for a doc you know exists in this release (e.g. a newly added `meta/*` doc), the cached bootstrap binary is stale and wasn't cleared — e.g. the running binary predates automatic invalidation, or `DETRITUS_CACHE_DIR` points somewhere `--setup` didn't expect. Confirm with `"${DETRITUS_CACHE_DIR:-$HOME/.cache}/detritus-codex/detritus" --version`, then clear it manually and restart the client:
+
+```bash
+rm -f "${DETRITUS_CACHE_DIR:-$HOME/.cache}/detritus-codex/detritus"
+```
+
+Cache location per platform: Linux `$DETRITUS_CACHE_DIR` or `~/.cache/detritus-codex/detritus`; macOS `~/Library/Caches/detritus-codex/detritus`; Windows `%LOCALAPPDATA%\detritus-codex\detritus.exe`.
 
 ## Don't
 
