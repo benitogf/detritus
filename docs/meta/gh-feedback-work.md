@@ -39,7 +39,7 @@ This applies to PR bodies, issue bodies, comment bodies, release notes. It does 
 
 ## Phase 0: Track progress
 
-Initialize a `TodoWrite` list mirroring phases 1–7 so the user can see where the flow is at a glance. Update in real time — mark in-progress before starting each phase, completed immediately after.
+Initialize a `TodoWrite` list mirroring phases 1–7 (including the Phase 1.5 issue-link preflight) so the user can see where the flow is at a glance. Update in real time — mark in-progress before starting each phase, completed immediately after.
 
 ## Phase 1: Collect feedback
 
@@ -64,6 +64,40 @@ Filter each to `created_at > <last-commit-timestamp>`, then dedupe by author + t
 Also ignore comments authored by the current user themselves (they're signal for context, not action items).
 
 If the filtered set is empty, STOP and report: "No feedback posted since the last commit — nothing to address." Do not proceed to classification.
+
+## Phase 1.5: Verify the PR has a linked issue
+
+Per `meta/gh` cross-skill convention #9, no PR should exist without a linked issue. The PR-creation skills enforce this on the way in; this phase enforces it for PRs that bypassed the rule (older PRs, PRs opened directly with `gh pr create`, the pre-fix `/smith` flow, etc.).
+
+Read the PR body:
+
+```
+gh api repos/<owner>/<repo>/pulls/<pr> --jq .body
+```
+
+Check for any GitHub-recognized closing keyword followed by an issue reference — case-insensitive match against this regex:
+
+```
+(?i)(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)[:\s]+(?:(?:[\w.-]+/[\w.-]+)?#[0-9]+|https?://github\.com/[\w.-]+/[\w.-]+/issues/[0-9]+)
+```
+
+The keyword alternation enumerates GitHub's nine recognized closing forms exactly: `close, closes, closed, fix, fixes, fixed, resolve, resolves, resolved`. The `[:\s]+` between keyword and reference accepts both `Closes #42` and the conventional-commits `Closes: #42` form. The reference itself can be:
+
+- `#N` — same-repo issue
+- `owner/repo#N` — cross-repo close
+- `https://github.com/owner/repo/issues/N` — full URL form (also recognized by GitHub's autolinker)
+
+Plain-prose `#N` references without a closing keyword do NOT count — GitHub only auto-links via closing keywords, so the convention check has to match GitHub's own definition.
+
+If a match is found, proceed to Phase 2.
+
+If no match is found, STOP and `AskUserQuestion` with these options:
+
+- **Create an issue retroactively and link it** (default) — invoke `/gh-issue-create`. The sub-skill scans the recent conversation for a user-raised ask; if it can't find one (likely, since the conversation context here is just the feedback-work invocation), it will prompt for the issue subject. Paste the PR title + body when it prompts. After the issue is posted, PATCH the PR body to add `Closes #<n>` to the Summary section. Then proceed to Phase 2.
+- **Proceed without an issue (one-off override)** — record the decision in the Phase 7 report; the rule #9 violation remains on the PR.
+- **Cancel** — stop the feedback-work flow.
+
+The default is always **Create retroactively**, regardless of how full the PR body is. An empty-body PR signals "this PR hasn't been described yet" — which is a separate problem but does not change the answer to "should this PR be linked to an issue?"; the answer is still yes.
 
 ## Phase 2: Classify
 
