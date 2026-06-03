@@ -353,14 +353,15 @@ func TestCodexCacheBinaryDefaultPath(t *testing.T) {
 }
 
 func TestClearCodexCacheRemovesStaleBinary(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("DETRITUS_CACHE_DIR", dir)
-	binPath := filepath.Join(dir, cacheBinName())
+	// DETRITUS_CACHE_DIR overrides the home-derived path, so the home arg is irrelevant.
+	cacheDir := t.TempDir()
+	t.Setenv("DETRITUS_CACHE_DIR", cacheDir)
+	binPath := filepath.Join(cacheDir, cacheBinName())
 	if err := os.WriteFile(binPath, []byte("stale"), 0o755); err != nil {
 		t.Fatalf("seed cache: %v", err)
 	}
 
-	clearCodexCache(t.TempDir(), false)
+	clearCodexCache(homeDir(), false)
 
 	if fileExists(binPath) {
 		t.Fatal("expected stale cached MCP binary to be removed so the bootstrap re-fetches")
@@ -368,14 +369,15 @@ func TestClearCodexCacheRemovesStaleBinary(t *testing.T) {
 }
 
 func TestClearCodexCacheDryRunKeepsBinary(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("DETRITUS_CACHE_DIR", dir)
-	binPath := filepath.Join(dir, cacheBinName())
+	// DETRITUS_CACHE_DIR overrides the home-derived path, so the home arg is irrelevant.
+	cacheDir := t.TempDir()
+	t.Setenv("DETRITUS_CACHE_DIR", cacheDir)
+	binPath := filepath.Join(cacheDir, cacheBinName())
 	if err := os.WriteFile(binPath, []byte("stale"), 0o755); err != nil {
 		t.Fatalf("seed cache: %v", err)
 	}
 
-	clearCodexCache(t.TempDir(), true)
+	clearCodexCache(homeDir(), true)
 
 	if !fileExists(binPath) {
 		t.Fatal("dry-run must not remove the cached MCP binary")
