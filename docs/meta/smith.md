@@ -15,6 +15,8 @@ related:
   - meta/janitor
   - meta/gh
   - meta/gh-self-review
+  - meta/gh-issue-work
+  - meta/gh-issue-create
   - meta/janitor-platforms
   - meta/truthseeker
 ---
@@ -106,10 +108,10 @@ Do not pollute the user's main thread with raw audit logs.
 
 When the final acceptance item ticks green:
 
-1. Run `/gh-self-review` against the full `feat/<slug>` diff (the cumulative build-phase work).
-2. Address any blockers the self-review surfaces with one more build-phase tick (commit + verify + update scratchpad) before continuing.
-3. Open the PR via `/gh` against the repo's default branch. PR body is product-focused — what the feature delivers, the acceptance checklist as the test plan, no code identifiers.
-4. Set State block's *Current phase* to `audit` AND *Build-phase PR* to the opened PR URL.
+1. **Loop `/gh-self-review` to a clean read.** Run `/gh-self-review` against the full `feat/<slug>` diff (the cumulative build-phase work). If it reports blockers, OR forces any amendment to the diff — blocker fix, non-blocker cleanup, anything — fix the issue with one or more build-phase ticks (commit + verify + update scratchpad), then re-run `/gh-self-review` against the updated diff. Terminate the loop only when a no-blocker pass is observed against a diff that has not changed since the prior pass. Every amendment invalidates the prior read; a fresh-agent review of a diff that just changed has not actually reviewed the change you're about to ship. This is the same convergence rule `gh-issue-work` enforces in its Phase 8a — `/smith` inherits it verbatim, not a relaxed variant.
+2. **Push the branch.** `git push -u origin feat/<slug>`. The hand-off below enters `gh-issue-work` at Phase 9 (open PR), which assumes the branch is already pushed.
+3. **Delegate PR opening to `/gh-issue-work` Phase 9.** Do NOT re-implement `gh pr create` here. If no GitHub issue is linked to this `/smith` run yet, invoke `/gh-issue-create` first against the captured *Feature spec* + *Acceptance criteria* to seed one. Then jump to `gh-issue-work` Phase 9 (open PR) — skipping its Phase 8a (self-review) because step 1 above already produced a clean read against the exact diff being shipped, and skipping its Phase 8b (confirmation gate) because the autonomous loop has no live user message to consult; the user's Plan-time approval that initiated the smith run IS the authorisation, captured in the scratchpad's *Last user directive*. This keeps `/smith` strictly an orchestrator over the canonical `/gh` flow: when the gh flow tightens its Phase 9 (PR body shape, footer rules, base-branch detection), `/smith` inherits the tightening for free. The "skip 8a/8b under these specific conditions" carve-out is `/smith`-only and exists because the smith loop has already satisfied both rules' purposes — do not generalise it to other gh-issue-work callers.
+4. Set State block's *Current phase* to `audit` AND *Build-phase PR* to the URL `gh-issue-work` returns.
 5. Pause the autonomous loop until the user merges the PR. Mid-loop pivots and PR review comments are handled via `/gh-feedback-work` on subsequent ticks; PR-comment changes go onto `feat/<slug>` and update the PR in place.
 6. Once the PR is merged, the next scheduled tick begins the audit phase against `main` (or the project's default branch).
 
@@ -176,6 +178,8 @@ Build phase — not allowed:
 - Dependency additions not in the spec. If the spec implies a new dependency, name it in a hazard and ask before adding.
 - Skipping verification. A build-phase tick that doesn't verify green does not commit.
 - Opening a PR before all acceptance items are checked.
+- Opening a PR with a stale self-review (*restated from Build-to-Audit Transition step 1*). If `/gh-self-review` forced any amendment to the diff — blocker fix, non-blocker cleanup, anything — the prior clean read is stale and the self-review MUST re-run before delegating to `gh-issue-work`'s Phase 9.
+- Re-implementing `gh pr create` in the smith flow instead of delegating to `gh-issue-work` Phase 9 (*restated from Build-to-Audit Transition step 3*). Drift between two PR-opening paths is exactly what the self-review-loop fix exists to prevent.
 - Scheduling the build phase on a disposable runner. See *Build Phase Durability* above — mode 2 has no PR body to host the State block until acceptance items tick, and mode 3 (report incompatibility) is the required fallback.
 
 Audit phase — allowed / not allowed: same as `/janitor` → *Safety Boundaries*. The audit phase is `/janitor` mode with a scoped target.
