@@ -146,6 +146,8 @@ git push -u origin <branch>
 
 This phase has two sub-steps. **8a is unconditional and never skipped.** 8b is the only part that may be skipped by a prior user directive.
 
+> **One narrow exception:** the `/smith` orchestrator's *Build-to-Audit Transition* (see `meta/smith.md` step 3) enters this skill at Phase 9, skipping both 8a and 8b. The skip is justified there because (a) smith's transition step 1 already looped `/gh-self-review` to convergence against the exact same diff, and (b) the autonomous loop has no live user message to consult for 8b. Do NOT extend this exception to any other caller — the "never skipped" rule applies to every interactive use of `/gh-issue-work`.
+
 ### 8a. Sub-agent review — ALWAYS RUN
 
 Delegate the review to a **fresh sub-agent** so the audit runs without the conversational context that produced the code. This mirrors how `/gh-self-review` and `/gh-pr` work — the author's blind spots stay with the author; the sub-agent sees only the diff and the stated intent.
