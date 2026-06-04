@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -381,5 +382,74 @@ func TestClearCodexCacheDryRunKeepsBinary(t *testing.T) {
 
 	if !fileExists(binPath) {
 		t.Fatal("dry-run must not remove the cached MCP binary")
+	}
+}
+
+func readUpsertedEntry(t *testing.T, file, parentKey string) map[string]any {
+	t.Helper()
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("read %s: %v", file, err)
+	}
+	var data map[string]any
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatalf("parse %s: %v", file, err)
+	}
+	parent, ok := data[parentKey].(map[string]any)
+	if !ok {
+		t.Fatalf("missing parent key %q in %s", parentKey, file)
+	}
+	entry, ok := parent["detritus"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing detritus entry under %q in %s", parentKey, file)
+	}
+	return entry
+}
+
+// VS Code's native MCP host skips any server entry that lacks an explicit
+// transport "type", so upsertMCP must stamp "stdio" when writing under the
+// "servers" key. Other hosts key under "mcpServers" and infer stdio, so the
+// type must NOT be added there.
+func TestUpsertMCPStampsStdioForVSCodeServersKey(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "mcp.json")
+	upsertMCP(file, "servers", "/usr/local/bin/detritus")
+
+	entry := readUpsertedEntry(t, file, "servers")
+	if entry["type"] != "stdio" {
+		t.Fatalf("expected type=stdio for servers key, got %v", entry["type"])
+	}
+	if entry["command"] != "/usr/local/bin/detritus" {
+		t.Fatalf("expected command to be preserved, got %v", entry["command"])
+	}
+}
+
+func TestUpsertMCPOmitsTypeForMcpServersKey(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "mcp.json")
+	upsertMCP(file, "mcpServers", "/usr/local/bin/detritus")
+
+	entry := readUpsertedEntry(t, file, "mcpServers")
+	if _, ok := entry["type"]; ok {
+		t.Fatalf("expected no type for mcpServers key, got %v", entry["type"])
+	}
+}
+
+// The in-the-wild repair path: a config written by an older detritus has a
+// "servers.detritus" entry with no transport "type". Re-running setup must
+// upgrade it in place by adding "type":"stdio" so VS Code stops skipping it.
+func TestUpsertMCPUpgradesExistingServersEntryWithoutType(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "mcp.json")
+	seed := []byte(`{"servers":{"detritus":{"command":"/old/path","args":[]}}}`)
+	if err := os.WriteFile(file, seed, 0o644); err != nil {
+		t.Fatalf("seed config: %v", err)
+	}
+
+	upsertMCP(file, "servers", "/usr/local/bin/detritus")
+
+	entry := readUpsertedEntry(t, file, "servers")
+	if entry["type"] != "stdio" {
+		t.Fatalf("expected re-run to add type=stdio, got %v", entry["type"])
+	}
+	if entry["command"] != "/usr/local/bin/detritus" {
+		t.Fatalf("expected command to be refreshed, got %v", entry["command"])
 	}
 }
