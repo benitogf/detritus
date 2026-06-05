@@ -330,10 +330,19 @@ func upsertMCP(file, parentKey, command string) {
 	if !ok {
 		parent = map[string]any{}
 	}
-	parent["detritus"] = map[string]any{
+	entry := map[string]any{
 		"command": command,
 		"args":    []any{},
 	}
+	// VS Code's native MCP host keys servers under "servers" and silently
+	// skips any entry without an explicit transport "type". Without this the
+	// gateway initializes but never starts detritus, so kb_*/code_* tools never
+	// reach Copilot Chat. Other hosts (Cursor/Windsurf use "mcpServers") infer
+	// stdio and don't need it, so only stamp it for the VS Code schema.
+	if parentKey == "servers" {
+		entry["type"] = "stdio"
+	}
+	parent["detritus"] = entry
 	data[parentKey] = parent
 
 	out, err := json.MarshalIndent(data, "", "  ")
