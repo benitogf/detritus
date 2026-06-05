@@ -1,5 +1,5 @@
 ---
-description: Take a GitHub issue end-to-end — branch, fix, test, commit, push, self-review the diff, confirm with the user, then open PR with a product-focused summary and the Claude Code attribution footer.
+description: Take a GitHub issue end-to-end — branch, fix, test, commit, push, self-review the diff, confirm with the user unless opening the PR was already directed, then open PR with a product-focused summary and the Claude Code attribution footer.
 category: meta
 triggers:
   - gh-issue-work
@@ -17,7 +17,7 @@ related:
 
 # /gh-issue-work — Issue → Branch → Fix → Self-Review → PR
 
-Take a GitHub issue end-to-end: branch from the default base, implement the fix, run tests, commit, push, self-review the diff and confirm with the user, then open a PR whose body is product-focused (no code identifiers). Always append the Claude Code attribution footer on the PR body so reviewers can tell it was filed by an agent on the user's behalf.
+Take a GitHub issue end-to-end: branch from the default base, implement the fix, run tests, commit, push, self-review the diff (always — Phase 8a), and confirm with the user before opening unless opening the PR was already directed (Phase 8b's authorized-skip path), then open a PR whose body is product-focused (no code identifiers). Always append the Claude Code attribution footer on the PR body so reviewers can tell it was filed by an agent on the user's behalf.
 
 ## Posting to GitHub as the user
 
@@ -181,13 +181,16 @@ Default behavior — ask via `AskUserQuestion`:
 - **Edit first** — stop, collect the user's notes, amend or add commits on the branch, then re-enter this phase from the top.
 - **Cancel** — stop. The branch stays pushed; no PR is opened.
 
-**Skip 8b only when ALL of the following hold:**
-- 8a has run on the *current* diff and returned no blockers, AND
-- The user's latest message — in the same conversation, with no `/clear` and no re-entry through `/gh` since — explicitly told you to open / push / create the PR, AND
-- The diff has not changed since that directive (no new commits, no amends, no fixes from 8a's findings), AND
+**Two absolute floors for ANY skip** — never waived by either path below:
+- 8a has run on the *current* diff and returned no blockers (fix blockers and re-run 8a; never open the PR with unresolved blockers, never skip 8a), AND
 - An issue already exists and is linked.
 
-If 8a forced any amendments (even non-blocker fixes the user is unaware of), the user's prior "open it" is stale — re-ask. When all four hold, proceed straight to Phase 9. Otherwise ask. Asking the user to confirm what they just told you to do is the failure mode 8b's escape exists to prevent — but the escape applies only to 8b. Never open the PR with unresolved blockers, and never skip 8a.
+With both floors met, skip 8b when **either** authorization path holds:
+
+- **Path A — direct latest-message directive** (you're mid-flow on an already-built diff): the user's latest message — same conversation, no `/clear`, no re-entry through `/gh` since — explicitly told you to open / push / create the PR, AND the diff has not changed since that directive (no new commits, amends, or 8a fixes). If 8a forced any amendment, that prior "open it" is stale — re-ask.
+- **Path B — propagated up-front authorization** (the create-and-open flow — `meta/gh` Phase 1's "work code and open a PR, no issue referenced" row, which dispatches `gh-issue-create` then `gh-issue-work` — or `/grow` Step 6 → `/gh` → create → work): the open-PR authorization was given *before the work existed* and propagated through `/gh`/`/grow` (see `meta/gh` Phase 2). Here the directive is necessarily not the latest message and the diff necessarily changed after it — so Path A's "latest message" and "diff unchanged" conditions do not apply; the user authorized the end-to-end outcome, not a specific diff. Routine non-blocker cleanups folded in during 8a do not invalidate this authorization. But if 8a forced a change that alters scope or behavior beyond the authorized intent, re-ask despite the up-front authorization.
+
+When a Path holds, proceed straight to Phase 9; otherwise ask. Asking the user to confirm what they already directed — directly (A) or via a propagated handoff (B) — is the failure mode 8b's escape exists to prevent. The escape applies only to 8b; never skip 8a.
 
 ## Phase 9: Open PR
 
@@ -239,7 +242,7 @@ GitHub-review-comment feedback (posted on the PR itself) is handled by `/gh-feed
 
 - Don't reference code paths, symbols, or line numbers in the PR body. That belongs in the diff. The body is for the non-technical reader.
 - Don't write bare `<owner>/<repo>#<n>` cross-repo shortcuts in the PR body when the org slug contains another repo name in the same org as a substring. Default to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)`, keeping the `<owner>/<repo>` pattern out of the label, or GitHub's autolinker will mangle the render. Same-repo `Closes #<n>` is unaffected.
-- Don't open the PR without an explicit "Open PR as-is" from the user in Phase 8. A pushed branch is recoverable; an open PR pings reviewers.
+- Don't open the PR without authorization. Open as-is when Phase 8b's two floors hold (8a clean on the current diff, an issue linked) AND either authorization path holds — Path A (direct latest-message directive, diff unchanged since) or Path B (up-front authorization propagated through `/gh`/`/grow`). Otherwise gate behind an explicit "Open PR as-is". A pushed branch is recoverable; an open PR pings reviewers — but never re-ask once the user has directed it (directly or via a propagated handoff) and 8a is clean. Phase 8a is never skipped regardless.
 - Don't force-push, don't rebase shared branches, don't skip hooks.
 - Don't post issue/PR comments from this skill — the PR body carries all narrative.
 - Don't include the attribution footer on commits (`Co-Authored-By:` already handles commits). Footer is GitHub-UI-only.

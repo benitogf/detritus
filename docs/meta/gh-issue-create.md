@@ -1,5 +1,5 @@
 ---
-description: Draft a GitHub issue from the current conversation, confirm with the user, post it with the Claude Code attribution footer, then offer next steps (/gh-issue-work, refine, or leave).
+description: Draft a GitHub issue from the current conversation, confirm with the user unless the post was already directed, post it with the Claude Code attribution footer, then offer next steps (/gh-issue-work, refine, or leave).
 category: meta
 triggers:
   - gh-issue-create
@@ -16,7 +16,7 @@ related:
 
 # /gh-issue-create — Draft & File a GitHub Issue
 
-Capture something from the current conversation as a GitHub issue. Always draft first, confirm with the user, then post. Always append the Claude Code attribution footer so it's clear the issue was filed by an agent on the user's behalf.
+Capture something from the current conversation as a GitHub issue. Always draft first and show the draft; confirm before posting only when the post wasn't already directed (see Phase 4 — an explicit instruction in the triggering message, `/gh` args, or an upstream `/gh`/`/grow` handoff is the authorization). Always append the Claude Code attribution footer so it's clear the issue was filed by an agent on the user's behalf.
 
 ## Posting to GitHub as the user
 
@@ -125,12 +125,17 @@ If any existing title is a substring match or near-match of the draft title, war
 
 ## Phase 4: Show draft, confirm
 
-Print title + body exactly as they will be posted, plus the labels line: `Labels: plane`. Then ask via `AskUserQuestion`:
-- **Post as-is** — proceed to Phase 5.
-- **Edit title / body first** — collect the user's edits, redraft, re-display, and re-ask.
-- **Cancel** — stop, print nothing to GitHub.
+Print title + body exactly as they will be posted, plus the labels line: `Labels: plane`.
 
-Never post without an explicit "post as-is" confirmation.
+**Decide whether a confirmation gate is needed:**
+
+- **The invoking instruction already directed posting** — anywhere in the chain that reached this skill the user explicitly said to create/open/file the issue (e.g. "create the issue and open a PR", "file it", "open an issue for this"). That chain includes: the user's message that triggered this skill directly; the `/gh` args; and the upstream skill that dispatched here (the `/gh` router after it found a concrete ask, or `/grow` Step 6 shipping a KB change the user told it to ship). When the router or `/grow` hands off, it propagates that authorization signal (see `meta/gh` Phase 2) — treat a propagated authorization the same as a direct one. That instruction IS the confirmation: show the draft for transparency, then proceed to Phase 5 without a blocking question. Re-asking whether to do the thing the user just told you to do is the redundant-confirmation failure mode — do not reproduce it.
+- **The issue content was inferred from conversation with no explicit post instruction anywhere in the chain** — the user discussed a problem but neither they nor the upstream skill directed a post. Here the gate is real: the user hasn't seen the drafted text or authorized the post. Ask via `AskUserQuestion`:
+  - **Post as-is** — proceed to Phase 5.
+  - **Edit title / body first** — collect the user's edits, redraft, re-display, and re-ask.
+  - **Cancel** — stop, print nothing to GitHub.
+
+When in doubt about whether the instruction was explicit, ask. The gate's purpose is letting the user see the drafted content before it goes public, not extracting a yes to a request they already made.
 
 ## Phase 5: Post
 
@@ -146,9 +151,11 @@ gh api --method POST repos/<owner>/<repo>/issues \
 
 Capture the returned `number` and `html_url`. Verify the response's `labels` array contains `plane` — if not, the sync to Plane will not happen; surface the failure to the user instead of pretending it worked.
 
-## Phase 6: Offer next steps
+## Phase 6: Next steps
 
-After posting, ask via `AskUserQuestion`:
+**If the post was authorized by a create-AND-open instruction** — the directed action that reached Phase 4 was "create the issue *and* open a PR" (the create-and-open flow, directly or propagated via `/gh`/`/grow`) — do NOT ask "Work it now?". The user already directed the PR half; asking is the redundant-confirmation failure mode. Auto-chain straight into `/gh-issue-work #<n>`, carrying the open-PR authorization forward so its Phase 8b Path B fires (this Phase 6 hand-off is the channel that delivers that propagated signal — gating it behind a question makes Path B unreachable on this flow). Print the issue URL, then continue.
+
+**Otherwise** — the user directed only an issue (not a PR), or the issue was inferred from conversation — ask via `AskUserQuestion`:
 - **Work it now** — hand off to `/gh-issue-work #<n>` in the same session.
 - **Give feedback to refine it** — collect the user's notes, rewrite the body (keep the footer), and PATCH in place:
   ```
@@ -169,7 +176,7 @@ https://github.com/<owner>/<repo>/issues/<n>
 
 - Don't include code identifiers / file paths / function names in the issue body. A short SHA in the `## Context` section is the one exception — it's causation metadata, not implementation detail.
 - Don't write bare `<owner>/<repo>#<n>` cross-repo shortcuts when the org slug contains another repo name in the same org as a substring. The autolinker re-tokenizes the org slug and the result renders as a smear of nested links (especially in Plane). Default to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)` or `[<repo> #<n>](https://github.com/<owner>/<repo>/issues/<n>)`, keeping the `<owner>/<repo>` pattern out of the label. Bare `#<n>` for same-repo refs is unaffected.
-- Don't post without explicit confirmation. Ever.
+- Don't post without authorization. An explicit instruction to create/open/file the issue (in the triggering message, the `/gh` args, or an upstream `/gh`/`/grow` handoff that propagated the authorization) IS the authorization — show the draft, then post without re-asking. Only gate behind `AskUserQuestion` when the issue was inferred from conversation with no explicit post instruction. Never re-confirm a post the user already directed.
 - Don't open an issue in a repo the user didn't authorize (ask if ambiguous).
 - Don't open obvious duplicates — warn on near-match titles.
 - The attribution footer goes on the body, never the title.

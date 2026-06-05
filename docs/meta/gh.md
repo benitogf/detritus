@@ -48,7 +48,7 @@ These apply to every sub-skill this router dispatches to. The sub-skill docs als
 - `#<n>` (bare) — valid only when cwd is inside the target repo. Router fetches and inspects.
 - `<owner>/<repo>#<n>` — fully qualified reference to an issue or PR.
 - Free-text description — no reference to an existing issue/PR. Router routes to `gh-issue-create`.
-- Nothing at all — router scans the recent conversation for a concrete ask; if it finds one, routes to `gh-issue-create`; if ambiguous, asks the user.
+- Nothing at all — router scans the recent conversation for a concrete ask. **If the conversation clearly references a specific open issue/PR (most often one acted on earlier in this same turn), that is NOT ambiguous: re-fetch that resource's current state (Phase 0/1) and classify it via the issue/PR rows — do not ask the user what to do.** Only when no concrete problem and no GitHub reference exist does the router fall back to asking. A free-text concrete problem with no reference routes to `gh-issue-create`.
 
 ## Phase 0: Locate target repo
 
@@ -60,6 +60,8 @@ These apply to every sub-skill this router dispatches to. The sub-skill docs als
   ```
 
 ## Phase 1: Classify the input
+
+**Always classify off freshly-fetched state — never a stale snapshot.** On every invocation (including re-invocations within an ongoing PR/issue conversation), re-run the resolution-helper fetches below before classifying. Commits, reviews, and comments fetched earlier in the same turn are stale the moment the author or a CI job touches the PR; a re-invoke almost always means something changed since you last looked. If a classification input is answerable by `gh api` (does a newer commit exist? is there a post-last-commit comment? open or merged?), fetch it — never ask the user to disambiguate what the API resolves.
 
 Apply the first matching rule:
 
@@ -89,7 +91,9 @@ gh api repos/<owner>/<repo>/pulls/<n>/commits --jq '.[-1].commit.committer.date'
 
 Call the selected sub-skill with the resolved context (repo, issue/PR number, original user prompt, any extracted SHA). Do NOT re-do phases the sub-skill will re-do — let the sub-skill fetch the issue/PR body itself. The router's only job after classification is to hand the sub-skill a clean entry point.
 
-If the user confirmed `gh-issue-create` and the issue gets posted, honour the sub-skill's existing offer to chain into `gh-issue-work`. Don't override that flow from here.
+**Propagate the authorization signal.** When the user's instruction (the `/gh` args or the message that invoked the router) explicitly directed the sub-skill's terminal action — post the issue, open the PR — carry that signal into the handoff so the sub-skill does not re-ask. A sub-skill's confirmation gate (e.g. `gh-issue-create` Phase 4, `gh-issue-work` Phase 8b) exists to confirm an action the user has NOT yet authorized; an explicit instruction routed through `/gh` already authorizes it. Conversely, when you reached the sub-skill by *inferring* a concrete ask from conversation (no explicit post/PR instruction), say so in the handoff — the gate stays live. Never strip a gate the user didn't waive; never re-raise one they did.
+
+If the user confirmed `gh-issue-create` and the issue gets posted, honour the sub-skill's existing offer to chain into `gh-issue-work`. Don't override that flow from here. When the instruction was create-AND-open, `gh-issue-create` Phase 6 skips that offer entirely — its create-and-open branch auto-chains into `gh-issue-work` on the propagated authorization, with no re-ask, and the open-PR authorization rides through to `gh-issue-work` Phase 8b Path B.
 
 ## Phase 3: Report
 
@@ -101,7 +105,8 @@ No summary of the routing decision itself — the result is what matters, not th
 
 ## Guardrails
 
-- Don't dispatch to a sub-skill without a clear classification. Ambiguous input → ask the user.
-- Don't bypass a sub-skill's confirmation gates. `gh-issue-create` requires explicit "post as-is" — the router doesn't override that.
+- Don't dispatch to a sub-skill without a clear classification. Ambiguous input → ask the user. But a clear in-conversation issue/PR reference is NOT ambiguous — re-fetch and classify it; don't ask.
+- Don't classify or ask off a stale snapshot. Re-fetch live PR/issue state (commits, reviews, comments) on every invocation before classifying — a re-invoke usually means the resource changed since you last looked. Never ask the user something `gh api` answers (newer commit? post-last-commit comment? merged?).
+- Don't bypass a sub-skill's confirmation gates without authorization — but a gate is not bypassed when the user already authorized the action. `gh-issue-create` gates on "post as-is" only when the post was *not* directed; an explicit instruction routed through `/gh` authorizes it and the router propagates that (Phase 2). Don't re-raise a gate the user waived, and don't strip one they didn't.
 - Don't accumulate state across sub-skill calls. Each sub-skill is a unit; the router hands off and reports, nothing more.
 - Don't change repos mid-flow. If the user pivots, re-enter `/gh` from the top.
