@@ -91,6 +91,8 @@ gh api repos/<owner>/<repo>/pulls/<n>/commits --jq '.[-1].commit.committer.date'
 
 Call the selected sub-skill with the resolved context (repo, issue/PR number, original user prompt, any extracted SHA). Do NOT re-do phases the sub-skill will re-do — let the sub-skill fetch the issue/PR body itself. The router's only job after classification is to hand the sub-skill a clean entry point.
 
+**Propagate the authorization signal.** When the user's instruction (the `/gh` args or the message that invoked the router) explicitly directed the sub-skill's terminal action — post the issue, open the PR — carry that signal into the handoff so the sub-skill does not re-ask. A sub-skill's confirmation gate (e.g. `gh-issue-create` Phase 4, `gh-issue-work` Phase 8b) exists to confirm an action the user has NOT yet authorized; an explicit instruction routed through `/gh` already authorizes it. Conversely, when you reached the sub-skill by *inferring* a concrete ask from conversation (no explicit post/PR instruction), say so in the handoff — the gate stays live. Never strip a gate the user didn't waive; never re-raise one they did.
+
 If the user confirmed `gh-issue-create` and the issue gets posted, honour the sub-skill's existing offer to chain into `gh-issue-work`. Don't override that flow from here.
 
 ## Phase 3: Report

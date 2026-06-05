@@ -162,5 +162,6 @@ KB deltas are not done when written to the working tree — they ship like any o
 
 - The detritus clone's edits are uncommitted on the default branch. Per the `/gh` conventions, never commit to the default branch — `/gh` (→ `gh-issue-create` then `gh-issue-work`) opens the issue, branches, commits, and opens the PR.
 - Hand `/gh` a one-line description of the KB change (which doc, what rule tightened, what failure it prevents). The issue/PR bodies stay product-focused per the `/gh` conventions; the recurrence-prevention rationale from the signal table is the issue's "why".
+- **Carry the authorization forward.** When the user told `/grow` to ship the change (or invoked `/grow` with a shipping directive in the same breath as the correction), that is explicit authorization for the full create-issue-and-open-PR flow — pass it through to `/gh` so the sub-skills don't re-ask (see `meta/gh` Phase 2's authorization-propagation rule). If the user only asked `/grow` to *write* the KB delta and said nothing about shipping, the `/gh` confirmation gates stay live — let them fire.
 - This is public `benitogf/detritus` — scrub any private org/customer/product names from the issue, PR, branch, and commit bodies before shipping.
 - If the user declines `/gh` (wants the edit left in the tree), stop after Step 5 and say so. Default is to ship.
