@@ -153,3 +153,14 @@ Apply the re-confirmation decision rule from the top of this skill:
 - **Otherwise** → the triggering correction is the approval; implement the minimal KB delta directly in the local detritus clone.
 
 Do not produce a second confirmation loop when the first message already settled the question.
+
+---
+
+## Step 6: Ship the KB change via /gh
+
+KB deltas are not done when written to the working tree — they ship like any other change. After implementing (Step 5), route delivery through `/gh` so the change lands as a tracked issue + PR rather than a loose edit on the default branch.
+
+- The detritus clone's edits are uncommitted on the default branch. Per the `/gh` conventions, never commit to the default branch — `/gh` (→ `gh-issue-create` then `gh-issue-work`) opens the issue, branches, commits, and opens the PR.
+- Hand `/gh` a one-line description of the KB change (which doc, what rule tightened, what failure it prevents). The issue/PR bodies stay product-focused per the `/gh` conventions; the recurrence-prevention rationale from the signal table is the issue's "why".
+- This is public `benitogf/detritus` — scrub any private org/customer/product names from the issue, PR, branch, and commit bodies before shipping.
+- If the user declines `/gh` (wants the edit left in the tree), stop after Step 5 and say so. Default is to ship.

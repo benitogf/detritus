@@ -125,12 +125,17 @@ If any existing title is a substring match or near-match of the draft title, war
 
 ## Phase 4: Show draft, confirm
 
-Print title + body exactly as they will be posted, plus the labels line: `Labels: plane`. Then ask via `AskUserQuestion`:
-- **Post as-is** — proceed to Phase 5.
-- **Edit title / body first** — collect the user's edits, redraft, re-display, and re-ask.
-- **Cancel** — stop, print nothing to GitHub.
+Print title + body exactly as they will be posted, plus the labels line: `Labels: plane`.
 
-Never post without an explicit "post as-is" confirmation.
+**Decide whether a confirmation gate is needed:**
+
+- **The invoking instruction already directed posting** — the user's message that triggered this skill (or the `/gh` args handed to it) explicitly said to create/open/file the issue (e.g. "create the issue and open a PR", "file it", "open an issue for this"). That instruction IS the confirmation. Show the draft for transparency, then proceed to Phase 5 without a blocking question. Re-asking whether to do the thing the user just told you to do is the redundant-confirmation failure mode — do not reproduce it.
+- **The issue content was inferred from conversation with no explicit post instruction** — the user discussed a problem but didn't say "file it". Here the gate is real: the user hasn't seen the drafted text or authorized the post. Ask via `AskUserQuestion`:
+  - **Post as-is** — proceed to Phase 5.
+  - **Edit title / body first** — collect the user's edits, redraft, re-display, and re-ask.
+  - **Cancel** — stop, print nothing to GitHub.
+
+When in doubt about whether the instruction was explicit, ask. The gate's purpose is letting the user see the drafted content before it goes public, not extracting a yes to a request they already made.
 
 ## Phase 5: Post
 
@@ -169,7 +174,7 @@ https://github.com/<owner>/<repo>/issues/<n>
 
 - Don't include code identifiers / file paths / function names in the issue body. A short SHA in the `## Context` section is the one exception — it's causation metadata, not implementation detail.
 - Don't write bare `<owner>/<repo>#<n>` cross-repo shortcuts when the org slug contains another repo name in the same org as a substring. The autolinker re-tokenizes the org slug and the result renders as a smear of nested links (especially in Plane). Default to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)` or `[<repo> #<n>](https://github.com/<owner>/<repo>/issues/<n>)`, keeping the `<owner>/<repo>` pattern out of the label. Bare `#<n>` for same-repo refs is unaffected.
-- Don't post without explicit confirmation. Ever.
+- Don't post without authorization. An explicit instruction to create/open/file the issue (in the triggering message or `/gh` args) IS the authorization — show the draft, then post without re-asking. Only gate behind `AskUserQuestion` when the issue was inferred from conversation with no explicit post instruction. Never re-confirm a post the user already directed.
 - Don't open an issue in a repo the user didn't authorize (ask if ambiguous).
 - Don't open obvious duplicates — warn on near-match titles.
 - The attribution footer goes on the body, never the title.
