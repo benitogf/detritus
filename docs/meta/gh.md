@@ -93,7 +93,7 @@ Call the selected sub-skill with the resolved context (repo, issue/PR number, or
 
 **Propagate the authorization signal.** When the user's instruction (the `/gh` args or the message that invoked the router) explicitly directed the sub-skill's terminal action — post the issue, open the PR — carry that signal into the handoff so the sub-skill does not re-ask. A sub-skill's confirmation gate (e.g. `gh-issue-create` Phase 4, `gh-issue-work` Phase 8b) exists to confirm an action the user has NOT yet authorized; an explicit instruction routed through `/gh` already authorizes it. Conversely, when you reached the sub-skill by *inferring* a concrete ask from conversation (no explicit post/PR instruction), say so in the handoff — the gate stays live. Never strip a gate the user didn't waive; never re-raise one they did.
 
-If the user confirmed `gh-issue-create` and the issue gets posted, honour the sub-skill's existing offer to chain into `gh-issue-work`. Don't override that flow from here. When the instruction was create-AND-open, that "offer to chain" is itself auto-resolved by the propagated authorization (`gh-issue-create` Phase 6) — the chain proceeds without a re-ask, and the open-PR authorization rides through to `gh-issue-work` Phase 8b Path B.
+If the user confirmed `gh-issue-create` and the issue gets posted, honour the sub-skill's existing offer to chain into `gh-issue-work`. Don't override that flow from here. When the instruction was create-AND-open, `gh-issue-create` Phase 6 skips that offer entirely — its create-and-open branch auto-chains into `gh-issue-work` on the propagated authorization, with no re-ask, and the open-PR authorization rides through to `gh-issue-work` Phase 8b Path B.
 
 ## Phase 3: Report
 
