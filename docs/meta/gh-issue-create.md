@@ -174,7 +174,7 @@ https://github.com/<owner>/<repo>/issues/<n>
 
 - Don't include code identifiers / file paths / function names in the issue body. A short SHA in the `## Context` section is the one exception — it's causation metadata, not implementation detail.
 - Don't write bare `<owner>/<repo>#<n>` cross-repo shortcuts when the org slug contains another repo name in the same org as a substring. The autolinker re-tokenizes the org slug and the result renders as a smear of nested links (especially in Plane). Default to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)` or `[<repo> #<n>](https://github.com/<owner>/<repo>/issues/<n>)`, keeping the `<owner>/<repo>` pattern out of the label. Bare `#<n>` for same-repo refs is unaffected.
-- Don't post without authorization. An explicit instruction to create/open/file the issue (in the triggering message or `/gh` args) IS the authorization — show the draft, then post without re-asking. Only gate behind `AskUserQuestion` when the issue was inferred from conversation with no explicit post instruction. Never re-confirm a post the user already directed.
+- Don't post without authorization. An explicit instruction to create/open/file the issue (in the triggering message, the `/gh` args, or an upstream `/gh`/`/grow` handoff that propagated the authorization) IS the authorization — show the draft, then post without re-asking. Only gate behind `AskUserQuestion` when the issue was inferred from conversation with no explicit post instruction. Never re-confirm a post the user already directed.
 - Don't open an issue in a repo the user didn't authorize (ask if ambiguous).
 - Don't open obvious duplicates — warn on near-match titles.
 - The attribution footer goes on the body, never the title.
