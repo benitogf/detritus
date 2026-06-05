@@ -107,6 +107,6 @@ No summary of the routing decision itself — the result is what matters, not th
 
 - Don't dispatch to a sub-skill without a clear classification. Ambiguous input → ask the user. But a clear in-conversation issue/PR reference is NOT ambiguous — re-fetch and classify it; don't ask.
 - Don't classify or ask off a stale snapshot. Re-fetch live PR/issue state (commits, reviews, comments) on every invocation before classifying — a re-invoke usually means the resource changed since you last looked. Never ask the user something `gh api` answers (newer commit? post-last-commit comment? merged?).
-- Don't bypass a sub-skill's confirmation gates. `gh-issue-create` requires explicit "post as-is" — the router doesn't override that.
+- Don't bypass a sub-skill's confirmation gates without authorization — but a gate is not bypassed when the user already authorized the action. `gh-issue-create` gates on "post as-is" only when the post was *not* directed; an explicit instruction routed through `/gh` authorizes it and the router propagates that (Phase 2). Don't re-raise a gate the user waived, and don't strip one they didn't.
 - Don't accumulate state across sub-skill calls. Each sub-skill is a unit; the router hands off and reports, nothing more.
 - Don't change repos mid-flow. If the user pivots, re-enter `/gh` from the top.

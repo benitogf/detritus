@@ -1,5 +1,5 @@
 ---
-description: Draft a GitHub issue from the current conversation, confirm with the user, post it with the Claude Code attribution footer, then offer next steps (/gh-issue-work, refine, or leave).
+description: Draft a GitHub issue from the current conversation, confirm with the user unless the post was already directed, post it with the Claude Code attribution footer, then offer next steps (/gh-issue-work, refine, or leave).
 category: meta
 triggers:
   - gh-issue-create
@@ -16,7 +16,7 @@ related:
 
 # /gh-issue-create — Draft & File a GitHub Issue
 
-Capture something from the current conversation as a GitHub issue. Always draft first, confirm with the user, then post. Always append the Claude Code attribution footer so it's clear the issue was filed by an agent on the user's behalf.
+Capture something from the current conversation as a GitHub issue. Always draft first and show the draft; confirm before posting only when the post wasn't already directed (see Phase 4 — an explicit instruction in the triggering message, `/gh` args, or an upstream `/gh`/`/grow` handoff is the authorization). Always append the Claude Code attribution footer so it's clear the issue was filed by an agent on the user's behalf.
 
 ## Posting to GitHub as the user
 
