@@ -151,9 +151,11 @@ gh api --method POST repos/<owner>/<repo>/issues \
 
 Capture the returned `number` and `html_url`. Verify the response's `labels` array contains `plane` — if not, the sync to Plane will not happen; surface the failure to the user instead of pretending it worked.
 
-## Phase 6: Offer next steps
+## Phase 6: Next steps
 
-After posting, ask via `AskUserQuestion`:
+**If the post was authorized by a create-AND-open instruction** — the directed action that reached Phase 4 was "create the issue *and* open a PR" (the create-and-open flow, directly or propagated via `/gh`/`/grow`) — do NOT ask "Work it now?". The user already directed the PR half; asking is the redundant-confirmation failure mode. Auto-chain straight into `/gh-issue-work #<n>`, carrying the open-PR authorization forward so its Phase 8b Path B fires (this Phase 6 hand-off is the channel that delivers that propagated signal — gating it behind a question makes Path B unreachable on this flow). Print the issue URL, then continue.
+
+**Otherwise** — the user directed only an issue (not a PR), or the issue was inferred from conversation — ask via `AskUserQuestion`:
 - **Work it now** — hand off to `/gh-issue-work #<n>` in the same session.
 - **Give feedback to refine it** — collect the user's notes, rewrite the body (keep the footer), and PATCH in place:
   ```
