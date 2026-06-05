@@ -1,5 +1,5 @@
 ---
-description: Take a GitHub issue end-to-end — branch, fix, test, commit, push, self-review the diff, confirm with the user, then open PR with a product-focused summary and the Claude Code attribution footer.
+description: Take a GitHub issue end-to-end — branch, fix, test, commit, push, self-review the diff, confirm with the user unless opening the PR was already directed, then open PR with a product-focused summary and the Claude Code attribution footer.
 category: meta
 triggers:
   - gh-issue-work
@@ -17,7 +17,7 @@ related:
 
 # /gh-issue-work — Issue → Branch → Fix → Self-Review → PR
 
-Take a GitHub issue end-to-end: branch from the default base, implement the fix, run tests, commit, push, self-review the diff and confirm with the user, then open a PR whose body is product-focused (no code identifiers). Always append the Claude Code attribution footer on the PR body so reviewers can tell it was filed by an agent on the user's behalf.
+Take a GitHub issue end-to-end: branch from the default base, implement the fix, run tests, commit, push, self-review the diff (always — Phase 8a), and confirm with the user before opening unless opening the PR was already directed (Phase 8b's authorized-skip path), then open a PR whose body is product-focused (no code identifiers). Always append the Claude Code attribution footer on the PR body so reviewers can tell it was filed by an agent on the user's behalf.
 
 ## Posting to GitHub as the user
 
