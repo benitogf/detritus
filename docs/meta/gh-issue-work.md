@@ -239,7 +239,7 @@ GitHub-review-comment feedback (posted on the PR itself) is handled by `/gh-feed
 
 - Don't reference code paths, symbols, or line numbers in the PR body. That belongs in the diff. The body is for the non-technical reader.
 - Don't write bare `<owner>/<repo>#<n>` cross-repo shortcuts in the PR body when the org slug contains another repo name in the same org as a substring. Default to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)`, keeping the `<owner>/<repo>` pattern out of the label, or GitHub's autolinker will mangle the render. Same-repo `Closes #<n>` is unaffected.
-- Don't open the PR without an explicit "Open PR as-is" from the user in Phase 8. A pushed branch is recoverable; an open PR pings reviewers.
+- Don't open the PR without authorization. When Phase 8b's skip conditions all hold (8a clean on the current diff, the user already directed opening the PR, the diff hasn't changed since, an issue is linked), open as-is. Otherwise gate behind an explicit "Open PR as-is". A pushed branch is recoverable; an open PR pings reviewers — but never re-ask once the user has directed it and 8a is clean. Phase 8a is never skipped regardless.
 - Don't force-push, don't rebase shared branches, don't skip hooks.
 - Don't post issue/PR comments from this skill — the PR body carries all narrative.
 - Don't include the attribution footer on commits (`Co-Authored-By:` already handles commits). Footer is GitHub-UI-only.
