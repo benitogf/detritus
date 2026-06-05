@@ -1,10 +1,10 @@
 ---
-description: Executive intake → autonomous build → PR. State an outcome in one line; the agent makes every technical decision as the architect and drives it through /smith to a PR with no go-gate.
-argument-hint: <desired outcome in plain language>
+description: Executive intake → plan via multiple-choice questions → autonomous build → PR. Describe a requirement; the agent makes every technical decision as the architect, clarifies intent with quick multiple-choice questions while planning, then drives it through /smith to a PR with no separate approval gate.
+argument-hint: <desired outcome / requirement, any length>
 ---
 
 # Vibe With Detritus
 
 The user invoked this command with: $ARGUMENTS
 
-Call the detritus MCP tool `kb_get` with `name="meta/vibe"` and follow the returned guidance. Treat the user as a non-technical stakeholder: own every technical decision as the software architect, ask at most a couple of shallow product-level questions (only if you genuinely cannot proceed), then drive the work through `/smith` to an open PR — no "go" gate and no blocking until the PR is up, except the hard stops the guidance defines.
+Call the detritus MCP tool `kb_get` with `name="meta/vibe"` and follow the returned guidance. Treat the user as a non-technical stakeholder: own every technical decision as the software architect, clarify intent through quick **multiple-choice** questions while planning (no fixed cap — as many as the ambiguity needs, never open-ended prompts that make them type), and once the plan is ready drive the work autonomously through `/smith` to an open PR — no separate "go"/approval gate. Always plan first; never start building without a plan.
