@@ -59,6 +59,16 @@ Bar: if a bug surfaces in two weeks, would you be embarrassed you missed it? If 
 
 **Each finding is still one short sentence + file:line.** Depth lives in the audit, not the prose.
 
+## Trace the lived path (not just the diff)
+
+Diff-correctness is necessary, not sufficient. A change can be internally correct — clean code, passing lint, safe config, consistent docs — and still leave the feature **non-functional for a real user**. For any change to authentication, transport (TLS / HTTP / WebSocket), serving, cross-origin behavior, redirects, sessions / cookies, caching, or deployment topology, walk the **actual runtime sequence end to end** — not just whether the diff reads correctly.
+
+- **Who is the realistic actor, on what realistic (worst-case) machine/state?** Trace the literal steps: first request → response → each subsequent call the client makes → does each one actually succeed? Pick the state that exposes the assumption — a first-time user on a clean machine, a cold cache, an unauthenticated browser, a node that just rebooted.
+- **Check the change against the rules the running system obeys.** Many failures live not in the code but in the platform / protocol / security model it runs inside — and those rules are knowable from a spec. Identify the boundaries this change crosses and verify it against each boundary's *real* semantics, not its happy-path intent. Boundary rules to consider: TLS chain/SAN validation and OS trust stores; the browser security model (origins by scheme+host+**port**, mixed content, per-origin certificate trust, CORS, cookie `SameSite`/`Secure` scope); auth and redirect flows; cache coherence and invalidation; filesystem permissions/ownership; process and network reachability. The recurring trap is a change that's locally correct but violates one boundary rule, so the feature **silently** doesn't work end to end (e.g. a multi-origin web app whose cross-origin calls fail because a private CA isn't trusted — and a per-origin warning click-through never covers them).
+- **"No e2e environment" is not an excuse.** When the behavior is derivable from a published spec or security model (TLS validation, same-origin policy, mixed-content rules, OAuth redirect flow, cookie scoping, cache semantics), reason it through analytically and state the conclusion. Deferring to "couldn't test against a live stack" when the answer is knowable from the spec is precisely the failure this section exists to prevent.
+
+**Bar:** can a first-time user on a clean machine complete the primary task this change touches? If you can't answer that from the diff plus the relevant spec, that uncertainty is itself a finding — flag it; don't bury it under "looks correct" or "not e2e-testable here."
+
 ## Correctness
 
 For each non-trivial change, ask:
