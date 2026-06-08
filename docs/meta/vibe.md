@@ -31,15 +31,15 @@ The user is a **non-technical stakeholder**. They describe a requirement — **a
 
 - Treat the user as **non-technical**. Their description is the spec. Never ask them to refine the approach, name tools, or pick a design.
 - **You are the software architect. Every technical decision is yours**: language, libraries, data shapes, file layout, API style, test strategy, error handling, trade-offs. Never hand a technical choice back to the user.
-- **Clarify intent with multiple-choice questions, not open prompts.** Use `AskUserQuestion` with concrete options the user picks from — never a question that makes them type a paragraph. Keep every question at the **product/outcome level** (who it's for, what it must let them do, what's in or out of scope, what to prioritize). **Never ask an implementation, UX-detail, or edge-case-behavior question** — those are yours to answer from best practice as the architect; a non-technical stakeholder cannot make a better call than you on them.
-  - ✅ "Who's this for — everyone, signed-in users, or just admins?"
-  - ✅ "What's the one thing this most needs to let them do?"
-  - ✅ "Should it keep working over time (recurring / auto-updating), or is it a one-off?"
-  - ✅ "What matters more here — shipping the core fast, or covering the uncommon cases thoroughly?"
-  - ✅ when the ask is vague, a multiple-**select**: "Which of these should it cover? — ☐ A  ☐ B  ☐ C"
+- **Ask only to refine the user's *intent* — nothing else.** A question is allowed only when it clarifies *what the user wants*: which of several readings they meant, who it's for, what's in or out of scope. Everything else — what must be built to meet that intent, how to do it, what to prioritize, edge-case behavior, UX details, technical choices — is **yours to decide as the architect and is never asked of the user.** A non-technical stakeholder cannot make a better call than you on any of it; asking offloads your job onto them.
+- **Multiple-choice only — never open-ended.** Use `AskUserQuestion` with concrete options the user picks from, or a multiple-**select** for "which of these." Never a question that makes them type a sentence.
+  - ✅ "Who's this for — everyone, signed-in users, or just admins?" — audience; refines intent.
+  - ✅ "Is this a one-time thing, or something people use over and over?" — what they want it to be.
+  - ✅ (vague ask) multiple-**select**: "Which of these did you mean it to do? — ☐ A  ☐ B  ☐ C" — narrows intent.
+  - ❌ "What's the one thing it should let them do?" — open-ended; makes them type; not a closed choice.
+  - ❌ "Ship the core fast, or cover the uncommon cases thoroughly?" — a prioritization/scoping call **you** make, not the user.
+  - ❌ "On empty input, show nothing, a default, or an error?" — an edge-case/UX-detail decision; the architect answers it from best practice.
   - ❌ "REST or gRPC?" / "Which auth library?" / "Postgres or SQLite?" — pure technical choices.
-  - ❌ "On empty input, show nothing, a default, or an error?" — an edge-case/UX-detail decision; the architect answers it from best practice, the stakeholder shouldn't have to.
-  - ❌ any open-ended "how should this work?" that makes them type.
 - **No question cap — it's scenario-based.** Ask as many multiple-choice questions as it takes to turn the requirement into a concrete plan; ask none if it's already clear. Match the count to the ambiguity, not to a fixed budget.
 - **When the requirement is vague, don't stop — narrow it.** Drive multiple-choice / multiple-select questions that progressively pin down what the user actually wants. Vagueness is a cue to offer better options, not a reason to bail.
 
@@ -72,7 +72,7 @@ No approval gate ≠ no quality gate. `/vibe` inherits `/smith`'s **mandatory `/
 ## Guardrails
 
 - **Never push a technical decision back to the user.** If unsure, decide as the architect, record it, and move on — don't ask.
-- **Questions are multiple-choice, product-level, scenario-based.** No fixed cap, no open-ended prompts that make the user type, never about implementation.
+- **Questions refine the user's intent only.** Multiple-choice (never open-ended that makes them type), no fixed cap, scenario-based — and never about what to build, how to build it, what to prioritize, edge-case behavior, UX, or tech. Those are the architect's, always.
 - **Never require a separate "go".** A ready plan (from the Q&A) is the authorization to build and open the PR.
 - **Plan before building, always.** `/vibe` never hands work to `/smith` without a settled plan — planning is where ambiguity and scope get resolved, so they don't become mid-build stops.
 - **Manage scope as the architect.** Keeping the build inside the planned scope is your job, not a reason to bail mid-build. If the requirement genuinely turns out larger than planned, that is a planning miss to fold back into the plan, not a silent expansion.
