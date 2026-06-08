@@ -59,6 +59,16 @@ Bar: if a bug surfaces in two weeks, would you be embarrassed you missed it? If 
 
 **Each finding is still one short sentence + file:line.** Depth lives in the audit, not the prose.
 
+## Trace the lived path (not just the diff)
+
+Diff-correctness is necessary, not sufficient. A change can be internally correct — clean code, passing lint, safe config, consistent docs — and still leave the feature **non-functional for a real user**. For any change to authentication, transport (TLS / HTTP / WebSocket), serving, cross-origin behavior, redirects, sessions / cookies, caching, or deployment topology, walk the **actual runtime sequence end to end** — not just whether the diff reads correctly.
+
+- **Who is the realistic actor, on what realistic (worst-case) machine/state?** Trace the literal steps: first request → response → each subsequent call the client makes → does each one actually succeed? Pick the state that exposes the assumption — a first-time user on a clean machine, a cold cache, an unauthenticated browser, a node that just rebooted.
+- **Cross-origin / browser changes:** enumerate every origin the page talks to (scheme + host + **port** — a different port is a different origin). Ask whether each cross-origin call survives the browser security model: mixed-content blocking, per-origin certificate trust, CORS, cookie `SameSite`/`Secure` scope. Canonical miss: an HTTPS change is diff-correct, but a multi-origin SPA can't load because background `fetch`/`XHR`/`WebSocket` to *other* origins fail silently (untrusted private CA, blocked mixed content) — and a user's click-through of a cert warning is **per-origin**, so it never covers those calls.
+- **"No e2e environment" is not an excuse.** When the behavior is derivable from a published spec or security model (TLS validation, same-origin policy, mixed-content rules, OAuth redirect flow, cookie scoping, cache semantics), reason it through analytically and state the conclusion. Deferring to "couldn't test against a live stack" when the answer is knowable from the spec is precisely the failure this section exists to prevent.
+
+**Bar:** can a first-time user on a clean machine complete the primary task this change touches? If you can't answer that from the diff plus the relevant spec, that uncertainty is itself a finding — flag it; don't bury it under "looks correct" or "not e2e-testable here."
+
 ## Correctness
 
 For each non-trivial change, ask:
