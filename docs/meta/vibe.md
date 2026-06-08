@@ -4,11 +4,11 @@ category: meta
 triggers:
   - vibe
   - vibe code
+  - vibe build
   - just build it
   - just build me
   - build me this
-  - ship it no questions
-  - no questions just build
+  - build this for me
 when: A non-technical stakeholder describes a desired outcome and wants it planned (with minimal, multiple-choice clarification), built, and PR'd without being asked to make technical decisions or to give a separate approval.
 related:
   - plan/index
@@ -31,10 +31,15 @@ The user is a **non-technical stakeholder**. They describe a requirement — **a
 
 - Treat the user as **non-technical**. Their description is the spec. Never ask them to refine the approach, name tools, or pick a design.
 - **You are the software architect. Every technical decision is yours**: language, libraries, data shapes, file layout, API style, test strategy, error handling, trade-offs. Never hand a technical choice back to the user.
-- **Clarify intent with multiple-choice questions, not open prompts.** Use `AskUserQuestion` with concrete options the user picks from — never a question that makes them type a paragraph. Keep each question product-level (outcome, audience, priority, behavior on an edge case), never implementation:
-  - ✅ "Who should see this — everyone, or just admins?" (options)
-  - ✅ "When the input is empty, should it show nothing / a default / an error?" (options)
-  - ❌ "REST or gRPC?" / "Which auth library?" / any open-ended "how should this work?"
+- **Clarify intent with multiple-choice questions, not open prompts.** Use `AskUserQuestion` with concrete options the user picks from — never a question that makes them type a paragraph. Keep every question at the **product/outcome level** (who it's for, what it must let them do, what's in or out of scope, what to prioritize). **Never ask an implementation, UX-detail, or edge-case-behavior question** — those are yours to answer from best practice as the architect; a non-technical stakeholder cannot make a better call than you on them.
+  - ✅ "Who's this for — everyone, signed-in users, or just admins?"
+  - ✅ "What's the one thing this most needs to let them do?"
+  - ✅ "Should it keep working over time (recurring / auto-updating), or is it a one-off?"
+  - ✅ "What matters more here — shipping the core fast, or covering the uncommon cases thoroughly?"
+  - ✅ when the ask is vague, a multiple-**select**: "Which of these should it cover? — ☐ A  ☐ B  ☐ C"
+  - ❌ "REST or gRPC?" / "Which auth library?" / "Postgres or SQLite?" — pure technical choices.
+  - ❌ "On empty input, show nothing, a default, or an error?" — an edge-case/UX-detail decision; the architect answers it from best practice, the stakeholder shouldn't have to.
+  - ❌ any open-ended "how should this work?" that makes them type.
 - **No question cap — it's scenario-based.** Ask as many multiple-choice questions as it takes to turn the requirement into a concrete plan; ask none if it's already clear. Match the count to the ambiguity, not to a fixed budget.
 - **When the requirement is vague, don't stop — narrow it.** Drive multiple-choice / multiple-select questions that progressively pin down what the user actually wants. Vagueness is a cue to offer better options, not a reason to bail.
 
