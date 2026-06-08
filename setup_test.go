@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -64,5 +65,71 @@ func TestGenerateClaudeSkillsPrunesStale(t *testing.T) {
 	// SKILL.md-less directory left alone.
 	if _, err := os.Stat(emptyDir); err != nil {
 		t.Fatalf("directory without SKILL.md was removed: %v", err)
+	}
+}
+
+func TestUpsertTOMLTableAddsDetritusMCP(t *testing.T) {
+	input := `model = "gpt-5.5"
+
+[mcp_servers.node_repl]
+command = "node-repl"
+args = []
+`
+
+	got := upsertTOMLTable(input, "mcp_servers.detritus", []string{
+		`command = "C:\\detritus.exe"`,
+		"args = []",
+	})
+
+	if !strings.Contains(got, "[mcp_servers.node_repl]\ncommand = \"node-repl\"") {
+		t.Fatalf("existing node_repl table was not preserved:\n%s", got)
+	}
+	if !strings.Contains(got, "[mcp_servers.detritus]\ncommand = \"C:\\\\detritus.exe\"\nargs = []") {
+		t.Fatalf("detritus table was not added:\n%s", got)
+	}
+}
+
+func TestUpsertTOMLTableReplacesExistingDetritusMCP(t *testing.T) {
+	input := `model = "gpt-5.5"
+
+[mcp_servers.detritus]
+command = "old"
+args = ["--old"]
+
+[mcp_servers.node_repl]
+command = "node-repl"
+`
+
+	got := upsertTOMLTable(input, "mcp_servers.detritus", []string{
+		`command = "new"`,
+		"args = []",
+	})
+
+	if strings.Contains(got, "old") || strings.Contains(got, "--old") {
+		t.Fatalf("old detritus table content was not replaced:\n%s", got)
+	}
+	if !strings.Contains(got, "[mcp_servers.detritus]\ncommand = \"new\"\nargs = []") {
+		t.Fatalf("new detritus table missing:\n%s", got)
+	}
+	if !strings.Contains(got, "[mcp_servers.node_repl]\ncommand = \"node-repl\"") {
+		t.Fatalf("following table was not preserved:\n%s", got)
+	}
+}
+
+func TestUpsertCodexMCPConfigWritesEscapedWindowsPath(t *testing.T) {
+	config := filepath.Join(t.TempDir(), "config.toml")
+
+	upsertCodexMCPConfig(config, `C:\Users\Owner\AppData\Local\detritus-codex\detritus.exe`)
+
+	raw, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(raw)
+	if !strings.Contains(got, `[mcp_servers.detritus]`) {
+		t.Fatalf("detritus table missing:\n%s", got)
+	}
+	if !strings.Contains(got, `command = "C:\\Users\\Owner\\AppData\\Local\\detritus-codex\\detritus.exe"`) {
+		t.Fatalf("windows path was not escaped as a TOML basic string:\n%s", got)
 	}
 }

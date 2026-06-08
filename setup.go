@@ -71,7 +71,7 @@ func RunSetup(binaryPath string, dryRun bool) error {
 	setupClaudeCode(home, binaryPath, docs, dryRun)
 
 	// Codex
-	setupCodex(home, docs, dryRun)
+	setupCodex(home, binaryPath, docs, dryRun)
 
 	// Verdent
 	if verdentDetected(home) {
@@ -384,7 +384,7 @@ func generateClaudeSkills(home string, docs []docEntry) {
 
 // ---- Codex ------------------------------------------------------------------
 
-func setupCodex(home string, docs []docEntry, dryRun bool) {
+func setupCodex(home, binaryPath string, docs []docEntry, dryRun bool) {
 	codexDir := filepath.Join(home, ".codex")
 	if !dirExists(codexDir) {
 		fmt.Println("Codex not detected; skipping Codex setup.")
@@ -392,13 +392,85 @@ func setupCodex(home string, docs []docEntry, dryRun bool) {
 	}
 
 	skillsDir := filepath.Join(codexDir, "skills")
+	configFile := filepath.Join(codexDir, "config.toml")
 	if dryRun {
+		fmt.Printf("[dry-run] Would upsert detritus into %s (mcp_servers)\n", configFile)
 		fmt.Printf("[dry-run] Would write %d Codex skill files to %s\n", len(docs), skillsDir)
 		return
 	}
 
+	upsertCodexMCPConfig(configFile, binaryPath)
 	generateCodexSkills(skillsDir, docs)
+	fmt.Printf("Codex MCP config: %s\n", configFile)
 	fmt.Printf("Codex skills: %s\n", skillsDir)
+}
+
+func upsertCodexMCPConfig(file, command string) {
+	content := ""
+	if raw, err := os.ReadFile(file); err == nil {
+		content = string(raw)
+	}
+
+	content = upsertTOMLTable(content, "mcp_servers.detritus", []string{
+		"command = " + tomlString(command),
+		"args = []",
+	})
+
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create Codex config directory: %v\n", err)
+		os.Exit(1)
+	}
+	if err := os.WriteFile(file, []byte(content), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to write %s: %v\n", file, err)
+		os.Exit(1)
+	}
+}
+
+func upsertTOMLTable(content, table string, body []string) string {
+	content = strings.ReplaceAll(content, "\r\n", "\n")
+	content = strings.TrimRight(content, "\n")
+
+	header := "[" + table + "]"
+	blockLines := append([]string{header}, body...)
+	block := strings.Join(blockLines, "\n")
+
+	if content == "" {
+		return block + "\n"
+	}
+
+	lines := strings.Split(content, "\n")
+	start := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == header {
+			start = i
+			break
+		}
+	}
+
+	if start < 0 {
+		return content + "\n\n" + block + "\n"
+	}
+
+	end := len(lines)
+	for i := start + 1; i < len(lines); i++ {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), "[") {
+			end = i
+			break
+		}
+	}
+
+	updated := append([]string{}, lines[:start]...)
+	updated = append(updated, blockLines...)
+	updated = append(updated, lines[end:]...)
+	return strings.TrimRight(strings.Join(updated, "\n"), "\n") + "\n"
+}
+
+func tomlString(value string) string {
+	value = strings.ReplaceAll(value, "\\", "\\\\")
+	value = strings.ReplaceAll(value, "\"", "\\\"")
+	value = strings.ReplaceAll(value, "\n", "\\n")
+	value = strings.ReplaceAll(value, "\r", "\\r")
+	return "\"" + value + "\""
 }
 
 func generateCodexSkills(skillsDir string, docs []docEntry) {
