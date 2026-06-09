@@ -65,6 +65,10 @@ The build phase requires a durable runner (`meta/loop-core` → *Durability* mod
 - **Mode 2 (GitHub-state-only) does not apply.** The mode-2 fallback puts the State block "in the issue or PR bodies the loop maintains." `/smith`'s build phase opens no PR until every acceptance item ticks green — there is nothing to write the State block into between ticks. A long-lived tracking issue isn't a /gh-router convention (issues describe problems, not loop state); using one anyway would create a documentation trail outside the established flow.
 - **Mode 3 (report incompatibility) is the right fallback.** The platform adapter must check at setup that the selected scheduler is durable; if not, report the incompatibility and ask the user to pick a durable scheduler (Desktop Routines, external scheduler, Codex `local`) or a different platform. Do not silently fall through to mode 2.
 
+Durable local mode 1 is therefore the default for the build phase on every platform. Which scheduler is durable vs disposable is owned by `meta/janitor-platforms`, not restated here: on Codex, `local` (or a thread heartbeat) is durable and `worktree` is disposable; on Claude Code, Desktop Routines or the external scheduler run against the real checkout while Cloud Routines are disposable. The disposable runners (Codex `worktree`, Claude Cloud Routines) stay incompatible with the **build phase** — they remain valid for `/janitor` and for `/smith`'s audit phase; only the build phase requires mode 1.
+
+**Future — portable state mode (non-default).** A future GitHub-backed state mode could re-enable disposable runners for the build phase by carrying the compact State block in a GitHub issue or PR body — `meta/loop-core` → *Durability* mode 2, but with a host that exists *before* any PR opens. That needs new machinery and is only worth it if the disposable-runner cost is justified for a given loop. Until it exists, mode 2 stays inapplicable to the build phase and mode 3 is the required fallback (see *Safety Boundaries*).
+
 The audit phase, which opens **after** the build-phase PR merges, has no such constraint — it inherits `/janitor`'s full durability handling and can run on any of the three modes per the changed-files scope.
 
 ## Scratchpad — smith-specific sections
@@ -76,9 +80,12 @@ The shared scratchpad spine (current orientation, tick log, state block) is defi
 - **Acceptance criteria** — checklist of objectively-verifiable items derived from `/plan`'s steps. Each item: `- [ ] <item description> — <verification: test name, function signature, endpoint shape, etc.>`. Items tick green during the build phase; when all are checked, the phase transitions.
 - **Current phase** — `build` or `audit`. Drives loop behavior at every wake.
 
-The State block (defined in `meta/loop-core`) gets these `/smith`-specific fields added:
+The State block (defined in `meta/loop-core`) gets these `/smith`-specific fields added. The generic fields (*In-flight sub-agents / branches / PRs*, *Hazards / Deferred*, *Next-tick plan*, *Last user directive*) are required by `meta/loop-core` and are not re-listed here:
 
-- **Acceptance items checked** — `N/M`, with a one-line summary of which item is next.
+- **Acceptance items checked** — `N/M`, naming the **current acceptance item** the build phase is working (the one-line summary of which item is next).
+- **Changed files** — the files touched on `feat/<slug>` so far, so a fresh agent sees the build surface without re-diffing.
+- **Verification command** — the canonical command this loop runs to gate a commit.
+- **Last verification result** — `green` / `red`, dated; on red, the failure evidence (failing test name, assertion, or first error) the next tick retries against.
 - **Feature branch** — `feat/<slug>` long-lived branch where build-phase commits accumulate.
 - **Build-phase PR** — the open PR if build phase ended and PR is in review; otherwise empty.
 
@@ -99,7 +106,7 @@ Each scheduled wake during the build phase follows this order:
 7. Implement the smallest in-spec delta on `feat/<slug>`.
 8. Run the canonical verification command. Verification must complete green on this tick — partial-tick verification does not count, and a tick that fails verification does **not** commit.
 9. If verification is green and at least one acceptance item moves from `[ ]` to `[x]`, commit + push to `feat/<slug>`. Do **not** open a PR yet — commits accumulate on the branch until all acceptance items are checked.
-10. Update the scratchpad: tick log entry, State block (acceptance items checked, next-tick plan, hazards if any), Acceptance criteria section (move ticked items to `[x]`).
+10. Update the scratchpad — this is a **compaction checkpoint** (`meta/loop-core` → *Compaction checkpoint*): tick log entry, State block (acceptance items checked, changed files, verification command + last result/failure evidence, next-tick plan, hazards if any), Acceptance criteria section (move ticked items to `[x]`) — left sufficient for a fresh agent to resume from scratchpad + git alone. The build phase's checkpoint events are: each completed acceptance item, each failed-verification cluster (serialize the failure evidence — this never softens step 8's hard gate or commits on red), the self-review pass (Build-to-Audit Transition step 1), and the build-to-audit phase transition. Manual context clearing is allowed only after this update lands.
 11. If all acceptance items are now checked, transition to the *Build-to-Audit Transition* below. Otherwise, the next wake continues the build phase.
 
 Do not pollute the user's main thread with raw audit logs.
@@ -142,6 +149,10 @@ Shared audit rules in `meta/loop-core` → *Shared Audit Agent Rules* apply. On 
 - Propose the smallest next delta toward the next unchecked item. The proposal includes: files to touch, what changes, what verification proves the item is met.
 - Do **not** propose work outside the spec. Out-of-spec needs (a refactor that would help, a related cleanup) get reported as hazards into the State block, not as deltas to implement.
 - Do **not** propose multi-item deltas. One item at a time, in checklist order, unless two items share a single fix obviously and the agent can name both.
+
+GOOD tasks to delegate — each a single bounded read against the current item: audit the **current acceptance item**, inspect the **failing verification output**, map the **affected files** for the next delta, review the `feat/<slug>` **diff for blockers**, summarize **missing tests** for the item. The BAD tasks — implementing the feature, deciding scope, or owning the loop — belong to the main agent, never the sub-agent (`meta/loop-core` → *Shared Audit Agent Rules*: the main agent is the only loop owner).
+
+Report shape follows `meta/loop-core` → *Per-tick report files*, with the smith fields: finding/status per item, evidence (file:line / test name), affected files, smallest next delta (files + change + verification), and the verification command + result.
 
 ## Audit Phase Audit Agent Contract
 
