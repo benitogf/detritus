@@ -195,7 +195,7 @@ func generateInlineCommandInstructions(home string, docs []docEntry, dryRun bool
 	var sb strings.Builder
 	sb.WriteString("---\ndescription: detritus knowledge base guardrails and command router\napplyTo: \"**\"\n---\n\n")
 	sb.WriteString("## Guardrails\n\n")
-	sb.WriteString("Push back when evidence demands it — including against the user. Research (KB via kb_search/kb_get, source code, docs) before asking researchable questions. Prove before acting. Early returns, flat code, no deep nesting. Comments terse: default to none, one line max, only for a non-obvious WHY — never restate the code or paraphrase the name.\n\n")
+	sb.WriteString("Push back when evidence demands it — including against the user. Research (KB via kb_search/kb_get, source code, docs) before asking researchable questions. Prove before acting. Early returns, flat code, no deep nesting. Comments terse: default to none, one line max, only for a non-obvious WHY — never restate the code or paraphrase the name (exported APIs keep a contract doc comment).\n\n")
 	sb.WriteString("## Command Tokens\n\n")
 	sb.WriteString("When a user message contains one or more detritus command tokens anywhere in the text (for example: /truthseeker, /plan, /testing), treat each token as an explicit request to load the matching knowledge doc.\n\n")
 	sb.WriteString("Rules:\n")
@@ -263,7 +263,7 @@ You have access to the **detritus MCP server** providing knowledge base tools: `
 3. **Prove before acting** — base conclusions on evidence, not assumptions. Show your reasoning.
 4. **Radical honesty** — if something is wrong, unproven, or assumed, say so directly.
 5. **Line-of-sight code** — early returns, flat structure, no deep nesting.
-6. **Terse comments** — default to no comment; one short line max; only when the WHY is non-obvious, never restating the code or paraphrasing the name.
+6. **Terse comments** — default to no comment; one short line max; only when the WHY is non-obvious, never restating the code or paraphrasing the name; exported APIs keep a contract doc comment.
 
 ## Workflow
 
