@@ -11,7 +11,10 @@ triggers:
   - inline code
   - coding style
   - code style
-when: Writing or modifying any code - names must reflect current behavior, inline operations should be extracted into named functions
+  - comment
+  - comments
+  - commenting
+when: Writing or modifying any code - names must reflect current behavior, inline operations extracted into named functions, and comments kept terse (only for a non-obvious WHY)
 related:
   - patterns/state-management
 ---
@@ -24,6 +27,7 @@ related:
 > 1. **Every function name describes its current behavior** — not its historical or intended behavior
 > 2. **Inline multi-step operations are extracted** into named functions
 > 3. **Side effects are visible in the name** — if it writes, deletes, or schedules, the name says so
+> 4. **Comments are terse** — default to none; one short line max; only when the WHY is genuinely non-obvious, never restating the code or paraphrasing the name
 
 ---
 
@@ -122,3 +126,35 @@ MetricsTick(store, true)
 2. **Update all callers** — never leave a caller using a stale name
 3. **If two functions now exist** (immediate + deferred), ensure both names make the distinction obvious
 4. **Search the codebase** for all usages before renaming — use grep, not assumptions
+
+---
+
+## 5. Comments — Terse, and Only for a Non-Obvious WHY
+
+Default to **no comment**. Names (sections 1–3) carry the meaning; a comment is a last resort for the rare case where the *why* genuinely can't live in the code.
+
+### Rule: Never restate what the code says or paraphrase the name
+
+```go
+// BAD: restates the code / paraphrases the function name
+count++ // increment the counter
+
+// setUser sets the user
+func setUser(...) { ... }
+
+// GOOD: no comment — the code and name already say it
+count++
+func setUser(...) { ... }
+```
+
+**Exported (public) APIs are the exception:** keep their doc comment, but make it state the *contract* or a non-obvious *why* — not a restatement of the name. `// SetUser sets the user` is noise; `// SetUser replaces any existing record for the user.` earns its place.
+
+### Rule: Comment only when the WHY is non-obvious — one short line
+
+```go
+// GOOD: explains a reason the code itself cannot convey
+// porter swallows the retry cause, so own the loop to surface each attempt's error
+for attempt := 1; attempt <= maxAttempts; attempt++ { ... }
+```
+
+A comment earns its place only when deleting it would lose information not recoverable from the code: a non-obvious constraint, why a workaround exists, why *not* the obvious approach. Keep it to one short line. When the code changes, update or delete a now-stale comment in the same commit — the same discipline as names in section 1.
