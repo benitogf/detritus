@@ -80,7 +80,7 @@ The shared scratchpad spine (current orientation, tick log, state block) is defi
 - **Acceptance criteria** — checklist of objectively-verifiable items derived from `/plan`'s steps. Each item: `- [ ] <item description> — <verification: test name, function signature, endpoint shape, etc.>`. Items tick green during the build phase; when all are checked, the phase transitions.
 - **Current phase** — `build` or `audit`. Drives loop behavior at every wake.
 
-The State block (defined in `meta/loop-core`) gets these `/smith`-specific fields added. The generic fields (*In-flight sub-agents / branches / PRs*, *Hazards / Deferred*, *Next-tick plan*, *Last user directive*) are required by `meta/loop-core` and are not re-listed here:
+The State block (defined in `meta/loop-core`) gets these `/smith`-specific fields added; the generic fields `meta/loop-core`'s *State block* already requires (in-flight work, metric + delta, loop-end progress, skip-streak counter, hazards, next-tick plan, last directive) are not re-listed here:
 
 - **Acceptance items checked** — `N/M`, naming the **current acceptance item** the build phase is working (the one-line summary of which item is next).
 - **Changed files** — the files touched on `feat/<slug>` so far, so a fresh agent sees the build surface without re-diffing.
