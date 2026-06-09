@@ -116,6 +116,96 @@ command = "node-repl"
 	}
 }
 
+func TestUpsertTOMLTableReplacesParentDottedDetritusMCP(t *testing.T) {
+	input := `model = "gpt-5.5"
+
+[mcp_servers]
+detritus.command = "old-detritus"
+detritus.args = ["--old"]
+node_repl.command = "node-repl"
+`
+
+	got := upsertTOMLTable(input, "mcp_servers.detritus", []string{
+		`command = "new-detritus"`,
+		"args = []",
+	})
+
+	if strings.Contains(got, "old-detritus") || strings.Contains(got, `detritus.command`) {
+		t.Fatalf("old parent-table dotted detritus entry was not replaced:\n%s", got)
+	}
+	if !strings.Contains(got, `node_repl.command = "node-repl"`) {
+		t.Fatalf("sibling parent-table entry was not preserved:\n%s", got)
+	}
+	if !strings.Contains(got, "[mcp_servers.detritus]\ncommand = \"new-detritus\"\nargs = []") {
+		t.Fatalf("canonical detritus table missing:\n%s", got)
+	}
+	again := upsertTOMLTable(got, "mcp_servers.detritus", []string{
+		`command = "new-detritus"`,
+		"args = []",
+	})
+	if got != again {
+		t.Fatalf("upsert was not stable after parent-table migration:\nfirst:\n%s\nsecond:\n%s", got, again)
+	}
+}
+
+func TestUpsertTOMLTableReplacesTopLevelDottedDetritusMCP(t *testing.T) {
+	input := `model = "gpt-5.5"
+mcp_servers.detritus.command = "old-detritus"
+mcp_servers.detritus.args = ["--old"]
+mcp_servers.node_repl.command = "node-repl"
+`
+
+	got := upsertTOMLTable(input, "mcp_servers.detritus", []string{
+		`command = "new-detritus"`,
+		"args = []",
+	})
+
+	if strings.Contains(got, "old-detritus") || strings.Contains(got, `mcp_servers.detritus.command`) {
+		t.Fatalf("old top-level dotted detritus entry was not replaced:\n%s", got)
+	}
+	if !strings.Contains(got, `mcp_servers.node_repl.command = "node-repl"`) {
+		t.Fatalf("sibling top-level dotted entry was not preserved:\n%s", got)
+	}
+	if !strings.Contains(got, "[mcp_servers.detritus]\ncommand = \"new-detritus\"\nargs = []") {
+		t.Fatalf("canonical detritus table missing:\n%s", got)
+	}
+	again := upsertTOMLTable(got, "mcp_servers.detritus", []string{
+		`command = "new-detritus"`,
+		"args = []",
+	})
+	if got != again {
+		t.Fatalf("upsert was not stable after top-level dotted migration:\nfirst:\n%s\nsecond:\n%s", got, again)
+	}
+}
+
+func TestUpsertTOMLTableUpdatesInlineParentTable(t *testing.T) {
+	input := `model = "gpt-5.5"
+mcp_servers = { node_repl = { command = "node-repl", args = [] }, detritus = { command = "old-detritus", args = ["--old"] } }
+`
+
+	got := upsertTOMLTable(input, "mcp_servers.detritus", []string{
+		`command = "new-detritus"`,
+		"args = []",
+	})
+
+	if strings.Contains(got, "old-detritus") || strings.Contains(got, "[mcp_servers.detritus]") {
+		t.Fatalf("inline parent table should update in place without appending a subtable:\n%s", got)
+	}
+	if !strings.Contains(got, `node_repl = { command = "node-repl", args = [] }`) {
+		t.Fatalf("sibling inline entry was not preserved:\n%s", got)
+	}
+	if !strings.Contains(got, `detritus = { command = "new-detritus", args = [] }`) {
+		t.Fatalf("inline detritus entry was not updated:\n%s", got)
+	}
+	again := upsertTOMLTable(got, "mcp_servers.detritus", []string{
+		`command = "new-detritus"`,
+		"args = []",
+	})
+	if got != again {
+		t.Fatalf("inline parent-table upsert was not stable:\nfirst:\n%s\nsecond:\n%s", got, again)
+	}
+}
+
 func TestUpsertCodexMCPConfigWritesEscapedWindowsPath(t *testing.T) {
 	config := filepath.Join(t.TempDir(), "config.toml")
 

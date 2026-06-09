@@ -439,30 +439,194 @@ func upsertTOMLTable(content, table string, body []string) string {
 	}
 
 	lines := strings.Split(content, "\n")
-	start := -1
-	for i, line := range lines {
-		if strings.TrimSpace(line) == header {
-			start = i
-			break
+	lines, inlineParentIndex := removeTOMLTableForms(lines, table)
+
+	if inlineParentIndex >= 0 {
+		parent, child, _ := strings.Cut(table, ".")
+		lines[inlineParentIndex] = upsertInlineTOMLTableValue(lines[inlineParentIndex], parent, child, body)
+		return strings.TrimRight(strings.Join(lines, "\n"), "\n") + "\n"
+	}
+
+	content = strings.TrimRight(strings.Join(lines, "\n"), "\n")
+	if content == "" {
+		return block + "\n"
+	}
+	return content + "\n\n" + block + "\n"
+}
+
+func removeTOMLTableForms(lines []string, table string) ([]string, int) {
+	parent, child, hasChild := strings.Cut(table, ".")
+	header := "[" + table + "]"
+	parentHeader := "[" + parent + "]"
+	inlineParentIndex := -1
+	section := ""
+	filtered := make([]string, 0, len(lines))
+
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		if trimmed == header {
+			for i+1 < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[i+1]), "[") {
+				i++
+			}
+			continue
+		}
+
+		if strings.HasPrefix(trimmed, "[") {
+			section = trimmed
+			filtered = append(filtered, lines[i])
+			continue
+		}
+
+		if hasChild && section == "" && isInlineTOMLTableAssignment(trimmed, parent) {
+			inlineParentIndex = len(filtered)
+			filtered = append(filtered, lines[i])
+			continue
+		}
+
+		if hasChild && section == "" && isTOMLKeyFor(trimmed, table) {
+			continue
+		}
+
+		if hasChild && section == parentHeader && isTOMLKeyFor(trimmed, child) {
+			continue
+		}
+
+		filtered = append(filtered, lines[i])
+	}
+
+	return filtered, inlineParentIndex
+}
+
+func isTOMLKeyFor(trimmed, key string) bool {
+	return strings.HasPrefix(trimmed, key+".") || strings.HasPrefix(trimmed, key+" ") || strings.HasPrefix(trimmed, key+"=")
+}
+
+func isInlineTOMLTableAssignment(trimmed, key string) bool {
+	eq := strings.Index(trimmed, "=")
+	if eq < 0 || strings.TrimSpace(trimmed[:eq]) != key {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimSpace(trimmed[eq+1:]), "{")
+}
+
+func upsertInlineTOMLTableValue(line, parent, child string, body []string) string {
+	eq := strings.Index(line, "=")
+	if eq < 0 || strings.TrimSpace(line[:eq]) != parent {
+		return line
+	}
+
+	open := strings.Index(line[eq+1:], "{")
+	if open < 0 {
+		return line
+	}
+	open += eq + 1
+	close := findMatchingBrace(line, open)
+	if close < 0 {
+		return line
+	}
+
+	entries := splitInlineTOMLEntries(line[open+1 : close])
+	kept := entries[:0]
+	for _, entry := range entries {
+		if inlineTOMLEntryKey(entry) == child {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	kept = append(kept, child+" = "+inlineTOMLTableBody(body))
+
+	return line[:open+1] + " " + strings.Join(kept, ", ") + " " + line[close:]
+}
+
+func findMatchingBrace(value string, open int) int {
+	depth := 0
+	inString := false
+	escaped := false
+	for i := open; i < len(value); i++ {
+		ch := value[i]
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch ch {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return i
+			}
 		}
 	}
+	return -1
+}
 
-	if start < 0 {
-		return content + "\n\n" + block + "\n"
-	}
-
-	end := len(lines)
-	for i := start + 1; i < len(lines); i++ {
-		if strings.HasPrefix(strings.TrimSpace(lines[i]), "[") {
-			end = i
-			break
+func splitInlineTOMLEntries(value string) []string {
+	var entries []string
+	start := 0
+	depth := 0
+	inString := false
+	escaped := false
+	for i := 0; i < len(value); i++ {
+		ch := value[i]
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' {
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch ch {
+		case '"':
+			inString = true
+		case '{', '[':
+			depth++
+		case '}', ']':
+			depth--
+		case ',':
+			if depth == 0 {
+				if entry := strings.TrimSpace(value[start:i]); entry != "" {
+					entries = append(entries, entry)
+				}
+				start = i + 1
+			}
 		}
 	}
+	if entry := strings.TrimSpace(value[start:]); entry != "" {
+		entries = append(entries, entry)
+	}
+	return entries
+}
 
-	updated := append([]string{}, lines[:start]...)
-	updated = append(updated, blockLines...)
-	updated = append(updated, lines[end:]...)
-	return strings.TrimRight(strings.Join(updated, "\n"), "\n") + "\n"
+func inlineTOMLEntryKey(entry string) string {
+	eq := strings.Index(entry, "=")
+	if eq < 0 {
+		return ""
+	}
+	return strings.TrimSpace(entry[:eq])
+}
+
+func inlineTOMLTableBody(body []string) string {
+	return "{ " + strings.Join(body, ", ") + " }"
 }
 
 func tomlString(value string) string {
