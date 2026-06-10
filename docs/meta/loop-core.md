@@ -125,6 +125,20 @@ The scratchpad and GitHub-side state are the only cross-tick carriers (see *Dura
 
 This adds no new persistence mechanism — it is the discipline of using the existing stores as the resume point at known boundaries, so the main thread stays lean between them.
 
+## Usage-Limit Resilience
+
+A loop must survive the consuming seat hitting its usage / token limit mid-tick. The reset is temporary; losing the schedule is not — so a limit hit must pause the loop, never end it.
+
+The hazard is specific to **self-rescheduling drivers** — those where each tick is responsible for arming the next one at the end of its own turn (Claude Code `/loop` dynamic mode via `ScheduleWakeup` is the canonical example). When a tick exhausts the seat mid-run, the turn is terminated *before* it reaches the re-arm call, so no next wake is queued and the entire loop stops — not just the tick that died. Recovery then requires a human to restart it.
+
+Rules:
+
+- **Prefer a driver whose schedule is standing data, independent of any single tick** — durable cron (`.claude/scheduled_tasks.json`), an OS timer, or first-party Routines. A limit-killed tick cannot delete a standing schedule, so the next fire still occurs on wall-clock; once a fire lands after the seat resets, it succeeds with no manual restart.
+- **Do not build resilience on "remaining quota" detection.** No first-party signal reliably exposes remaining seat quota before a tick runs, and any in-band attempt to re-arm after detecting exhaustion runs as a model turn that the limit itself blocks. The reset time is only knowable reactively (from the limit error), and a self-pacing wake is clamped too short (≤1h on `ScheduleWakeup`) to reliably jump a longer reset. The robust "escape hatch" is simply *fire again next interval*, which a standing schedule provides for free.
+- **If a self-rescheduling driver is unavoidable, treat it as office-hours-only** and tell the user a limit hit will stop the loop until they restart it. Do not present it as unattended-durable.
+
+The platform adapter (`meta/janitor-platforms`) names which drivers on each host are standing-schedule (resilient) versus self-rescheduling (fragile).
+
 ## Shared Main Agent Rules
 
 These rules apply to the main agent in every recurring-loop command. Command-specific contracts (`/janitor`, `/smith`) add their own rules on top.

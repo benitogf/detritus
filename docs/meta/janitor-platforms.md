@@ -44,7 +44,7 @@ Detect the current host when possible and choose the closest supported behavior:
 
 1. Codex app: prefer a thread heartbeat for short intervals such as `5min`.
 2. Codex app with hourly/weekly cadence: use a cron/worktree automation when the requested schedule fits detached work.
-3. Claude Code: default to **Desktop Routines** via `/schedule` when the user can keep the Desktop app open during wake windows, or to the **external scheduler fallback** (`claude -p` triggered by cron / launchd / systemd / Task Scheduler) when always-on durability is required. Both run against the actual local checkout and can read/write the gitignored scratchpad — matching `/janitor`'s workspace-scoped intent. Use **Cloud Routines** only when the janitor is explicitly opting into GitHub-state-only operation against a remote repository, not the user's workspace; Cloud Routines clone the repo fresh per tick and cannot see local state.
+3. Claude Code: default to **Desktop Routines** via `/schedule` when the user can keep the Desktop app open during wake windows, or to the **external scheduler fallback** (`claude -p` triggered by cron / launchd / systemd / Task Scheduler) when always-on durability is required and Agent-SDK billing is acceptable. When the user wants usage-limit resilience without `claude -p` billing and will keep a Claude REPL open, use the **in-session durable cron** (`CronCreate durable:true`) — seat-billed, standing-schedule, survives limit kills where `/loop` does not. All three run against the actual local checkout and can read/write the gitignored scratchpad — matching `/janitor`'s workspace-scoped intent. Use **Cloud Routines** only when the janitor is explicitly opting into GitHub-state-only operation against a remote repository, not the user's workspace; Cloud Routines clone the repo fresh per tick and cannot see local state. Never default to `/loop` for `/janitor` — it is fragile under usage limits (a limit-killed tick ends the whole loop).
 4. GitHub Actions: create or recommend a scheduled workflow only when repository-hosted CI automation is acceptable.
 5. **GitHub Copilot (VS Code)**: `/janitor` and `/smith` are **not supported** — see the Copilot section below before proceeding.
 6. Cursor or Windsurf: install the reusable command/workflow instructions, then require that recurrence be driven by platform UI support or an external scheduler if no native recurring scheduler is available.
@@ -72,7 +72,8 @@ Claude Code Routines are the first-party scheduling primitive. Two variants shar
 - **Desktop Routines** (`/schedule` → Routines → Local): run locally against the actual workspace checkout. Minimum interval is 1 minute. Default for `/janitor` when the user keeps the Desktop app open during wake windows. Desktop Routines do not fire while the app is closed — if the user needs always-on durability, use the external scheduler fallback instead.
 - **External scheduler plus Claude Code CLI** (cron / launchd / systemd / Task Scheduler driving `claude -p`): durable sibling to Desktop Routines — fires regardless of Desktop app state, against the same local checkout. Default for `/janitor` when the user wants always-on durability without keeping the Desktop app open, or when first-party Routines are unavailable.
 - **Cloud Routines** (`/schedule` → Routines → Cloud): run on Anthropic-managed infrastructure, clone the selected repository at the start of each run, and survive without the user's machine. Minimum interval is **1 hour**; cron expressions evaluating to a sub-hour cadence are rejected at routine-creation time. Opt-in for `/janitor` when the loop is explicitly GitHub-state-only — no workspace, no local scratchpad, no rolling metric history beyond what survives in issue / PR bodies.
-- **`/loop`**: session-scoped polling inside the current conversation; stops when the session ends. Not suitable for unattended or non-office-hour work.
+- **In-session durable cron** (`CronCreate` with `durable: true`): a standing schedule that fires inside the running interactive session against the local checkout. Seat-billed — it never spawns `claude -p`, so it does not draw on the Agent-SDK credit pool the way the external scheduler does. Standing-schedule, so it is **usage-limit resilient** (see *meta/loop-core* → *Usage-Limit Resilience*) where `/loop` is not. Choose this when the user wants limit-resilient durability without `claude -p` billing and is willing to keep a Claude REPL open. Details below.
+- **`/loop`**: session-scoped self-rescheduling polling inside the current conversation. **Fragile under usage limits** — it re-arms the next tick at the end of each tick, so a tick that dies on a seat/token limit stops the whole loop, not just that tick (*meta/loop-core* → *Usage-Limit Resilience*). Stops when the session ends. Office-hours / attended use only; never present it as unattended-durable.
 
 `/smith`'s **build phase** requires a durable runner (mode 1), so Cloud Routines (disposable) cannot host it — use Desktop Routines or the external scheduler. Cloud remains fine for `/janitor` and for `/smith`'s audit phase. See `meta/smith` → *Build Phase Durability*.
 
@@ -95,6 +96,24 @@ Default Claude Code path when the user wants durability without the Desktop-app-
 Same durability characteristics as Desktop Routines (mode 1) — runs against the actual local checkout, can read/write the scratchpad on disk. Difference is the lifecycle: external scheduler fires regardless of whether the Claude Code Desktop app is running.
 
 Claude Code hooks are useful for lifecycle behavior inside a tick (Setup `maintenance` matcher, Stop hooks), but hooks are not the source of recurrence.
+
+### In-session durable cron (limit-resilient, seat-billed)
+
+Use when the user wants a loop that survives a usage-limit hit (and Claude restarts) **without** the Agent-SDK billing of the external `claude -p` scheduler, and is willing to keep a Claude REPL open. This is the standing-schedule answer to *meta/loop-core* → *Usage-Limit Resilience*: unlike `/loop`, the schedule is persisted data, so a tick that dies mid-run on a seat/token limit cannot end the loop — the next scheduled fire still occurs, and the first fire after the seat resets succeeds with no manual restart.
+
+Durability is mode 1 (durable): ticks fire against the actual local checkout and read/write the gitignored `.janitor/<slug>.md` scratchpad on disk.
+
+1. Resolve target, topics, interval, and scratchpad slug from the core janitor Inputs section.
+2. Compose a self-contained janitor prompt. Each fire is a fresh session, so the prompt must inline the target, topics or default review rubric, the full janitor loop (including the step 2 scratchpad read), audit-agent contract, main-agent contract, state/non-overlap rule, durability mode (mode 1), safety boundaries, verification expectations, and `/gh` delivery rule — same inlining requirement as Desktop Routines.
+3. Create the schedule with `CronCreate`, `durable: true`, `recurring: true`, and a cron expression matching the requested cadence (use an off-:00/:30 minute per the tool's guidance). Persists to `.claude/scheduled_tasks.json`.
+4. Trigger one immediate tick so the user sees a first run.
+5. Report the effective cadence in human terms.
+
+Constraints to state to the user up front:
+
+- Fires only while a Claude REPL is **idle** (not mid-query) and **running** — it does not fire while Claude is fully closed. For always-on-while-closed durability the user must accept the external `claude -p` scheduler (and its Agent-SDK billing) instead.
+- `recurring` cron jobs **auto-expire after 7 days**, firing one final time then deleting. For a perpetual janitor, re-create on expiry or keep a lightweight weekly refresh.
+- Non-overlap is not platform-guaranteed; rely on the target-scoped state check (loop step 3) at every wake, as with Cloud Routines.
 
 ### Cloud Routines (GitHub-state-only opt-in)
 
