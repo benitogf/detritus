@@ -27,7 +27,7 @@ This skill replaces Claude Code's in-session TodoWrite list with the cross-sessi
 - `<id>` OR fuzzy text — render just the matching item with full detail in chat (text, group, scope, priority rationale, status, id, ... — internal fields are visible because the user explicitly asked for the record).
 - `--tier P0` / `--tier P1` / etc. — filter to a single tier (internal flag; tier is hidden from output but still usable for filtering).
 - `--group <name>` — filter to a single group.
-- `--all` — include `deferred` and `done`-but-not-yet-archived items in the TodoWrite render.
+- `--all` — include `deferred` and `failed` items in the TodoWrite render (normally deferred items are hidden until due).
 
 ## Phase 1: Read the store — fresh, every time
 
@@ -76,7 +76,6 @@ Only `title` is rendered. `body` (the optional longer description) is reserved f
 | Same format with the leading verb of the item title gerundized when easy (e.g. `[DETRITUS] Implement...` → `[DETRITUS] Implementing...`) | `activeForm` |
 | `status: open` | `"pending"` |
 | `status: in-progress` | `"in_progress"` |
-| `status: done` (only if `--all` was passed) | `"completed"` |
 | `status: deferred` | omitted from the call |
 | `status: failed` | `"pending"` with `content` prefixed by `⚠ FAILED:` |
 
@@ -192,7 +191,7 @@ Any `/todo` invocation against this JSON state MUST produce exactly this TodoWri
 
 ## Phase 5: Single-id / fuzzy-text detail mode
 
-If the user passed `<id>` (e.g. `t_003`) OR a fuzzy text string (e.g. `/todo view "janitor write"`), resolve to the matching item and render its **full record** in chat (not via TodoWrite — this is a debug query, not a list view). Show: id, group, title, body (if present), status, priority {score, tier, rationale}, scope {repos, paths, evidence, concreteness, knownBlockers}, deps, tags, addedAt, editedAt, claimedAt, completedAt, deferredUntil, forkSession.
+If the user passed `<id>` (e.g. `t_003`) OR a fuzzy text string (e.g. `/todo view "janitor write"`), resolve to the matching item and render its **full record** in chat (not via TodoWrite — this is a debug query, not a list view). Show: id, group, title, body (if present), status, priority {score, tier, rationale}, scope {repos, paths, evidence, concreteness, knownBlockers}, deps, tags, addedAt, editedAt, claimedAt, deferredUntil, forkSession.
 
 The `body` field is shown in this detail mode but never in the TodoWrite list view — that's the whole point of the title/body split.
 
@@ -239,8 +238,8 @@ No matching todos. (TodoWrite list cleared.)
 - TodoWrite content shows `[<UPPERCASE-PREFIX>] <item text>` per row (or bare text for ungrouped items). No synthetic header rows, no ids, no scores, no tiers per `meta/todo` convention #11. No markdown syntax (bold, italics, links) — Claude Code's TodoWrite UI renders content as plain text and would show the literal markers.
 - Always call TodoWrite, even when the active list is empty (an empty TodoWrite call clears stale items from the IDE).
 - **The compact prefix is the only place the group appears in the IDE view.** The full group title is reserved for detail-mode (`/todo view <id>`) and for `/todo view --group <full title>` filter input.
-- Don't reveal `archive` items unless `--all` is passed AND the user has explicitly asked for history.
+- There is no `archive` to reveal — completed items are evicted from the store on `/todo-done`, so history lives in the cited PR/issue/git, not here.
 - Don't surface deferred items whose `deferredUntil` is in the future without `--all` — the whole point of defer is to drop the item from view.
-- If the file's `version` doesn't match the skill's expected version (`version: 1`), stop and surface the mismatch to the user — don't render best-effort. A future schema bump would ship its own migration logic; in the meantime, the only valid value is 1.
+- If the file's `version` doesn't match the skill's expected version (`version: 2`), stop and surface the mismatch to the user — don't render best-effort. A v1 store (has an `archive` array or `done` items) should be migrated by the next mutation per `meta/todo` #2 before a clean render.
 - The TodoWrite render REPLACES whatever was previously in the IDE's todo list. Users invoking /todo-view should understand this is a "switch to persistent-todo view" action.
 - Detail-mode (single-id / fuzzy-match) is the one place internal fields surface — the user explicitly asked for the record.

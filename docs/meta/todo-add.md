@@ -29,7 +29,7 @@ If text is missing, ask the user one concise question and stop.
 ## Phase 1: Read the store
 
 - Resolve `~/.claude/projects/<slug>/todos.json` (Phase 0 of `meta/todo`).
-- If missing, lazily create with `{ version: 1, epoch: 0, items: [], archive: [] }` and continue (schema defined in `meta/todo` convention #2).
+- If missing, lazily create with `{ version: 2, epoch: 0, items: [] }` and continue (schema defined in `meta/todo` convention #2).
 - Capture `epoch`.
 
 ## Phase 2: Infer scope + priority (Haiku sub-agent)
@@ -104,7 +104,6 @@ If the user passed an explicit tier hint (`--p0` etc.), honor it but let the sub
   "priority": <from Phase 2>,
   "scope": <from Phase 2 — includes evidence array>,
   "addedAt": "<ISO timestamp>",
-  "completedAt": null,
   "deferredUntil": null,
   "forkSession": null,
   "deps": [],
@@ -141,4 +140,4 @@ If `group` was null (no clear cluster), append: *"No group inferred — item is 
   - On any match, surface the candidates via `AskUserQuestion` by **positional index** (`1.`, `2.`, ...) — never by internal id, per convention #11 — and ask whether this is a new item, a refinement of an existing one (which should be a `/todo-edit` instead), or a merge candidate (append evidence/body to the existing).
 - Don't fabricate scope. If the sub-agent can't infer a concrete scope from the text + recent conversation, the item gets `concreteness: ambiguous` — don't guess paths to look concrete.
 - Don't ignore the epoch-check on write. Always re-read before write; restart on epoch mismatch.
-- Don't write to the archive section. Items always land in `items` first.
+- New items always land in `items` with `status: open`. There is no archive (completed items are evicted by `/todo-done`, not stored).

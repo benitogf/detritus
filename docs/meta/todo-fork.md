@@ -61,7 +61,7 @@ If **any** item in a candidate group fails **either** gate, the group is rejecte
 ## Phase 1: Read + scan
 
 - Read the store.
-- Filter to active open items (exclude `in-progress`, `deferred`, `done`, `failed`).
+- Filter to active open items (exclude `in-progress`, `deferred`, `failed`). There is no `done` state — completed items are evicted from the store.
 - Capture `epoch`.
 
 ## Phase 2: Sonnet sub-agent identifies groups

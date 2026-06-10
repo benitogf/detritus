@@ -34,7 +34,7 @@ Same as `/todo-audit` Phase 1.
 Pass to the sub-agent:
 - Full active items list with current priority and scope.
 - Last 20–40 conversation turns (or a summary if longer) — broader context than `/todo-audit` since idle-mode wants strategic ranking, not just pivot-reactive.
-- The user's recent completed items (last 5–10 from `archive`) so the sub-agent can infer current focus areas.
+- The user's recent activity from the conversation + recent git/PR context so the sub-agent can infer current focus areas (completed items aren't retained in the store — they're evicted on `/todo-done`).
 - Any `/janitor` scratchpad hazards if `.janitor/` exists.
 
 The sub-agent returns a re-ranking plus a `contentious` array:

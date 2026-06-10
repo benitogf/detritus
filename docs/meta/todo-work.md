@@ -61,7 +61,7 @@ Apply these steps in order to the resolved item. If a step blocks, stop and repo
 
 2. **Sync the branch.** `git checkout <default-branch>` and `git pull --ff-only` so work starts from current head. New branch is cut from the fetched default, never from the current working branch. Branch name derived from the item's `title` (kebab-case, scoped to the change shape — `fix/`, `feat/`, `refactor/`, `docs/`, `chore/` prefix per /gh-issue-work convention).
 
-3. **Verify the issue is real and actionable.** Write a test (or tests) that *fail* against the current code and replicate the reported behavior. Use the item's `scope.evidence` file:line refs as the starting point — drop a breakpoint or failing assertion at the cited location. If the test cannot be made to fail, the item may be stale — stop, report, and offer to mark it `done` (with a "stale-on-arrival" tag) without opening a PR. Don't silently advance on a stale item.
+3. **Verify the issue is real and actionable.** Write a test (or tests) that *fail* against the current code and replicate the reported behavior. Use the item's `scope.evidence` file:line refs as the starting point — drop a breakpoint or failing assertion at the cited location. If the test cannot be made to fail, the item may be stale — stop, report, and offer to evict it via `/todo-done` (no PR) or downgrade it via `/todo-edit`. Don't silently advance on a stale item.
 
    - For async or subscription code, follow `testing/go-backend-async` patterns: precise `wg.Add(N)`, callbacks only update state, no sleeps, no polling.
    - Tests must be fast and low-resource. No long sleeps, no heavyweight load generators, no high goroutine counts unless essential.
@@ -76,7 +76,7 @@ Apply these steps in order to the resolved item. If a step blocks, stop and repo
 
 8. **Open issue + PR via `/gh`**. Let the router dispatch to `gh-issue-create` then `gh-issue-work`. Issue body is product-focused (no code identifiers); PR body describes the final state. The `plane` label is applied automatically by `gh-issue-create`. **Skip this step if `--no-pr` was passed.**
 
-9. **Mark the item done via `/todo-done <id>`.** This is the protocol's terminal step. The item's status flips to `done`, `completedAt` is stamped, the forkSession lock (if any) is cleared, and the next-up survivors are re-ranked per `/todo-done` Phase 3.
+9. **Mark the item done via `/todo-done <id>`.** This is the protocol's terminal step. The item is removed from the store (eviction — no retained `done` status), the forkSession lock (if any) is released with it, and the next-up survivors are re-ranked per `/todo-done` Phase 3.
 
 10. **Hand back to the user.** Stop there. The user reviews the PR and either gives feedback or says "next".
 
@@ -88,7 +88,7 @@ If step 3 cannot produce a failing test, the item was a false positive or has al
 
 - What was tried (the candidate failing-test scenarios).
 - Current code state at the cited `scope.evidence` refs, showing the issue is not present.
-- Recommendation: mark the item `done` with a `stale-on-arrival` tag (via `/todo-done` + `/todo-edit --tag stale-on-arrival`), or downgrade priority via `/todo-edit`.
+- Recommendation: evict it via `/todo-done` (it won't open a PR), or — if you want it to stay visible — downgrade its priority via `/todo-edit`. (A `stale-on-arrival` tag is pointless now: `/todo-done` removes the item, so the tag wouldn't persist.)
 
 Wait for explicit user confirmation before any status mutation. No silent done-flips.
 

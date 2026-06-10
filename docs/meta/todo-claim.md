@@ -29,7 +29,7 @@ Set `status: in-progress` and stamp `forkSession` so the parent conversation (an
 - Read the store.
 - Find the item.
 - If the item is already `in-progress` with a different `forkSession`, refuse the claim and surface the existing lock: *"t_005 is claimed by fork-2a — cannot claim from this session."* The user can `/todo claim t_005 --release` from the original fork (or override with `--force` if it's clear the original session is dead).
-- If the item is `done` or `failed`, refuse — the item is settled.
+- If the item is `failed`, refuse — the item is settled. (A completed item can't be claimed: `/todo-done` evicts it from the store, so it no longer exists to claim.)
 - If the item is `deferred`, ask the user to confirm — claiming a deferred item un-defers it.
 
 ## Phase 2: Derive the fork session id
@@ -68,7 +68,7 @@ Released t_005 (was fork-1). Item back to open status; available for re-ranking.
 
 A claimed item leaves the fork lifecycle in one of three ways:
 
-1. **Completed** — fork runs `/todo-done t_005`. Status → `done`, `forkSession` cleared, `completedAt` stamped.
+1. **Completed** — fork runs `/todo-done t_005`. The item is removed from the store (eviction, not a retained `done` status); its `forkSession` lock goes with it.
 2. **Released** — fork runs `/todo-claim t_005 --release`. Status → `open`, `forkSession` cleared. The work isn't done; the item is back in the active pool.
 3. **Failed** — fork detected it can't complete the work (e.g., scope was wrong, blocker discovered). Current path: run `/todo-claim --release` so the item returns to `open` status, and add a `failed-once` tag via `/todo-edit --tag failed-once` to capture the prior attempt. The item is back in the active pool for re-ranking. A first-class `failed` status with a `⚠ FAILED:` render in /todo-view is documented in the schema but lacks a direct user-facing setter — a future `--status` flag on `/todo-edit` or `/todo-done` would close this gap.
 

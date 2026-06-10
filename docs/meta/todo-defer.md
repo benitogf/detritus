@@ -44,7 +44,7 @@ If duration is missing, ask. If id is missing, near-match nudge.
 
 - Read the store.
 - Resolve `<id>` per `/todo-done` Phase 1: accept internal id OR fuzzy substring match; positional-index disambiguation.
-- If the item is `done`, `failed`, or already deferred with a future `deferredUntil`, surface the current state and ask whether to overwrite the deferral or cancel.
+- If the item is `failed`, or already deferred with a future `deferredUntil`, surface the current state and ask whether to overwrite the deferral or cancel. (There is no `done` state to check — completed items are evicted from the store.)
 - If the item has `status: in-progress` with `forkSession` set, refuse the defer — *"Item is in-flight in a fork; release it from the fork first, or complete it via /todo done."*
 
 ## Phase 2: Parse the duration
