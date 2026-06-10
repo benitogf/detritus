@@ -50,7 +50,7 @@ If the input is genuinely ambiguous (no clear items can be extracted), the skill
 
 - Resolve `~/.claude/projects/<slug>/todos.json` (Phase 0 of `meta/todo`).
 - Invoke the `Read` tool to read the file fresh per `meta/todo` Phase 0's always-re-read-fresh rule.
-- If the file is missing, lazily create with `{ version: 1, epoch: 0, items: [], archive: [] }` and continue.
+- If the file is missing, lazily create with `{ version: 2, epoch: 0, items: [] }` and continue.
 
 ## Phase 2: Sub-agent parses free-form input
 

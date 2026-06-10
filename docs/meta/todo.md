@@ -39,7 +39,7 @@ One entry point for the `/todo-*` skill family. Reads the conversation + any arg
 These apply to every sub-skill this router dispatches to.
 
 1. **Single canonical store: `~/.claude/projects/<slug>/todos.json`.** `<slug>` is the project slug the memory system uses at the same location (e.g. `c--ClintonStuff-github` mirrors the cwd path). One file per project. The JSON is the source of truth; any markdown view is derived.
-2. **Schema**: `{ version: 1, epoch: <int>, updatedAt: <ISO>, items: [...], archive: [...] }`. Each item: `{ id, title, body?, group, status, priority: {score, tier, rationale}, scope: {repos, paths, evidence?, concreteness, knownBlockers}, addedAt, editedAt?, claimedAt?, completedAt, deferredUntil, forkSession, deps, tags, source }`.
+2. **Schema**: `{ version: 2, epoch: <int>, updatedAt: <ISO>, items: [...] }` — there is **no `archive`** array, and items carry no `completedAt`: completed items are *removed* from the store, not retained (see #4). Each item: `{ id, title, body?, group, status, priority: {score, tier, rationale}, scope: {repos, paths, evidence?, concreteness, knownBlockers}, addedAt, editedAt?, claimedAt?, deferredUntil, forkSession, deps, tags, source }`.
 
    **Field semantics**:
    - `title` — short, imperative, one-line summary of the work. Used as the TodoWrite content text. Required.
@@ -49,11 +49,13 @@ These apply to every sub-skill this router dispatches to.
    - `editedAt` (optional) — stamped by /todo-edit on first edit.
    - `claimedAt` (optional) — stamped by /todo-claim when the item goes in-progress.
 
-   The `version` field is a forward-compatibility hook — if a future PR changes the schema shape, that PR bumps the version and ships its own migration logic. There is no migration in this PR; the schema ships at version 1.
+   The `version` field is a forward-compatibility hook — a PR that changes the schema shape bumps the version and ships its own migration logic. The schema ships at **version 2**. The v1→v2 migration runs lazily on the first mutation of an older store: drop the top-level `archive` array, remove every item with `status: done`, strip the now-unused `completedAt` field, and set `version: 2`. A v1 store is detected by the presence of an `archive` key or any `done` item.
 
    See the per-skill docs for which fields each operation touches.
 3. **Atomic, epoch-checked writes.** Every mutating sub-skill reads the file, captures `epoch`, computes the mutation, and writes only if `epoch` is unchanged. Mismatched epoch → another session wrote first → re-read + retry. Prevents two parallel sessions clobbering each other.
-4. **Status values**: `open`, `in-progress`, `done`, `failed`, `deferred`. Lifecycle: open → (claimed by /todo-claim) in-progress → (/todo-done) done → (/todo-clear) moved to archive. `failed` is set when a forked session reports it couldn't complete its assignment. `deferred` is set by /todo-defer with a `deferredUntil` date.
+
+   **Keep the store small; never shell out to write it.** Because completed items are removed (#4, #2), the active store stays small — typically a few dozen items at most. The delegated writer MUST mutate it with the `Write`/`Edit` tools only; it must NOT shell out to a script (`python`, `jq`, `sed`, and especially `PowerShell`) to patch the JSON. A small file is exactly why a wholesale `Write` is reliable. If the file is large enough that scripting the edit feels necessary, that is the signal the store has grown wrong (stale items never evicted) — fix that, don't bypass the tool sandbox. (The one sanctioned exception is a one-time v1→v2 migration of an oversized legacy store, where a `python` filter may be used to produce the small v2 result.)
+4. **Status values**: `open`, `in-progress`, `failed`, `deferred`. Lifecycle: open → (claimed by /todo-claim) in-progress → (/todo-done) **removed from the store**. `done` is a terminal *action*, not a persisted status — `/todo-done` deletes the item's row; the store never accumulates completed work (its record lives in the PR/issue/git the item cited). This keeps the store bounded to the active working set. `failed` is set when a forked session reports it couldn't complete its assignment; `deferred` is set by /todo-defer with a `deferredUntil` date. Both `failed` and `deferred` persist in the store and are pruned manually via `/todo-clear`.
 5. **Priority always carries rationale.** Every item has `priority.score` (0–100), `priority.tier` (P0/P1/P2/P3), and `priority.rationale` (one sentence). Sub-agents that re-rank surface the rationale so the user can override.
 6. **Scope is persistent, not lazy.** Every item carries `scope.concreteness` (`concrete`, `ambiguous`, or `exploratory`) along with its target repos and paths. /todo-add infers and stores; /todo-fork reads stored scope to gate fork eligibility. An item with `concreteness != "concrete"` is automatically ineligible for forking.
 7. **Sub-agent model tiering.** Per convention #13, every `/todo-*` skill (mutations AND reads) delegates its I/O + reasoning work to a sub-agent. The model tier varies by skill: routine mutations and read-only ops (add, done, edit, defer, claim, clear, view, file) use Haiku — these are mechanical schema/render work. Reasoning passes (audit, idle, fork-gating, import-dedup) use Sonnet — these need genuine LLM judgment.
@@ -164,7 +166,7 @@ A SessionStart hook that auto-renders on session open was considered and intenti
 ## Phase 0: Locate the store
 
 - Derive the project slug from cwd (same logic the memory system uses).
-- Resolve `~/.claude/projects/<slug>/todos.json`. If the file doesn't exist yet, the router lazily creates it with `{ version: 1, epoch: 0, items: [], archive: [] }` on the first mutation. Read-only ops on a missing file return "no todos yet" without creating it.
+- Resolve `~/.claude/projects/<slug>/todos.json`. If the file doesn't exist yet, the router lazily creates it with `{ version: 2, epoch: 0, items: [] }` on the first mutation. Read-only ops on a missing file return "no todos yet" without creating it. If an existing store is version 1 (has an `archive` array or `done` items), the first mutation migrates it to version 2 per convention #2.
 - Honor `~/.claude/projects/<slug>/todos.json` over any project-local `.claude/todos.json`. If both exist, prefer the user-scoped store and surface a one-line note to the user.
 
 ### Always re-read fresh — never use cached context
@@ -192,7 +194,7 @@ Apply the first matching rule:
 | `/todo idle` OR "I'm between tasks" / "take a breather" / "let's plan" | `/todo-idle` |
 | `/todo edit <id> <text>` OR "change t_003 to..." / "rename t_001..." | `/todo-edit` |
 | `/todo defer <id> <when>` OR "snooze t_002 tomorrow" / "later t_004" | `/todo-defer` |
-| `/todo clear` OR "archive done" / "clean up completed" | `/todo-clear` |
+| `/todo clear` OR "prune failed/deferred" / "drop stale items" | `/todo-clear` |
 | `/todo file` OR "where is the todo file" / "show the path" | `/todo-file` |
 | `/todo fork` OR "fork these in parallel" / "parallelize my todos" | `/todo-fork` |
 | `/todo claim <id>` OR (inside a forked conversation) "I'm working on t_005" | `/todo-claim` |

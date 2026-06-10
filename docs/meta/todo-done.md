@@ -1,5 +1,5 @@
 ---
-description: Mark a todo as done. Sub-agent re-prioritizes survivors so the next-up item reflects what's actually next.
+description: Mark a todo done — removes it from the active store (no archive). Sub-agent re-prioritizes survivors so the next-up item reflects what's actually next.
 category: meta
 triggers:
   - todo-done
@@ -17,7 +17,7 @@ related:
 
 _Follows `meta/todo` convention #13: main session validates input + calls TodoWrite + prints the confirmation line; the phases below describe the work the delegated sub-agent performs._
 
-Set an item's status to `done`, stamp `completedAt`, and let a Haiku sub-agent quickly re-rank the surviving open items.
+Remove the completed item from the store — "done" is eviction, not a retained status — and let a Haiku sub-agent quickly re-rank the surviving open items. The store stays bounded to the active working set; completion history lives in the PR/issue/git the item cited.
 
 ## Inputs
 
@@ -36,14 +36,14 @@ Per `meta/todo` convention #11, when fuzzy match is ambiguous list candidates by
   3. If 0 matches, print "no matching item" and stop.
   4. If 1 match, proceed.
   5. If >1 matches, list candidates by positional index (`1. <text>`, `2. <text>`, ...) — never showing internal ids — and ask the user to pick a number via `AskUserQuestion`.
-- If the item is already `done`, surface a one-line note ("Already done: <text>.") and stop.
+- (No "already done" guard is needed: completed items are removed from the store, so any resolved match is still active.)
 - If the item is `in-progress` with `forkSession` set, surface a one-line warning: *"This item is claimed by a fork — confirm you want to mark it done from this session and release the fork."* and ask the user to confirm. Don't reveal the fork id in the user-facing message.
 
 ## Phase 2: Mutate
 
-- Set `status: "done"`, `completedAt: <ISO timestamp>`.
-- If the item had `forkSession`, clear it (`forkSession: null`).
-- Capture `epoch` before mutating; epoch-check on write per `meta/todo` convention #3.
+- **Remove the item from `items`.** `/todo-done` evicts it — it does NOT set a `done` status or stamp `completedAt`, and there is no `archive` to move it to.
+- If the item had `forkSession`, the eviction releases the fork (the row is gone).
+- Capture `epoch` before mutating; epoch-check on write per `meta/todo` convention #3. The post-eviction store is small, so rewrite it wholesale with `Write`/`Edit` — never shell out to a script (convention #3).
 
 ## Phase 3: Quick re-rank (Haiku sub-agent)
 
@@ -79,5 +79,5 @@ If no survivors were rescored, just print the first sentence ("Marked done: <tex
 
 - Don't mark done without resolving the input to exactly one item. Internal id and fuzzy text both resolve; on multi-match, surface candidates by positional index per `meta/todo` convention #11 and require the user to pick before mutating. Never proceed on an ambiguous match.
 - Don't auto-release a forked claim silently. Always confirm with the user when the item being marked done has `forkSession` set.
-- Don't move the item to `archive` on `done`. Archiving is `/todo-clear`'s job; this skill only changes status.
+- Done means eviction, not archival. `/todo-done` removes the item outright — there is no `archive` and no retained `done` status. Completion history lives in the cited PR/issue/git, not the store.
 - Don't skip the rescore pass. Even if no items get changed, the sub-agent's check is what gives the user confidence the next-up item is current.

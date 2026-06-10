@@ -72,8 +72,8 @@ Instead:
 3. After `/todo-import` returns, ask the user via `AskUserQuestion` what to do with the parent item:
    - **Keep as rollup** (default): leave the parent's title + body + priority intact; it stays as the high-level goal alongside the new sub-tasks.
    - **Lower priority** to sort below the sub-tasks (parent becomes a context note).
-   - **Mark done** since it's been decomposed.
-   - **Drop** (archive immediately).
+   - **Mark done** (evict via `/todo-done`) since it's been decomposed.
+   - **Drop** (delete it outright — abandon rather than complete).
 4. Apply the user's choice as a normal edit on the parent.
 
 **Forbidden**: writing a `steps`, `breakdown`, `subtasks`, or any custom array field on the parent item. The schema in `meta/todo` is the only one; any extension fields are out-of-spec and `/todo-audit` will surface them as schema violations to be migrated to individual items.

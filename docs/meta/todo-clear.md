@@ -1,61 +1,59 @@
 ---
-description: Archive completed items from the active todo list. Items move from `items` to `archive`; nothing is deleted.
+description: Prune failed and deferred items from the active todo list. Completed items already auto-evict on /todo-done; this removes the non-active states you no longer want.
 category: meta
 triggers:
   - todo-clear
-  - clear todos
-  - archive completed
+  - prune todos
+  - drop failed
   - clean up todos
-when: User wants the active list trimmed of done items without losing history.
+when: User wants the active list trimmed of failed/deferred items they no longer intend to act on.
 related:
   - meta/todo
   - meta/todo-done
+  - meta/todo-defer
 ---
 
-# /todo-clear — Archive Completed Items
+# /todo-clear — Prune Failed / Deferred Items
 
 _Follows `meta/todo` convention #13: main session validates input + calls TodoWrite + prints the confirmation line; the phases below describe the work the delegated sub-agent performs._
 
-Move items with `status: done` from `items` to `archive`. Active list stays focused; history stays intact for later inspection.
+Remove items the user has given up on. There is no archive, and `done` items are already evicted by `/todo-done` (see `meta/todo` #4), so this skill exists only to prune the lingering non-active states — `failed` and, on request, `deferred`.
 
 ## Inputs
 
-- `/todo clear` — archive all `done` items. Default.
-- `/todo clear --before <duration>` — only archive items completed more than `<duration>` ago (uses the same relative-duration parser as `/todo-defer`: `+7d`, `+1w`, etc.). Useful if you want to keep recently-completed items visible for context.
-- `/todo clear --failed` — also archive items with `status: failed`. Default excludes failed items because the user usually wants them visible for retry.
+- `/todo clear` — remove all `failed` items. Default (`failed` = a fork reported it couldn't finish; clearing means "I'm not retrying it").
+- `/todo clear --deferred` — also remove `deferred` items (snoozed work you've decided to drop).
+- `/todo clear --before <duration>` — only remove matching items older than `<duration>` (same relative-duration parser as `/todo-defer`: `+7d`, `+1w`, etc.), keyed off `deferredUntil` for deferred items and `editedAt`/`addedAt` for failed ones.
+
+`/todo clear` never touches `open` or `in-progress` items — those are the active working set.
 
 ## Phase 1: Read
 
 - Read the store.
-- Identify items to archive based on flags.
+- Identify items to remove based on flags.
 
 ## Phase 2: Confirm if non-trivial
 
-If more than 10 items would be archived in one pass, surface the count and ask via `AskUserQuestion` whether to proceed. Otherwise proceed silently.
+If more than 10 items would be removed in one pass, surface the count and ask via `AskUserQuestion` whether to proceed. Otherwise proceed silently.
 
 ## Phase 3: Mutate
 
 - Capture `epoch`.
-- For each item to archive: move from `items` to `archive`, preserving all fields including `completedAt`.
-- Bump `epoch`, update `updatedAt`, write atomically.
+- Delete each matching item from `items` (removal — there is no archive).
+- Bump `epoch`, update `updatedAt`, write atomically. The store is small, so rewrite it wholesale with `Write`/`Edit` — never shell out to a script (convention #3).
 
 ## Phase 3b: TodoWrite sync
 
-Per `meta/todo` convention #10, call `TodoWrite` with the current open + in-progress items (archived items disappear). Keeps the IDE UI consistent with the JSON.
+Per `meta/todo` convention #10, call `TodoWrite` with the current open + in-progress items (the pruned items disappear). Keeps the IDE UI consistent with the JSON.
 
 ## Phase 4: Report
 
 ```
-Archived 4 done items. Active list now has 11 open + 2 in-progress items.
+Pruned 3 failed items. Active list now has 11 open + 2 in-progress items.
 ```
-
-## Restoring from archive
-
-Not supported. The `archive` array is read-only. To "restore" an archived item, use `/todo-add` with the same text — it'll get a new id and a fresh priority.
 
 ## Guardrails
 
-- Never delete items. `archive` is a move, not a drop.
-- Don't archive `in-progress` items even if their `forkSession` is null — `in-progress` means actively claimed, not done.
-- Don't archive deferred items. Deferral is a temporary state; archiving would lose the deferral context.
-- Confirmation gate at >10 items is a soft warning, not a hard block. A future `--yes` flag could skip the gate if the volume of completed items makes the confirmation friction repetitive.
+- Removal is permanent. There is no archive to restore from — to bring an item back, `/todo-add` it again (new id, fresh priority). The >10-item confirmation gate keeps a bulk prune from being a surprise.
+- Don't remove `open` or `in-progress` items. `/todo-clear` only prunes `failed` (and, with `--deferred`, `deferred`). Active work is never cleared.
+- `done` items never reach this skill — `/todo-done` already evicted them. If you find `done` items in a store, it's an un-migrated v1 store; the next mutation's v1→v2 migration removes them (see `meta/todo` #2).
