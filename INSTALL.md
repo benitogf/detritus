@@ -26,6 +26,14 @@ detritus --setup
 
 `detritus --setup` configures detected assistant apps and editors.
 
+## Add The Codex Plugin Marketplace
+
+For Codex plugin workflows, add the Detritus plugin marketplace/source:
+
+```bash
+codex plugin marketplace add benitogf/detritus
+```
+
 ## Install From A Downloaded Binary
 
 Download a binary from the
