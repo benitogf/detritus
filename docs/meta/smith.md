@@ -27,6 +27,12 @@ Drive a feature from a fresh `/plan` conversation through to a merged PR, then k
 
 Shared mechanics (scratchpad layout, durability rule, cadence guideline, skip-streak guardrail, mid-loop pivot, `/gh` delivery, shared main/audit-agent rules) live in `meta/loop-core` and are referenced rather than restated here. This doc owns `/smith`'s `/plan` pass-through, feature-spec scratchpad sections, build phase contract, build-to-audit transition, audit phase scope, and `/smith`-specific safety boundaries.
 
+> ## ⛔ The loop must never stall
+>
+> `/smith` is autonomous-to-done. The single most common — and most damaging — failure is **ending a turn with a status report and no live trigger for the next tick**. The loop then sits dead until the user pokes it, which defeats the entire command. A status report is *not* progress; only a committed delta plus a guaranteed next tick is.
+>
+> The only legitimate places to hand control back to the user are: **(a)** the build-to-audit transition (PR opened, awaiting merge), **(b)** a hard blocker the loop cannot resolve within its authority (surface it immediately — do not sit idle), or **(c)** an explicit user halt. **Anywhere else, the tick MUST end by guaranteeing the next tick fires** — see *Initial /plan Pass-Through* step 5 and *Self-continuation* below. If you catch yourself writing "I'll continue next" without having armed a trigger, you have already stalled.
+
 ## Inputs
 
 Free-form feature description, plus optional platform / interval hints. `/smith` reads the wording — no setup-time mode selection.
@@ -51,10 +57,19 @@ The first invocation of `/smith` does **not** schedule the loop. It dispatches t
 2. The user answers `/plan`'s questions. The conversation iterates until `/plan` has a settled implementation plan with concrete steps and no open questions.
 3. The user explicitly approves (`yes go`, `proceed`, `implement`, etc.) — this is `/plan`'s standard pre-implementation gate.
 4. `/smith` **captures the settled state**: it reads the latest Plan section from `/plan`'s output, lists each step as an acceptance item in the scratchpad, copies the user's relevant constraints verbatim into the scratchpad's *User-stated rules*, and notes any risks from `/plan`'s Insights into the scratchpad's *Hazards / Deferred*.
-5. `/smith` then loads the platform adapter (`meta/janitor-platforms`) and schedules the recurring loop. Cadence handling is the same as `/janitor`; durability is **not** — the build phase requires a durable runner (see *Build Phase Durability* below).
+5. `/smith` then loads the platform adapter (`meta/janitor-platforms`) and schedules the recurring loop. Cadence handling is the same as `/janitor`; durability is **not** — the build phase requires a durable runner (see *Build Phase Durability* below). **A live trigger must actually exist before the first report.** Declaring "I'll be the in-session runner" is *not* a schedule: if no platform scheduler is created, the agent itself owns firing the next tick (see *Self-continuation* below). Skipping this is the canonical stall — one tick runs, a report is emitted, and nothing ever wakes the loop again.
 6. The first scheduled tick begins the build phase.
 
 `/plan` runs only at first invocation. Subsequent scheduled ticks read the captured spec from the scratchpad — no interactive `/plan` inside autonomous ticks, since fresh-session schedulers have no user to converse with.
+
+### Self-continuation (who fires the next tick)
+
+Every tick must end by guaranteeing the next one fires. There are two valid arrangements, and exactly one of them must be true at all times the loop is live:
+
+- **Platform scheduler present** (Desktop/Cloud Routines, an external cron/launchd/systemd job driving `claude -p`, a Codex automation, GitHub Actions): the scheduler fires subsequent ticks. The agent does its tick, updates the scratchpad, and lets the schedule wake it again. This is the default that *Initial /plan Pass-Through* step 5 sets up.
+- **Interactive session with no external scheduler (the agent IS the runner):** the agent must self-arm the next tick before yielding — e.g. call `ScheduleWakeup` with a short delay and a prompt that re-enters the build loop — so work advances without the user typing anything. The on-disk scratchpad plus the pushed branch carry state across the gap (durability mode 1). Maximize work per tick (one self-wake should cover a meaningful, verified, committed delta, not a single line). **Never** end the turn with a report-and-wait; that is the exact stall this section exists to prevent.
+
+In both arrangements the rule is identical: a tick that did not reach the build-to-audit transition, hit a hard blocker, or get explicitly halted MUST leave a live trigger for the next tick. Report progress *in passing* when useful, never *instead of* continuing. Stop arming the trigger only at the three legitimate hand-back points named in *The loop must never stall*.
 
 If `/plan` reaches a settled state but the user pushes back on scope or risk afterward, that's a mid-loop pivot via chat (`meta/loop-core` → *Shared Main Agent Rules*) — the truthseeker pause applies before rewriting the scratchpad's spec, and the next scheduled tick honors the revised state.
 
