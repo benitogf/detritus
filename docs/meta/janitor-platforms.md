@@ -58,6 +58,7 @@ Use the Codex app automation API.
 - For `5min` and other short intervals, create a heartbeat automation attached to the current thread. This preserves continuity and lets each wake continue pending work.
 - For hourly, daily, or weekly detached maintenance, use a cron automation only when the janitor can run from a durable workspace. Prefer `local` execution against the resolved checkout when the loop needs gitignored `.janitor/` state across cold starts.
 - Use `worktree` execution only for janitors that can fully reconstruct state from GitHub-side branches, issues, PRs, and the automation prompt. Do not assume uncommitted or gitignored `.janitor/` files from a previous worktree tick will exist on the next tick.
+- `/smith`'s **build phase** additionally requires a durable runner (mode 1): `worktree` stays fine for `/janitor` and for `/smith`'s audit phase, but not the build phase. See `meta/smith` → *Build Phase Durability*.
 - Start one run immediately after creating the schedule so the user can confirm it works.
 - The automation prompt must include the full janitor loop contract, target, topics, verification expectations, and concise reporting requirements.
 - The runtime-derived scratchpad slug comes from the invocation root and topic, not from the Codex thread or automation id. Heartbeat and local cron ticks should read and update `.janitor/<slug>.md` in that resolved root; detached worktree ticks must either use a durable local checkout or report that the scratchpad cannot be persisted under the requested execution mode.
@@ -72,6 +73,8 @@ Claude Code Routines are the first-party scheduling primitive. Two variants shar
 - **External scheduler plus Claude Code CLI** (cron / launchd / systemd / Task Scheduler driving `claude -p`): durable sibling to Desktop Routines — fires regardless of Desktop app state, against the same local checkout. Default for `/janitor` when the user wants always-on durability without keeping the Desktop app open, or when first-party Routines are unavailable.
 - **Cloud Routines** (`/schedule` → Routines → Cloud): run on Anthropic-managed infrastructure, clone the selected repository at the start of each run, and survive without the user's machine. Minimum interval is **1 hour**; cron expressions evaluating to a sub-hour cadence are rejected at routine-creation time. Opt-in for `/janitor` when the loop is explicitly GitHub-state-only — no workspace, no local scratchpad, no rolling metric history beyond what survives in issue / PR bodies.
 - **`/loop`**: session-scoped polling inside the current conversation; stops when the session ends. Not suitable for unattended or non-office-hour work.
+
+`/smith`'s **build phase** requires a durable runner (mode 1), so Cloud Routines (disposable) cannot host it — use Desktop Routines or the external scheduler. Cloud remains fine for `/janitor` and for `/smith`'s audit phase. See `meta/smith` → *Build Phase Durability*.
 
 ### Desktop Routines (default for workspace janitors)
 

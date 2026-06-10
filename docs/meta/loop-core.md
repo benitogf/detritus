@@ -90,6 +90,16 @@ Commands may add command-specific State block fields (e.g. /smith adds *Current 
 
 Sub-agents return findings as a per-tick file at `<loop>/<slug>-tick-N.md` in the target root, not inline. This keeps the main thread free of raw audit output while preserving the detail until fold-in. The main agent reads the file, folds the summary into the scratchpad's tick log and State block, then deletes the per-tick file. Keep the file only if the user explicitly asks.
 
+The report is compact and evidence-backed (*Shared Audit Agent Rules*), not a log dump. Default shape — one line each:
+
+- **Finding / status**
+- **Evidence** — per the cite-or-it's-noise rule in *Shared Audit Agent Rules*.
+- **Affected files**
+- **Smallest next delta** — the minimal change to consider next.
+- **Verification** — the command to run, and its result if already run.
+
+Consuming commands may sharpen these fields for their phase. Only this durable summary is folded into the scratchpad; the raw file is deleted unless the user asked to keep it.
+
 ### Durability
 
 The scratchpad pattern assumes `<loop>/<slug>.md` persists on disk between ticks. On runners that meet that assumption — Desktop Routines, an external scheduler running CLI tools, Codex `local` execution, GitHub Actions with workspace caching — the scratchpad carries plan-state across cold starts as designed.
@@ -105,6 +115,15 @@ Per-tick report files inherit the same rule. On disposable runners they must be 
 ### Pruning
 
 The tick log is append-only across the session, but older entries should be summarized into a single "cumulative since tick N" block when the user signals a phase or cluster is closed, OR the log exceeds roughly thirty entries. The thirty is soft guidance — the goal is to keep the scratchpad readable across context resets, not to grow unbounded.
+
+### Compaction checkpoint
+
+The scratchpad and GitHub-side state are the only cross-tick carriers (see *Durable Cross-Tick State*) — chat history is never one. So serialize at every boundary the consuming command names, leaving the State block sufficient for a **fresh agent to resume from scratchpad + GitHub alone**: overwrite the State block and fold any open tick narrative into the log *before* moving on.
+
+- Serialize into the active *Durability* mode's store — the on-disk scratchpad (mode 1) or the issue / PR bodies (mode 2). There is no third store. On disposable runners the boundary collapses to **every wake-end**: serialize before the wake ends, never defer across ticks (this is the same rule *Durability* states for per-tick report files).
+- **Manual context clearing in a live session is allowed only after that serialization** — never before the State block is current. Clearing changes nothing about durability (mode 1 already persists to disk; fresh sessions already restart cold); it only trims live context once the resume point is written. The truthseeker pause (*Shared Main Agent Rules*) still applies before rewriting orientation.
+
+This adds no new persistence mechanism — it is the discipline of using the existing stores as the resume point at known boundaries, so the main thread stays lean between them.
 
 ## Shared Main Agent Rules
 
@@ -125,6 +144,7 @@ These rules apply to every audit sub-agent spawned by a recurring-loop command. 
 - Do not return broad themes without evidence. Every finding cites a file path (and line when applicable), a caller, or a concrete reproduction; "the auth code feels fragile" is noise, not a finding.
 - Do not edit files, stage, commit, push, or open PRs.
 - Do not dump long logs.
+- The main agent is the only loop owner. A sub-agent is a bounded reporter for one wake — it audits, inspects, maps, and reports; it does not make broad scope decisions, drive the loop as a separate owner, or take work the consuming command reserves for the main agent.
 
 ## Skip-Streak Guardrail
 
