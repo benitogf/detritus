@@ -133,7 +133,7 @@ Call shape (Shape B, structured — see `meta/todo-import`):
 }
 ```
 
-One item per plan step. Scope is filled in per step where you can — `/plan`'s analysis already named the files; reuse them. Items inherit the same group title (the plan's topic) so they cluster in `/todo-view`.
+One item per plan step. Scope is filled in per step where you can — `/plan`'s analysis already named the files; reuse them. Items inherit the same group title (the plan's topic) so they cluster in the /todo view.
 
 **Skip the import** if any of these hold:
 - The plan has only one step (just do it; no need to track a singleton).
@@ -142,6 +142,6 @@ One item per plan step. Scope is filled in per step where you can — `/plan`'s 
 
 If `/todo-import` reports duplicates (the plan re-introduces items already tracked), use its dedup confirmation flow — the user picks skip / add anyway / replace per duplicate.
 
-After the import returns, **then** proceed with implementation. Use `/todo-done <id>` after each meaningful chunk so the persistent view and the in-session TodoWrite UI both reflect progress.
+After the import returns, **then** proceed with implementation. Use `/todo done <id>` after each meaningful chunk so the persistent view and the in-session TodoWrite UI both reflect progress.
 
 If `/todo-import` isn't available (older detritus build, no skill installed), fall back silently to implementing without persistence — note in the report that the plan wasn't persisted ("plan-import unavailable on this setup").
