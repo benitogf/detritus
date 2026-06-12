@@ -11,6 +11,7 @@ related:
   - testing/go-backend-mock
   - testing/go-backend-async
   - testing/go-backend-e2e
+  - testing/flaky-check
   - patterns/async-events
 ---
 
@@ -27,6 +28,7 @@ This is the entry point for all testing-related workflows. Use this to find the 
 | Decide what to mock vs run real | `/testing-go-backend-mock` |
 | Synchronize async events with WaitGroup | `/testing-go-backend-async` |
 | Structure comprehensive lifecycle tests | `/testing-go-backend-e2e` |
+| Reproduce & fix a test that fails intermittently | `/testing-flaky-check` |
 
 **Most tests need all three** - mock at boundary, sync with WaitGroup, structure as E2E.
 
@@ -62,6 +64,16 @@ Key principles:
 - Test state transitions in sequence (phases)
 - Verify ordering across state changes
 - Single setup/teardown for full lifecycle
+
+### `/testing-flaky-check` - Flaky Test Detection
+**When:** A test fails intermittently or rarely and you need to reproduce it, capture its diagnostics, and fix the root cause
+
+Key principles:
+- Never discard a failure's output — every batch writes its full log to disk first
+- Run batches **manually, one at a time** — an unattended loop is just a high `-count`
+- Reproduce with the whole suite the way it failed, not a narrowed `-run`
+- A flake often comes from test *interaction*, not the named test in isolation
+- Root-cause from captured evidence before theorizing
 
 ---
 
@@ -126,3 +138,4 @@ func TestComponentE2E(t *testing.T) {
 - `/testing-go-backend-mock` (`testing/go-backend-mock`) - What and how to mock
 - `/testing-go-backend-async` (`testing/go-backend-async`) - WaitGroup synchronization patterns
 - `/testing-go-backend-e2e` (`testing/go-backend-e2e`) - E2E test structure and phases
+- `/testing-flaky-check` (`testing/flaky-check`) - Reproduce and fix intermittent failures
