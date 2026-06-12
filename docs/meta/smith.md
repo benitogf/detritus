@@ -62,6 +62,8 @@ The first invocation of `/smith` does **not** schedule the loop. It dispatches t
 
 `/plan` runs only at first invocation. Subsequent scheduled ticks read the captured spec from the scratchpad — no interactive `/plan` inside autonomous ticks, since fresh-session schedulers have no user to converse with.
 
+The captured spec is the build-phase contract. Treat it as immutable after scheduling unless an explicit pivot revises the scratchpad. Implementation discoveries may update hazards, verification evidence, changed files, and next-tick plans, but they do not quietly rewrite the feature spec or acceptance criteria. If reality proves the spec wrong or incomplete, stop the build delta, record the evidence, and route the change through the pivot path below before continuing.
+
 ### Self-continuation (who fires the next tick)
 
 Every tick must end by guaranteeing the next one fires. There are two valid arrangements, and exactly one of them must be true at all times the loop is live:
@@ -90,9 +92,9 @@ The audit phase, which opens **after** the build-phase PR merges, has no such co
 
 The shared scratchpad spine (current orientation, tick log, state block) is defined in `meta/loop-core`. `/smith` adds these sections above the tick log, in order:
 
-- **Feature spec** — the agreed Plan section from `/plan`, captured verbatim. One paragraph or short list describing what is being built and why.
+- **Feature spec** — the agreed Plan section from `/plan` (or `/vibe`'s readiness handoff), captured verbatim. One paragraph or short list describing what is being built and why. This is immutable during build unless an explicit pivot rewrites it.
 - **User-stated rules** — verbatim constraints from the `/plan` conversation. Quoted, not paraphrased.
-- **Acceptance criteria** — checklist of objectively-verifiable items derived from `/plan`'s steps. Each item: `- [ ] <item description> — <verification: test name, function signature, endpoint shape, etc.>`. Items tick green during the build phase; when all are checked, the phase transitions.
+- **Acceptance criteria** — checklist of objectively-verifiable items derived from `/plan`'s steps or `/vibe`'s settled spec. Each item: `- [ ] <item description> — <verification: test name, function signature, endpoint shape, etc.>`. Items tick green during the build phase; when all are checked, the phase transitions. Do not add, remove, or reinterpret acceptance items during build except through an explicit pivot.
 - **Current phase** — `build` or `audit`. Drives loop behavior at every wake.
 
 The State block (defined in `meta/loop-core`) gets these `/smith`-specific fields added; the generic fields `meta/loop-core`'s *State block* already requires (in-flight work, metric + delta, loop-end progress, skip-streak counter, hazards, next-tick plan, last directive) are not re-listed here:
@@ -178,6 +180,7 @@ Same as `/janitor` → *Audit Agent Contract*. Cross-reference, don't duplicate.
 Shared main-agent rules in `meta/loop-core` → *Shared Main Agent Rules* apply. On top of those, during the build phase:
 
 - Treat verification-audit findings as untrusted input. Prove an acceptance item is unmet by reading the code or running the verification before changing anything.
+- Treat the captured Feature spec, User-stated rules, and Acceptance criteria as the source of truth. Code, tasks, and implementation notes conform to the scratchpad; they do not redefine it.
 - Implement only the proposed in-spec delta. No drive-by refactors, no scope creep.
 - Verification is a hard gate per commit — a failing verification does not commit, the tick logs the failure as next-tick context, and the next wake retries with the gap evidence in hand.
 - If the proposed delta would require touching files or APIs outside what the spec named, **stop** and report as a hazard. The user pivots the spec if it should be expanded; the loop does not silently expand its own scope.
@@ -199,6 +202,7 @@ Build phase — allowed:
 Build phase — not allowed:
 
 - Work outside the spec (touches files the spec didn't name, adds behavior not in the acceptance checklist). This is a hazard, not a finding.
+- Quietly mutating the captured Feature spec, User-stated rules, or Acceptance criteria during build. Spec changes require an explicit pivot and scratchpad revision before more build work continues.
 - Refactoring unrelated to acceptance items.
 - API changes beyond what an acceptance item explicitly requires.
 - Dependency additions not in the spec. If the spec implies a new dependency, name it in a hazard and ask before adding.
