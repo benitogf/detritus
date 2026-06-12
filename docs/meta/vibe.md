@@ -43,6 +43,23 @@ The user is a **non-technical stakeholder**. They describe a requirement — **a
 - **No question cap — it's scenario-based.** Ask as many multiple-choice questions as it takes to turn the requirement into a concrete plan; ask none if it's already clear. Match the count to the ambiguity, not to a fixed budget.
 - **When the requirement is vague, don't stop — narrow it.** Drive multiple-choice / multiple-select questions that progressively pin down what the user actually wants. Vagueness is a cue to offer better options, not a reason to bail.
 
+## Intent-to-contract intake
+
+`/vibe` treats the user's intent as the source spec, and the plan is only ready when that intent has been refined into a buildable contract. This is still executive intake, not a request for the user to write a technical PRD.
+
+Before handing work to `/smith`, run a readiness check:
+
+- **Intent clarity** — the user's desired outcome, audience, and scope boundary are clear. If not, ask multiple-choice intent questions until they are.
+- **Acceptance clarity** — each acceptance criterion is objective enough for `/smith` to verify by test, command output, UI check, or documented manual check.
+- **Constraint capture** — user-stated rules, repo guidance, KB guidance, and known external constraints are captured as rules or decisions, not left as chat-only context.
+- **One-feature boundary** — the settled spec fits one coherent feature and one PR. Independent features split into separate `/smith` runs.
+
+Then run a consistency check:
+
+- The feature spec, acceptance criteria, verification plan, and decisions made on the user's behalf must agree with each other.
+- Any requirement that cannot be verified, contradicts another requirement, or expands beyond the agreed feature boundary is resolved before handoff.
+- Any helpful but out-of-scope work is recorded as a hazard/deferred item for `/smith`, not silently folded into the build.
+
 ## Plan first, then autonomous — no separate go-gate
 
 - `/vibe` **always runs `/plan` first** (in the executive mode above). The multiple-choice Q&A *is* the planning — it produces the settled scope, acceptance criteria, and the architect's technical decisions. `/vibe` never hands work to `/smith` without a ready plan.
@@ -55,7 +72,7 @@ Before handing off to `/smith`, restate — in plain language, as long as the re
 
 ## Execution — delegate to /smith
 
-- Hand the settled plan to `/smith` as its captured **Feature spec** + **Acceptance criteria**. Because `/vibe` already did the planning (executive-mode `/plan`), `/smith` does not re-run its interactive `/plan` pass — it proceeds straight to the build phase against the captured spec.
+- Hand the settled plan to `/smith` as its captured **Feature spec** + **Acceptance criteria**, plus any **User-stated rules**, architect decisions, and hazards/deferred items identified during the readiness and consistency checks. Because `/vibe` already did the planning (executive-mode `/plan`), `/smith` does not re-run its interactive `/plan` pass — it proceeds straight to the build phase against the captured spec.
 - Everything downstream is **inherited from `/smith` verbatim**, not reimplemented: the build phase, per-tick verification as a hard commit gate, the `/gh-self-review` convergence loop, and — at the *Build-to-Audit Transition* — **issue creation and PR opening** (`/smith` seeds a product-level issue via `/gh-issue-create` if none is linked, opens the PR via `/gh-issue-work` Phase 9, then runs the post-merge audit phase). `/vibe` does not front-run that and does not override `/gh-issue-create`'s confirmation gate — issue+PR creation happens inside `/smith`'s autonomous transition. When `/smith` or `/gh` tighten, `/vibe` inherits the tightening for free.
 - **Precondition — durable runner.** `/smith`'s build phase requires a durable runner (`meta/smith` → *Build Phase Durability*). If only a disposable scheduler is available, `/smith`'s setup surfaces that and asks the user to pick a durable one — a one-time setup precondition before any build, not a mid-flow gate.
 - **`/vibe`'s deliverable is an open PR.** It builds the change and opens the PR for human review; **merging, deploying, and any irreversible or external action stay outside `/vibe`'s scope** and remain the human's call. That boundary — not a mid-build pause — is the safety floor.
@@ -75,6 +92,7 @@ No approval gate ≠ no quality gate. `/vibe` inherits `/smith`'s **mandatory `/
 - **Questions refine the user's intent only.** Multiple-choice (never open-ended that makes them type), no fixed cap, scenario-based — and never about what to build, how to build it, what to prioritize, edge-case behavior, UX, or tech. Those are the architect's, always.
 - **Never require a separate "go".** A ready plan (from the Q&A) is the authorization to build and open the PR.
 - **Plan before building, always.** `/vibe` never hands work to `/smith` without a settled plan — planning is where ambiguity and scope get resolved, so they don't become mid-build stops.
+- **Do the readiness and consistency checks before handoff.** A vague plan is not a ready plan; autonomy starts only after the spec is buildable, verifiable, and internally consistent.
 - **Manage scope as the architect.** Keeping the build inside the planned scope is your job, not a reason to bail mid-build. If the requirement genuinely turns out larger than planned, that is a planning miss to fold back into the plan, not a silent expansion.
 - **Never open the PR with a stale self-review** (inherited from `/smith` / `gh-issue-work` Phase 8a's convergence rule).
 - **Don't reimplement** `/plan`, `/smith`, or `/gh` mechanics — compose them, so improvements propagate.
