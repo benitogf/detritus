@@ -11,6 +11,7 @@ triggers:
   - feature request
 when: User provides requirements, feature request, or asks for analysis/planning before implementation
 related:
+  - meta/vibe-plan
   - meta/grow
   - meta/truthseeker
   - meta/todo-import
