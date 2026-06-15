@@ -164,6 +164,8 @@ Each iteration spawns a NEW `Agent` invocation — never reuse the prior sub-age
 
 **Iteration 2+ scope handling.** Phase 1 re-runs to pick up new commits the dev made between iterations — committed scope evolves naturally. Only re-prompt the dev about modified/untracked files if the set *changed* since the prior iteration (new untracked files appeared, or files in the prior in-scope set are no longer in the working tree). If the modified/untracked set is unchanged, carry the prior iteration's in-scope decision forward silently — don't re-ask the same question.
 
+**The verdict is bound to the tree it ran against.** A clean exit certifies *that exact tree* — nothing more. ANY mutation of the tree after the review reopens it, even when the loop had already exited clean: a refactor the review itself prompted (extracting a shared helper, a rename), a follow-up fix, `commit --amend`, a squash, a rebase/merge, conflict resolution. Each produces a tree no sub-agent has seen. The rule: **the tree that ships is the tree the last review ran on.** If you change anything between the clean review and the push/PR, run one more fresh-sub-agent pass against the final tree before shipping — the 3-iteration cap counts review rounds, not a budget that excuses skipping the audit of what actually lands. A "no blockers" result from before a squash/refactor is stale the moment the tree moves.
+
 ## Why hand off to a fresh agent
 
 Self-review by the author who wrote the change shares the author's blind spots — the same mental model that produced the bug fails to catch it. The conversation that led to the diff also carries justifications ("we agreed this was fine") that bias the audit toward acceptance. Delegating to a fresh sub-agent:
