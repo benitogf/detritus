@@ -108,7 +108,9 @@ COUNT=10 TO=300s                 # per-batch iterations and timeout (from steps 
 b=1                              # ← bump this yourself before each new batch
 out=".flaky/batch-$b.log"
 go test -race -count=$COUNT -failfast -timeout $TO ./... > "$out" 2>&1; echo "rc=$?"
-rm -rf test/* 2>/dev/null        # if the suite writes scratch under test/
+# If your suite leaves scratch between runs, clean ONLY that dir here — uncomment
+# and point it at the real scratch path, never a source dir like test/:
+# rm -rf .scratch/* 2>/dev/null
 tail -1 "$out"                   # quick health line; the full log is in $out
 ```
 
