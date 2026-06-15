@@ -1,6 +1,6 @@
 {
     "name": "detritus",
-    "version": "3.21.0",
+    "version": "3.22.0",
     "description": "Knowledge base plugin for the ooo ecosystem — coding patterns, testing workflows, and library documentation served via MCP tools and agent skills",
     "author": "benitogf",
     "repository": "https://github.com/benitogf/detritus"
