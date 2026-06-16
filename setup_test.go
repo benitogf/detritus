@@ -48,7 +48,7 @@ func TestGenerateClaudeSkillsPrunesStale(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	generateClaudeSkills(home, []docEntry{{name: "meta/plan", alias: "plan", desc: "Plan things"}})
+	generateClaudeSkills(home, []docEntry{{name: "flows/plan/plan", alias: "plan", desc: "Plan things"}})
 
 	// Current doc installed.
 	if _, err := os.Stat(filepath.Join(skillsDir, "plan", "SKILL.md")); err != nil {

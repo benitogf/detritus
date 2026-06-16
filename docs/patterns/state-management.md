@@ -1,6 +1,5 @@
 ---
 description: State mutation patterns - single-writer, consolidation, no wasted writes
-category: patterns
 triggers:
   - state management
   - state mutation
@@ -18,7 +17,7 @@ triggers:
   - defer
 when: Writing code that reads, modifies, or writes shared state (metrics, flags, state, settings)
 related:
-  - patterns/coding-style
+  - flows/principles/coding-style
 ---
 
 # State Mutation Patterns

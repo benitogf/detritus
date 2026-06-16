@@ -303,10 +303,10 @@ func TestSetupClaudeTodoGuardCreatesFile(t *testing.T) {
 }
 
 func TestHasTodoDoc(t *testing.T) {
-	if !hasTodoDoc([]docEntry{{name: "meta/todo"}, {name: "plan/index"}}) {
-		t.Fatal("expected hasTodoDoc true when meta/todo present")
+	if !hasTodoDoc([]docEntry{{name: "flows/project/todo"}, {name: "flows/plan/plan"}}) {
+		t.Fatal("expected hasTodoDoc true when flows/project/todo present")
 	}
-	if hasTodoDoc([]docEntry{{name: "plan/index"}}) {
-		t.Fatal("expected hasTodoDoc false when meta/todo absent")
+	if hasTodoDoc([]docEntry{{name: "flows/plan/plan"}}) {
+		t.Fatal("expected hasTodoDoc false when flows/project/todo absent")
 	}
 }

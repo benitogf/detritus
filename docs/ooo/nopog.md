@@ -1,6 +1,5 @@
 ---
 description: nopog package - long-term historical data storage for the ooo ecosystem
-category: storage
 triggers:
   - nopog
   - history

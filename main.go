@@ -23,9 +23,6 @@ var version = "dev"
 //go:embed docs
 var docsFS embed.FS
 
-//go:embed commands
-var commandsFS embed.FS
-
 //go:embed generated/data.gob
 var dataFS embed.FS
 
@@ -80,6 +77,18 @@ func main() {
 			}
 			upsertVSCodeSettings(os.Args[2])
 			return
+		case "--readme":
+			if err := writeReadmeCommands("README.md"); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
+		case "--plugin-commands":
+			if err := writePluginCommands(pluginCommandsDir); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
 		case "--setup":
 			dryRun := len(os.Args) > 2 && os.Args[2] == "--dry-run"
 			self, _ := os.Executable()
@@ -120,6 +129,8 @@ func main() {
 			fmt.Println("  detritus                                              Start MCP server")
 			fmt.Println("  detritus --version                                    Print version")
 			fmt.Println("  detritus --list                                       List embedded documents")
+			fmt.Println("  detritus --readme                                     Regenerate the README command table from docs/flows/")
+			fmt.Println("  detritus --plugin-commands                            Regenerate plugin command shims from docs/flows/")
 			fmt.Println("  detritus --setup [--dry-run]                          Configure all detected IDEs")
 			fmt.Println("  detritus --update [--dry-run]                         Self-update to latest release")
 			fmt.Println("  detritus --todo-guard                                 PreToolUse hook handler (internal; installed by --setup)")
@@ -172,7 +183,7 @@ func main() {
 	})
 
 	type GetArgs struct {
-		Name    string `json:"name" jsonschema:"Document name without .md extension (e.g. ooo/package, patterns/coding-style, plan/analyze)"`
+		Name    string `json:"name" jsonschema:"Document name without .md extension (e.g. ooo/package, flows/principles/coding-style, flows/plan/plan)"`
 		Section string `json:"section,omitempty" jsonschema:"Optional: specific h2 section heading to retrieve instead of full document"`
 	}
 	mcp.AddTool(server, &mcp.Tool{
@@ -274,8 +285,8 @@ func main() {
 }
 
 // resolveDocName normalises a requested name into a canonical doc path.
-// It handles exact matches, aliases (e.g. "plan" -> "plan/analyze"),
-// underscore/slash-prefixed variants (e.g. "_truthseeker" -> "meta/truthseeker"),
+// It handles exact matches, aliases (e.g. "plan" -> "flows/plan/plan"),
+// underscore/slash-prefixed variants (e.g. "_truthseeker" -> "flows/principles/truthseeker"),
 // and hyphen-to-slash fallback (e.g. "ooo-package" -> "ooo/package").
 func resolveDocName(raw string, aliasToDoc map[string]string) string {
 	// Strip leading slashes and underscores
@@ -291,7 +302,7 @@ func resolveDocName(raw string, aliasToDoc map[string]string) string {
 		return doc
 	}
 
-	// 3. Normalised form is already a canonical doc path (e.g. "meta/truthseeker")
+	// 3. Normalised form is already a canonical doc path (e.g. "flows/principles/truthseeker")
 	if strings.Contains(norm, "/") {
 		return norm
 	}
@@ -300,19 +311,18 @@ func resolveDocName(raw string, aliasToDoc map[string]string) string {
 	return norm
 }
 
+// aliasForDoc maps a canonical doc name to its short kb_get alias. The alias is
+// the leaf filename — folder placement carries no command meaning beyond the
+// flows/ surfacing filter (see isFlowDoc). The one special case is ooo/, whose
+// leaves (package, auth, pivot…) are generic enough to collide, so they keep an
+// "ooo-" prefix. Filenames under flows/ already encode their command name
+// (e.g. flows/testing/testing-go-backend-mock), so no other special-casing.
 func aliasForDoc(name string) string {
-	parts := strings.SplitN(name, "/", 2)
-	leaf := parts[len(parts)-1]
-	switch {
-	case leaf == "index" && len(parts) == 2:
-		return parts[0] // testing/index -> testing, plan/index -> plan
-	case strings.HasPrefix(name, "testing/go-backend-"):
-		return "testing-" + leaf
-	case strings.HasPrefix(name, "ooo/"):
+	leaf := name[strings.LastIndex(name, "/")+1:]
+	if strings.HasPrefix(name, "ooo/") {
 		return "ooo-" + leaf
-	default:
-		return leaf
 	}
+	return leaf
 }
 
 // upsertMCP reads a JSON file, sets .<parentKey>.detritus = {command, args:[]},

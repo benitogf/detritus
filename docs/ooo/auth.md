@@ -1,6 +1,5 @@
 ---
 description: Simple JWT auth - github.com/benitogf/auth for lightweight services
-category: auth
 triggers:
   - github.com/benitogf/auth
   - simple auth

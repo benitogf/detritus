@@ -1,10 +1,7 @@
 ---
-description: Use detritus guidance for modern Go idioms
-argument-hint: [go-code-or-question]
+description: Modern Go patterns - auto-fix with gopls modernize after Go edits
 ---
-
-# Modern Go
 
 The user invoked this command with: $ARGUMENTS
 
-Call the detritus MCP tool `kb_get` with `name="patterns/go-modern"` and apply the returned modern Go guidance to the user's code or question.
+Call the detritus MCP tool `kb_get` with `name="flows/principles/go-modern"` and follow the returned guidance.

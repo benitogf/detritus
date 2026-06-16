@@ -1,6 +1,5 @@
 ---
 description: ooo filters internals - how filters are enforced and when they are bypassed
-category: core
 triggers:
   - filter bypass
   - direct storage

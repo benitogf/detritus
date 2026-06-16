@@ -1,6 +1,5 @@
 ---
 description: Server-side state management using ooo typed CRUD and persistent flags
-category: core
 triggers:
   - ooo state
   - ooo metrics
@@ -19,7 +18,7 @@ when: Managing server-side state (metrics, flags, scheduled actions) through ooo
 related:
   - ooo/package
   - patterns/state-management
-  - patterns/coding-style
+  - flows/principles/coding-style
 ---
 
 # Server-Side State with ooo

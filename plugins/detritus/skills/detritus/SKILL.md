@@ -16,9 +16,9 @@ Use the detritus MCP server as the first stop for questions about this knowledge
 
 ## Common Documents
 
-- `plan/index` for implementation planning.
-- `testing/index` for testing strategy.
-- `patterns/coding-style` for coding conventions.
-- `patterns/go-modern` for modern Go idioms.
-- `patterns/line-of-sight` for flat, readable control flow.
+- `flows/plan/plan` for implementation planning.
+- `flows/testing/testing` for testing strategy.
+- `flows/principles/coding-style` for coding conventions.
+- `flows/principles/go-modern` for modern Go idioms.
+- `flows/principles/line-of-sight` for flat, readable control flow.
 - `ooo/package` for ooo package guidance.

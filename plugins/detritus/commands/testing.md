@@ -1,10 +1,7 @@
 ---
-description: Use detritus testing guidance and decision tables
-argument-hint: [feature-or-risk]
+description: Testing index - entry point for all testing workflows
 ---
-
-# Testing With Detritus
 
 The user invoked this command with: $ARGUMENTS
 
-Call the detritus MCP tool `kb_get` with `name="testing/index"` and follow the returned testing guidance for the user's task.
+Call the detritus MCP tool `kb_get` with `name="flows/testing/testing"` and follow the returned guidance.
