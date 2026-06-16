@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -142,13 +143,13 @@ func TestMCPServer(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"_truthseeker", "Foundational"},     // old _alias -> meta/truthseeker
-		{"truthseeker", "Foundational"},      // bare alias -> meta/truthseeker
-		{"/truthseeker", "Foundational"},     // slash-prefixed -> meta/truthseeker
-		{"plan", ""},                         // alias -> plan/index (just check no error)
-		{"ooo-package", ""},                  // hyphen alias -> ooo/package
-		{"meta/truthseeker", "Foundational"}, // canonical name still works
-		{"testing-go-backend-mock", ""},      // compound alias -> testing/go-backend-mock
+		{"_truthseeker", "Foundational"},                 // old _alias -> flows/principles/truthseeker
+		{"truthseeker", "Foundational"},                  // bare alias -> flows/principles/truthseeker
+		{"/truthseeker", "Foundational"},                 // slash-prefixed -> flows/principles/truthseeker
+		{"plan", ""},                                     // alias -> flows/plan/plan (just check no error)
+		{"ooo-package", ""},                              // hyphen alias -> ooo/package
+		{"flows/principles/truthseeker", "Foundational"}, // canonical name still works
+		{"testing-go-backend-mock", ""},                  // leaf alias -> flows/testing/testing-go-backend-mock
 	} {
 		aliasResult, err := session.CallTool(ctx, &mcp.CallToolParams{
 			Name:      "kb_get",
@@ -274,7 +275,7 @@ func TestListFlag(t *testing.T) {
 		seen[name] = desc
 	}
 
-	for _, required := range []string{"ooo/package", "ooo/filters-internals", "ooo/state-patterns", "meta/grow", "meta/truthseeker", "plan/index", "patterns/async-events", "patterns/line-of-sight"} {
+	for _, required := range []string{"ooo/package", "ooo/filters-internals", "ooo/state-patterns", "flows/maintainer/grow", "flows/principles/truthseeker", "flows/plan/plan", "patterns/async-events", "flows/principles/line-of-sight"} {
 		if _, ok := seen[required]; !ok {
 			t.Errorf("--list missing required doc: %s", required)
 		}
@@ -314,14 +315,170 @@ func TestGenerateInlineCommandInstructionsUsesCommandOnlyMap(t *testing.T) {
 	}
 	text := string(data)
 
-	if !strings.Contains(text, "- /janitor -> meta/janitor") {
+	if !strings.Contains(text, "- /janitor -> flows/build/janitor") {
 		t.Fatal("expected /janitor mapping in generated instructions")
 	}
-	if strings.Contains(text, "- /loop-core -> meta/loop-core") {
-		t.Fatal("unexpected /loop-core mapping; non-command docs should not appear")
+	if strings.Contains(text, "- /loop ->") || strings.Contains(text, "core/loop") {
+		t.Fatal("unexpected loop-core mapping; non-flows docs should not appear as commands")
 	}
 	if !strings.Contains(text, "If a slash command token appears but is not in the mapping") {
 		t.Fatal("expected unmapped slash fallback rule")
+	}
+}
+
+// TestReadmeCommandsMatchFlows guards README ≡ docs/flows/: the generated
+// command table in README.md must equal what readmeCommandsSection() produces
+// from the flows/ tree, so the documented surface can never drift from what
+// ships. Regenerate with `detritus --readme`.
+func TestReadmeCommandsMatchFlows(t *testing.T) {
+	raw, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	text := string(raw)
+	si := strings.Index(text, readmeCommandsStart)
+	ei := strings.Index(text, readmeCommandsEnd)
+	if si < 0 || ei < 0 || ei < si {
+		t.Fatalf("README.md missing %s/%s markers", readmeCommandsStart, readmeCommandsEnd)
+	}
+	got := text[si : ei+len(readmeCommandsEnd)]
+	want := readmeCommandsSection()
+	if got != want {
+		t.Fatalf("README command table is stale — run `detritus --readme`.\n--- README ---\n%s\n--- expected ---\n%s", got, want)
+	}
+}
+
+// TestPluginCommandsMatchFlows guards the Claude/Codex plugin command shims ≡
+// docs/flows/: the committed shims must equal what writePluginCommands would
+// generate, so they can never drift to a deleted doc name. Regenerate with
+// `detritus --plugin-commands`.
+func TestPluginCommandsMatchFlows(t *testing.T) {
+	want := pluginCommandFiles()
+	entries, err := os.ReadDir(pluginCommandsDir)
+	if err != nil {
+		t.Fatalf("read %s: %v", pluginCommandsDir, err)
+	}
+	got := map[string]bool{}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		got[e.Name()] = true
+		data, err := os.ReadFile(filepath.Join(pluginCommandsDir, e.Name()))
+		if err != nil {
+			t.Fatalf("read %s: %v", e.Name(), err)
+		}
+		w, ok := want[e.Name()]
+		if !ok {
+			t.Errorf("plugin command %s has no backing flows/ doc — run `detritus --plugin-commands`", e.Name())
+			continue
+		}
+		if string(data) != w {
+			t.Errorf("plugin command %s is stale — run `detritus --plugin-commands`", e.Name())
+		}
+	}
+	for fname := range want {
+		if !got[fname] {
+			t.Errorf("missing plugin command %s for a flows/ doc — run `detritus --plugin-commands`", fname)
+		}
+	}
+}
+
+// TestPluginDocReferencesResolve guards every doc path referenced under
+// plugins/ (command shims AND the plugin SKILL.md) against the real docs tree,
+// so a doc rename can't leave a plugin file pointing at a deleted name — the
+// failure that shipped a broken SKILL.md before it was caught. Catches both
+// `kb_get name="<path>"` and backticked `<folder>/<doc>` references.
+func TestPluginDocReferencesResolve(t *testing.T) {
+	nameRe := regexp.MustCompile(`name="([^"]+)"`)
+	pathRe := regexp.MustCompile("`((?:flows|core|roles|ooo|patterns)/[A-Za-z0-9/_-]+)`")
+	err := filepath.Walk("plugins", func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		text := string(data)
+		refs := map[string]bool{}
+		for _, m := range nameRe.FindAllStringSubmatch(text, -1) {
+			refs[m[1]] = true
+		}
+		for _, m := range pathRe.FindAllStringSubmatch(text, -1) {
+			refs[m[1]] = true
+		}
+		for ref := range refs {
+			if strings.Contains(ref, "/") { // doc path, not a bare alias
+				if _, statErr := os.Stat(filepath.Join("docs", ref+".md")); statErr != nil {
+					t.Errorf("%s references non-existent doc %q (run `detritus --plugin-commands`, fix SKILL.md)", path, ref)
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk plugins/: %v", err)
+	}
+}
+
+// TestAliasForDocNoCollisions guards the leaf-based aliasForDoc: since folders
+// no longer disambiguate (two docs with the same leaf filename in different
+// folders would collide to one alias and silently shadow each other in the
+// kb_get alias map), assert every doc's alias is unique across the tree.
+func TestAliasForDocNoCollisions(t *testing.T) {
+	seen := map[string]string{}
+	err := filepath.Walk("docs", func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
+			return err
+		}
+		name := strings.TrimSuffix(strings.TrimPrefix(path, "docs/"), ".md")
+		alias := aliasForDoc(name)
+		if prev, ok := seen[alias]; ok {
+			t.Errorf("alias %q collides: %q and %q", alias, prev, name)
+		}
+		seen[alias] = name
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk docs/: %v", err)
+	}
+}
+
+// TestGeneratedArtifactsAreTracked closes the root cause behind the clean-checkout
+// failure: the content drift tests (TestPluginCommandsMatchFlows,
+// TestReadmeCommandsMatchFlows) read the working TREE, so a generated file that
+// exists on disk but is gitignored passes them yet never reaches the commit.
+// Assert the git INDEX actually contains every generated, committed artifact, so
+// a future .gitignore slip can't silently ship a broken plugin again.
+func TestGeneratedArtifactsAreTracked(t *testing.T) {
+	tracked := func(dir string) map[string]bool {
+		out, err := exec.Command("git", "ls-files", "-z", dir).Output()
+		if err != nil {
+			t.Fatalf("git ls-files %s: %v", dir, err)
+		}
+		set := map[string]bool{}
+		for _, p := range strings.Split(strings.TrimRight(string(out), "\x00"), "\x00") {
+			if p != "" {
+				set[p] = true
+			}
+		}
+		return set
+	}
+
+	// Every generated plugin command shim must be committed, not just on disk.
+	shims := tracked(pluginCommandsDir)
+	for fname := range pluginCommandFiles() {
+		p := pluginCommandsDir + "/" + fname
+		if !shims[p] {
+			t.Errorf("generated plugin shim %s is not tracked in git (gitignored or unstaged) — a .gitignore slip would ship a broken plugin", p)
+		}
+	}
+	// The embedded KB blob must be committed too. .gitignore excludes only its
+	// sibling generated/search.bleve/, not data.gob — assert it explicitly so a
+	// future broadening of that rule can't silently drop the embedded blob.
+	if !tracked("generated/data.gob")["generated/data.gob"] {
+		t.Error("generated/data.gob is not tracked in git")
 	}
 }
 

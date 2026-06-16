@@ -1,6 +1,5 @@
 ---
 description: General principles for working with asynchronous events in any language
-category: principles
 triggers:
   - async events
   - asynchronous
@@ -20,8 +19,8 @@ triggers:
   - missed events
 when: Working with async events, callbacks, subscriptions, event-driven architectures, or debugging race conditions
 related:
-  - testing/go-backend-async
-  - meta/truthseeker
+  - flows/testing/testing-go-backend-async
+  - flows/principles/truthseeker
 ---
 
 # Async Events: General Principles
@@ -201,5 +200,5 @@ When an entity moves through multiple async states (connecting → connected →
 
 ## Related
 
-- `testing/go-backend-async` — Go-specific implementation of these principles using `sync.WaitGroup`
-- `meta/truthseeker` — "Prove don't assume" as a foundational principle
+- `flows/testing/testing-go-backend-async` — Go-specific implementation of these principles using `sync.WaitGroup`
+- `flows/principles/truthseeker` — "Prove don't assume" as a foundational principle

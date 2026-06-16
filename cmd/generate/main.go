@@ -21,11 +21,16 @@ type ChunkMeta struct {
 	Position int
 }
 
+type DocEntry struct {
+	Name string
+	Meta DocMeta
+}
+
 type GeneratedData struct {
 	Chunks      []ChunkMeta
 	BlevePath   string
 	ToolDesc    string
-	DocMetadata map[string]DocMeta
+	DocMetadata []DocEntry
 }
 
 type DocMeta struct {
@@ -149,23 +154,44 @@ func buildBleveIndex(path string, docs []chunk.Doc, chunks []chunk.Chunk) (bleve
 	return index, nil
 }
 
-func buildDocMetadata(docs []chunk.Doc) map[string]DocMeta {
-	metadata := make(map[string]DocMeta, len(docs))
+func buildDocMetadata(docs []chunk.Doc) []DocEntry {
+	metadata := make([]DocEntry, 0, len(docs))
 	for _, doc := range docs {
 		sections := make([]string, len(doc.Sections))
 		for i, s := range doc.Sections {
 			sections[i] = s.Heading
 		}
-		metadata[doc.Name] = DocMeta{
-			Description: doc.Frontmatter.Description,
-			Category:    doc.Frontmatter.Category,
-			Triggers:    doc.Frontmatter.Triggers,
-			When:        doc.Frontmatter.When,
-			Related:     doc.Frontmatter.Related,
-			Sections:    sections,
-		}
+		metadata = append(metadata, DocEntry{
+			Name: doc.Name,
+			Meta: DocMeta{
+				Description: doc.Frontmatter.Description,
+				Category:    categoryForName(doc.Name),
+				Triggers:    doc.Frontmatter.Triggers,
+				When:        doc.Frontmatter.When,
+				Related:     doc.Frontmatter.Related,
+				Sections:    sections,
+			},
+		})
 	}
+	// Sort by name so the gob blob is byte-reproducible across runs.
+	sort.Slice(metadata, func(i, j int) bool { return metadata[i].Name < metadata[j].Name })
 	return metadata
+}
+
+// categoryForName derives a doc's category from its folder — the single source
+// of truth for the taxonomy (no per-doc `category:` frontmatter). flows/ docs
+// take their subfolder (plan, build, github, …); everything else takes its top
+// folder (core, roles, ooo, patterns).
+func categoryForName(name string) string {
+	parts := strings.Split(name, "/")
+	switch {
+	case parts[0] == "flows" && len(parts) >= 2:
+		return parts[1]
+	case parts[0] == "core", parts[0] == "roles", parts[0] == "ooo", parts[0] == "patterns":
+		return parts[0]
+	default:
+		return "other"
+	}
 }
 
 func buildToolDescription(docs []chunk.Doc) string {
@@ -174,15 +200,24 @@ func buildToolDescription(docs []chunk.Doc) string {
 
 	categoryDocs := map[string][]chunk.Doc{}
 	for _, doc := range docs {
-		cat := doc.Frontmatter.Category
-		if cat == "" {
-			cat = "other"
-		}
-		categoryDocs[cat] = append(categoryDocs[cat], doc)
+		categoryDocs[categoryForName(doc.Name)] = append(categoryDocs[categoryForName(doc.Name)], doc)
 	}
 
-	categoryOrder := []string{"core", "patterns", "testing", "principles", "meta", "plan", "style", "other"}
-	for _, cat := range categoryOrder {
+	categoryOrder := []string{"plan", "build", "github", "project", "testing", "principles", "maintainer", "core", "roles", "patterns", "ooo", "other"}
+	// Append any category present but not in the fixed order (sorted) so a new
+	// categoryForName output is never silently dropped from the description.
+	seen := map[string]bool{}
+	for _, c := range categoryOrder {
+		seen[c] = true
+	}
+	var extra []string
+	for c := range categoryDocs {
+		if !seen[c] {
+			extra = append(extra, c)
+		}
+	}
+	sort.Strings(extra)
+	for _, cat := range append(categoryOrder, extra...) {
 		catDocs, ok := categoryDocs[cat]
 		if !ok {
 			continue
@@ -241,8 +276,14 @@ func enrichTriggers(docs []chunk.Doc) {
 			tfidf := float64(count) * idf
 			candidates = append(candidates, scored{term, tfidf})
 		}
+		// Tie-break by term so equal-scored candidates order deterministically —
+		// candidates come from map iteration (random order), and an unstable sort
+		// on ties would otherwise make data.gob vary run to run.
 		sort.Slice(candidates, func(a, b int) bool {
-			return candidates[a].score > candidates[b].score
+			if candidates[a].score != candidates[b].score {
+				return candidates[a].score > candidates[b].score
+			}
+			return candidates[a].term < candidates[b].term
 		})
 
 		existing := map[string]bool{}

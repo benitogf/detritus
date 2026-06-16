@@ -1,10 +1,7 @@
 ---
-description: Improve the detritus knowledge base from corrections and observed gaps
-argument-hint: [correction-or-gap]
+description: Learn from conversation corrections - distill manual fixes into KB updates
 ---
-
-# Grow Detritus
 
 The user invoked this command with: $ARGUMENTS
 
-Call the detritus MCP tool `kb_get` with `name="meta/grow"` and follow the returned guidance for turning the correction or gap into a knowledge-base improvement.
+Call the detritus MCP tool `kb_get` with `name="flows/maintainer/grow"` and follow the returned guidance.

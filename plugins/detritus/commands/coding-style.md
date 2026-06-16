@@ -1,10 +1,7 @@
 ---
-description: Use detritus coding style guidance for naming, errors, and commits
-argument-hint: [code-or-question]
+description: Self-documenting code - naming, extraction, readability rules for AI
 ---
-
-# Coding Style
 
 The user invoked this command with: $ARGUMENTS
 
-Call the detritus MCP tool `kb_get` with `name="patterns/coding-style"` and apply the returned coding-style guidance to the user's code or question.
+Call the detritus MCP tool `kb_get` with `name="flows/principles/coding-style"` and follow the returned guidance.

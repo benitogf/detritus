@@ -161,6 +161,9 @@ func generateSharedPrompts(home string, docs []docEntry, dryRun bool) {
 	}
 	generated := map[string]bool{}
 	for _, doc := range docs {
+		if !isFlowDoc(doc.name) {
+			continue
+		}
 		filename := doc.alias + ".prompt.md"
 		generated[filename] = true
 		content := fmt.Sprintf("---\ndescription: %s\nagent: agent\n---\n\nCall kb_get(name=\"%s\") and follow the instructions in the returned document.\n", doc.desc, doc.name)
@@ -217,21 +220,28 @@ func generateInlineCommandInstructions(home string, docs []docEntry, dryRun bool
 	fmt.Printf("VS Code shared instructions: %s\n", instrFile)
 }
 
-// listCommandAliases returns slash-command aliases by reading embedded
-// command shim filenames under commands/*.md.
+// listCommandAliases returns the slash-command aliases: every doc under
+// docs/flows/ (the user-facing surface). flows/ is the single source for what
+// becomes a command — core/, roles/, and reference docs are kb_get-only.
 func listCommandAliases() map[string]bool {
 	out := map[string]bool{}
-	_ = fs.WalkDir(commandsFS, "commands", func(path string, d fs.DirEntry, err error) error {
+	_ = fs.WalkDir(docsFS, "docs/flows", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".md") {
 			return nil
 		}
-		base := strings.TrimSuffix(filepath.Base(path), ".md")
-		if base != "" {
-			out[base] = true
-		}
+		name := strings.TrimSuffix(strings.TrimPrefix(path, "docs/"), ".md")
+		out[aliasForDoc(name)] = true
 		return nil
 	})
 	return out
+}
+
+// isFlowDoc reports whether a doc is user-facing — only docs under flows/ are
+// surfaced as generated skills/prompts/commands. core/, roles/, and reference
+// docs (ooo/, patterns/) are kb_get-only: the MCP engine still serves them, but
+// they never appear in a user's command list.
+func isFlowDoc(name string) bool {
+	return strings.HasPrefix(name, "flows/")
 }
 
 func generateAgentFile(home string, dryRun bool) {
@@ -340,7 +350,7 @@ func setupClaudeCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 
 	generateClaudeSkills(home, docs)
 
-	// Enforce meta/todo convention #13 when the /todo family ships: install the
+	// Enforce the flows/project/todo convention #13 when the /todo family ships: install the
 	// PreToolUse write-guard hook (idempotent). If a future build drops /todo,
 	// hasTodoDoc is false and any prior guard entry is removed instead.
 	setupClaudeTodoGuard(home, binaryPath, hasTodoDoc(docs), false)
@@ -354,6 +364,9 @@ func generateClaudeSkills(home string, docs []docEntry) {
 	}
 	generated := map[string]bool{}
 	for _, doc := range docs {
+		if !isFlowDoc(doc.name) {
+			continue
+		}
 		generated[doc.alias] = true
 		skillDir := filepath.Join(skillsDir, doc.alias)
 		_ = os.MkdirAll(skillDir, 0o755)
@@ -646,6 +659,9 @@ func generateCodexSkills(skillsDir string, docs []docEntry) {
 
 	generated := map[string]bool{}
 	for _, doc := range docs {
+		if !isFlowDoc(doc.name) {
+			continue
+		}
 		generated[doc.alias] = true
 		skillDir := filepath.Join(skillsDir, doc.alias)
 		_ = os.MkdirAll(skillDir, 0o755)
@@ -753,6 +769,9 @@ func upsertVerdentRules(rulesFile string, docs []docEntry) {
 	ruleBlock.WriteString("- Keep manual invocation available. If user explicitly asks, support command-style prompts like /plan, /grow, /testing.\n\n")
 	ruleBlock.WriteString("Manual command to doc mapping:\n")
 	for _, doc := range docs {
+		if !isFlowDoc(doc.name) {
+			continue
+		}
 		fmt.Fprintf(&ruleBlock, "- /%s -> %s\n", doc.alias, doc.name)
 	}
 	ruleBlock.WriteString("<!-- DETRITUS-RULES:END -->")
@@ -789,6 +808,9 @@ func generateVerdentSkills(skillsDir string, docs []docEntry) {
 	}
 	generated := map[string]bool{}
 	for _, doc := range docs {
+		if !isFlowDoc(doc.name) {
+			continue
+		}
 		generated[doc.alias] = true
 		skillDir := filepath.Join(skillsDir, doc.alias)
 		_ = os.MkdirAll(skillDir, 0o755)

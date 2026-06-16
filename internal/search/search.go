@@ -25,11 +25,20 @@ type DocMeta struct {
 	Sections    []string
 }
 
+// DocEntry pairs a doc name with its metadata. Serialized as a slice (sorted by
+// Name in cmd/generate) rather than a map so data.gob is byte-reproducible —
+// gob encodes maps in randomized iteration order, which made every `go generate`
+// produce a different blob.
+type DocEntry struct {
+	Name string
+	Meta DocMeta
+}
+
 type GeneratedData struct {
 	Chunks      []ChunkMeta
 	BlevePath   string
 	ToolDesc    string
-	DocMetadata map[string]DocMeta
+	DocMetadata []DocEntry
 }
 
 type Result struct {
@@ -42,6 +51,7 @@ type Result struct {
 
 type Engine struct {
 	data         GeneratedData
+	docMeta      map[string]DocMeta
 	index        bleve.Index
 	docsFS       fs.FS
 	docsDir      string
@@ -60,6 +70,11 @@ func New(dataFS fs.FS, dataPath string, docsFS fs.FS, docsDir string) (*Engine, 
 		return nil, fmt.Errorf("decode data: %w", err)
 	}
 
+	docMeta := make(map[string]DocMeta, len(data.DocMetadata))
+	for _, entry := range data.DocMetadata {
+		docMeta[entry.Name] = entry.Meta
+	}
+
 	chunkContent, err := loadChunkContent(docsFS, docsDir, data)
 	if err != nil {
 		return nil, fmt.Errorf("load chunk content: %w", err)
@@ -72,6 +87,7 @@ func New(dataFS fs.FS, dataPath string, docsFS fs.FS, docsDir string) (*Engine, 
 
 	return &Engine{
 		data:         data,
+		docMeta:      docMeta,
 		index:        index,
 		docsFS:       docsFS,
 		docsDir:      docsDir,
@@ -121,7 +137,7 @@ func (e *Engine) ToolDescription() string {
 }
 
 func (e *Engine) DocMetadata() map[string]DocMeta {
-	return e.data.DocMetadata
+	return e.docMeta
 }
 
 func (e *Engine) GetDoc(name string) (string, error) {
@@ -141,7 +157,7 @@ func (e *Engine) GetSection(name, section string) (string, error) {
 }
 
 func (e *Engine) GetSections(name string) ([]string, error) {
-	meta, ok := e.data.DocMetadata[name]
+	meta, ok := e.docMeta[name]
 	if !ok {
 		return nil, fmt.Errorf("doc %q not found", name)
 	}
@@ -229,8 +245,8 @@ func buildIndex(data GeneratedData, chunkContent []string) (bleve.Index, error) 
 	}
 
 	triggerMap := map[string]string{}
-	for name, meta := range data.DocMetadata {
-		triggerMap[name] = strings.Join(meta.Triggers, " ")
+	for _, entry := range data.DocMetadata {
+		triggerMap[entry.Name] = strings.Join(entry.Meta.Triggers, " ")
 	}
 
 	batch := index.NewBatch()
@@ -257,12 +273,12 @@ func buildIndex(data GeneratedData, chunkContent []string) (bleve.Index, error) 
 
 func loadChunkContent(docsFS fs.FS, docsDir string, data GeneratedData) ([]string, error) {
 	docContent := map[string]string{}
-	for name := range data.DocMetadata {
-		content, err := fs.ReadFile(docsFS, docsDir+"/"+name+".md")
+	for _, entry := range data.DocMetadata {
+		content, err := fs.ReadFile(docsFS, docsDir+"/"+entry.Name+".md")
 		if err != nil {
-			return nil, fmt.Errorf("read doc %s: %w", name, err)
+			return nil, fmt.Errorf("read doc %s: %w", entry.Name, err)
 		}
-		docContent[name] = string(content)
+		docContent[entry.Name] = string(content)
 	}
 
 	result := make([]string, len(data.Chunks))

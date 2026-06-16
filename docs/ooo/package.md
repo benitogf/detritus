@@ -1,6 +1,5 @@
 ---
 description: ooo package - core real-time state management system
-category: core
 triggers:
   - ooo
   - server setup

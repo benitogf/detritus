@@ -1,10 +1,7 @@
 ---
-description: Optimize detritus knowledge retrieval and document findability
-argument-hint: [retrieval-problem]
+description: Re-index and optimize KB docs for agent retrieval efficiency
 ---
-
-# Optimize Detritus
 
 The user invoked this command with: $ARGUMENTS
 
-Call the detritus MCP tool `kb_get` with `name="meta/optimize"` and follow the returned guidance for improving retrieval quality.
+Call the detritus MCP tool `kb_get` with `name="flows/maintainer/optimize"` and follow the returned guidance.

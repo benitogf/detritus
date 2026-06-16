@@ -11,7 +11,7 @@ import (
 
 // todoGuardMarker is the stable substring detritus writes into the hook command
 // so re-runs (and uninstalls) can find the entry regardless of where the binary
-// lives. Enforces meta/todo convention #13: only a delegated sub-agent may write
+// lives. Enforces the flows/project/todo convention #13: only a delegated sub-agent may write
 // the cross-session todos.json store; a main-session Edit/Write is denied.
 const todoGuardMarker = "--todo-guard"
 
@@ -78,7 +78,7 @@ func todoGuardResponse(raw []byte) []byte {
 // the skill tree: a future build that drops /todo will also drop the guard.
 func hasTodoDoc(docs []docEntry) bool {
 	for _, d := range docs {
-		if d.name == "meta/todo" {
+		if d.name == "flows/project/todo" {
 			return true
 		}
 	}

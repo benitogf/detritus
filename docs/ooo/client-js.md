@@ -1,6 +1,5 @@
 ---
 description: ooo-client - JavaScript WebSocket client for ooo servers
-category: frontend
 triggers:
   - ooo-client
   - javascript

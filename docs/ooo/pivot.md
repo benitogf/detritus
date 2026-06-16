@@ -1,6 +1,5 @@
 ---
 description: pivot package - AP distributed multi-instance synchronization for ooo
-category: sync
 triggers:
   - pivot
   - cluster

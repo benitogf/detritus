@@ -19,25 +19,25 @@ func buildTestData() GeneratedData {
 			{DocName: "testing/go-backend-async", Section: "WaitGroup Patterns", Position: 1},
 		},
 		ToolDesc: "Get full knowledge document by name.\nCORE: ooo/package (ooo, server setup, filters)\n",
-		DocMetadata: map[string]DocMeta{
-			"ooo/package": {
+		DocMetadata: []DocEntry{
+			{Name: "ooo/package", Meta: DocMeta{
 				Description: "ooo package - core real-time state management system",
 				Category:    "core",
 				Triggers:    []string{"ooo", "server setup", "filters"},
 				Sections:    []string{"", "Server Setup", "Filters"},
-			},
-			"patterns/state-management": {
+			}},
+			{Name: "patterns/state-management", Meta: DocMeta{
 				Description: "State mutation patterns",
 				Category:    "patterns",
 				Triggers:    []string{"state", "single writer"},
 				Sections:    []string{"", "Single Writer"},
-			},
-			"testing/go-backend-async": {
+			}},
+			{Name: "testing/go-backend-async", Meta: DocMeta{
 				Description: "Async testing patterns",
 				Category:    "testing",
 				Triggers:    []string{"WaitGroup", "async"},
 				Sections:    []string{"", "WaitGroup Patterns"},
-			},
+			}},
 		},
 	}
 }
