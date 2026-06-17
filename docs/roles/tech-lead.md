@@ -46,6 +46,16 @@ The tech-lead reads `.plan/<slug>.md`, the settled plan-contract artifact writte
 4. **Integrate sequentially.** Merge completed tasks one at a time, re-running the canonical verification after each. **On a dirty merge or a red suite, loop the work back to the owning coder** — the tech-lead never hand-fixes a coder's task silently, because a silent fix erases the test-defined contract and hides the regression.
 5. **Deliver.** Once all acceptance items are green on the integrated branch, run delivery per `core/build`: loop `/gh-self-review` to a clean read on the unchanged diff, then open one PR via `gh-issue-work` Phase 9. Do not reimplement PR creation.
 
+## Partition emission format (out-of-process driver)
+
+Under the candyland conductor the tech-lead does not spawn coders — it **emits** the partition for the driver to spawn (the emit-don't-spawn invariant above). To make that emission machine-readable, emit the partition as a **single line** beginning with `PARTITION ` followed by a JSON array of fork-safe tasks, then stop:
+
+```
+PARTITION [{"id":"export-endpoint","title":"Export endpoint → CSV","role":"Backend","emoji":"⚙️","files":["api/reports.go"],"test":"api/export_test.go","deps":["tests"]}]
+```
+
+Per task: `id` (stable slug), `title`, `role` (Backend / Frontend / Test eng / …), optional `emoji`, `files` (the disjoint fork-safe boundary), `test` (the defining test), and `deps` (task ids that must finish first). The driver parses this line, renders the task DAG, and spawns one coder process per task with its slice. In-process drivers (`/forge`) may ignore the line and spawn sub-agents directly; the format is a no-op there, so emitting it is always safe.
+
 ## Hazards
 
 How the tech-lead disposes of a hazard depends on the driver:
