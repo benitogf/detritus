@@ -156,7 +156,7 @@ A single sub-agent pass can miss regressions a fix introduces. Fixing one blocke
 Stop conditions:
 
 - Sub-agent's triage is empty.
-- The only remaining items are **genuinely out of scope** for this change — a separate feature, a repo-wide cleanup the change didn't touch. A finding you *can* address in-scope is **not** deferrable: fix it and re-loop. Do not converge with handle-able findings unaddressed, and do not park them in a "Known non-blockers" PR section to ship around them — that is the deferral the hazards-never-defer rule forbids (`flows/plan/vibe`), applied to your own delivery. Out-of-scope items that survive get a **tracked issue** (via `/gh-issue-create`), not just a loose body line.
+- The only remaining items are **genuinely out of scope** for this change — a separate feature, a repo-wide cleanup the change didn't touch. A finding you *can* address in-scope is **not** deferrable: fix it and re-loop. Do not converge with handle-able findings unaddressed, and do not park them in a "Known non-blockers" PR section to ship around them — that is the deferral `core/completion`'s exit gate forbids (disposition 1: handle-able in-scope work is done now), applied to your own delivery. Out-of-scope items that survive get a **tracked issue** (via `/gh-issue-create`), not just a loose body line.
 - Loop has run 3 iterations. A finding that survives three independent fresh-sub-agent passes is unlikely to be phantom; surface the persistence to the dev for accept / defer / escalate.
 
 The test for "can I defer this?" is **not** "is it a blocker?" — it is "is it out of scope for this change?" If you could fix it with the same tools in the same diff, it is in scope, and shipping it as a known non-blocker is a punt.

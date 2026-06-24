@@ -18,6 +18,7 @@ related:
   - flows/github/gh-issue-work
   - flows/github/gh-self-review
   - core/loop
+  - core/completion
   - flows/principles/truthseeker
 ---
 
@@ -39,7 +40,7 @@ The user is a **non-technical stakeholder**. They describe a requirement — **a
 
 ## Execution — delegate to /smith
 
-- Hand the settled plan from `dream` to `/smith` as its captured **Feature spec** + **Acceptance criteria**, plus any **User-stated rules**, architect decisions, and hazards/deferred items identified during the readiness and consistency checks. Because `dream` already did the planning, `/smith` does not re-run its interactive `/plan` pass — it proceeds straight to the build phase against the captured spec.
+- Hand the settled plan from `dream` to `/smith` as its captured **Feature spec** + **Acceptance criteria**, plus any **User-stated rules**, architect decisions, and any feature-splits/blockers (`core/completion` dispositions) identified during the readiness and consistency checks. Because `dream` already did the planning, `/smith` does not re-run its interactive `/plan` pass — it proceeds straight to the build phase against the captured spec.
 - Everything downstream is **inherited from `/smith` verbatim**, not reimplemented: the build phase, per-tick verification as a hard commit gate, the `/gh-self-review` convergence loop, and — at the *Build-to-Audit Transition* — **issue creation and PR opening** (`/smith` seeds a product-level issue via `/gh-issue-create` if none is linked, opens the PR via `/gh-issue-work` Phase 9, then runs the post-merge audit phase). `/vibe` does not front-run that and does not override `/gh-issue-create`'s confirmation gate — issue+PR creation happens inside `/smith`'s autonomous transition. When `/smith` or `/gh` tighten, `/vibe` inherits the tightening for free.
 - **Precondition — durable runner.** `/smith`'s build phase requires a durable runner (`flows/build/smith` → *Build Phase Durability*). If only a disposable scheduler is available, `/smith`'s setup surfaces that and asks the user to pick a durable one — a one-time setup precondition before any build, not a mid-flow gate.
 - **`/vibe`'s deliverable is an open PR.** It builds the change and opens the PR for human review; **merging, deploying, and any irreversible or external action stay outside `/vibe`'s scope** and remain the human's call. That boundary — not a mid-build pause — is the safety floor.
@@ -55,10 +56,10 @@ No approval gate ≠ no quality gate. `/vibe` inherits `/smith`'s **mandatory `/
 
 ## Hazards are dealt with, never deferred
 
-`/vibe` goes from *intent* to *a PR that does the thing* — no extra steps, no delegation, no deferral. A non-technical stakeholder cannot action a "deferred" note, an auto-filed issue, or a "left for later" item, so producing one is a silent drop rather than a hand-off. Across both phases:
+`/vibe` goes from *intent* to *a PR that does the thing* — no extra steps, no delegation, no deferral. This is `core/completion`'s no-deferral exit gate on the autonomous path: a non-technical stakeholder cannot action a "deferred" note, an auto-filed issue, or a "left for later" item, so producing one is a silent drop rather than a hand-off. Across both phases:
 
 - **Planning (`dream`)** resolves in-scope hazards into the plan and splits genuinely separate features into separate plans — it never parks a hazard for the user (`core/dream` → *Hazards — deal with them, never defer*).
-- **Build (`/smith`)** deals with anything that surfaces mid-build inside the PR, as the architect — never auto-files an issue, never defers, never asks the non-technical user to decide. The same rule binds the parallel loop (`roles/tech-lead` → *Hazards*).
+- **Build (`/smith`)** deals with anything that surfaces mid-build inside the PR, as the architect — never auto-files an issue, never defers, never asks the non-technical user to decide. The same rule binds the parallel loop (`roles/tech-lead` → *Dispositions*).
 
 The only things that legitimately leave `/vibe`'s scope are the irreversible/external actions named below (merge, deploy) — the human's call, not deferred work.
 

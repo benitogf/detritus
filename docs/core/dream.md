@@ -8,6 +8,7 @@ triggers:
 when: Internal. Loaded via kb_get as the planning phase of /vibe, when a non-technical stakeholder's requirement must become a buildable plan through multiple-choice clarification without asking them to make technical decisions.
 related:
   - core/planning
+  - core/completion
   - flows/plan/plan
   - flows/plan/vibe
   - roles/tech-lead
@@ -53,11 +54,11 @@ Because the user is not reviewing the technical layer, record every non-trivial 
 
 ## Hazards — deal with them, never defer
 
-This is where `dream` diverges sharply from `/plan`. `/plan` records hazards for a developer to act on. `dream` feeds an **autonomous, non-technical** path (`/vibe`), where a deferred note is a silent drop — the stakeholder cannot action it. So:
+This is the autonomous realization of `core/completion`'s dispositions: disposition 1 (in-scope → do it) and disposition 2 (genuinely separate feature → split) both apply *in planning*. `dream` feeds an **autonomous, non-technical** path (`/vibe`), where a deferred note is a silent drop — the stakeholder cannot action it (unlike developer `/plan`, which may surface a genuinely-separate feature for the developer to triage). So:
 
 - **Resolve in-scope hazards into the plan.** If a concern is part of delivering what the user asked, decide it as the architect and fold it into the spec/criteria — do not park it.
 - **A genuinely separate feature is a planning split, not a hazard.** If something is truly out of scope, it becomes its own plan (say so when you restate), never a deferred item handed back to the user.
-- **Never auto-file an issue or delegate it away.** `/vibe` goes from intent to a PR that does the thing; deferral, issue-filing, and delegation are exactly what it must not do. Anything surfaced later at build time is dealt with in the PR by `roles/tech-lead` → *Hazards*.
+- **Never auto-file an issue or delegate it away.** `/vibe` goes from intent to a PR that does the thing; deferral, issue-filing, and delegation are exactly what it must not do. Anything surfaced later at build time is dealt with in the PR by `roles/tech-lead` → *Dispositions*.
 
 ## Restate what you understood, then hand off
 

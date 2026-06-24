@@ -33,7 +33,7 @@ This doc owns four operations on the cross-session store:
 
 | Verb | What it does |
 |---|---|
-| **audit** | Sonnet re-scores every open item against current context; detects fork-safe groups; offers janitor-hazard import |
+| **audit** | Sonnet re-scores every open item against current context; detects fork-safe groups; offers janitor-entry import |
 | **idle** | Deeper audit variant: asks the user about contentious re-orderings before committing |
 | **fork** | Identifies fork-safe groups under two hard gates and outputs per-fork assignment prompts |
 | **claim** | Locks an item `in-progress` with a `forkSession` id inside a forked conversation; `--release` undoes it |
@@ -73,18 +73,18 @@ A Sonnet sub-agent reads the active list + current conversation context and re-s
 **Mutate**: epoch-checked write of the new priorities + user-approved discovered items only — never items the user rejected. TodoWrite sync; report:
 
 ```
-Audit complete. Re-ranked 4 items (2 changed tier), added 1 discovered item, surfaced 1 fork group, imported 2 janitor hazards.
+Audit complete. Re-ranked 4 items (2 changed tier), added 1 discovered item, surfaced 1 fork group, imported 2 janitor entries.
 ```
 
 ### Janitor import
 
-If `<cwd>/.janitor/` exists, offer (separate `AskUserQuestion`, **always user-confirmed, never automatic**) to import entries from any active scratchpad's State block `Hazards / Deferred` section. The user-facing prompt names only each hazard's text plus an evidence-quality note. Each imported hazard becomes an item with `source: "janitor-import"`, the hazard title as `title`, its why-it-matters as `body`, file:line evidence parsed into `scope.evidence`; hazards without file evidence land as `concreteness: ambiguous` (sharpen via */todo edit* before forking).
+If `<cwd>/.janitor/` exists, offer (separate `AskUserQuestion`, **always user-confirmed, never automatic**) to import entries from any active scratchpad's State block `Blockers & feature-splits` section. The user-facing prompt names only each entry's text plus an evidence-quality note. Each imported entry becomes an item with `source: "janitor-import"`, the entry title as `title`, its why-it-matters as `body`, file:line evidence parsed into `scope.evidence`; entries without file evidence land as `concreteness: ambiguous` (sharpen via */todo edit* before forking).
 
 ## Idle mode — deeper pass with user feedback
 
 A deeper audit for when the user is between tasks and has time to engage. **Explicit-only** (`/todo idle`, "I'm between tasks", "let's plan", a session start / post-milestone cadence) — never auto-invoked from pivot detection; that's the audit's job. The difference: idle **actively asks the user about contentious calls** — items where re-ranking confidence is low or two items are nearly tied and the user's preference breaks the tie. If you don't ask, you've just run an expensive audit.
 
-The Sonnet sub-agent gets broader context than the audit (last 20–40 turns or summary, recent git/PR context, `.janitor/` hazards if present) and returns the re-ranking plus a `contentious` array:
+The Sonnet sub-agent gets broader context than the audit (last 20–40 turns or summary, recent git/PR context, `.janitor/` blockers & feature-splits if present) and returns the re-ranking plus a `contentious` array:
 
 ```jsonc
 {
@@ -180,5 +180,5 @@ Claimed "<title>" as fork-1. The parent conversation excludes it from re-ranking
 
 - Audit on pivots only; idle is explicit-only — reactive strategic passes waste tokens and the user's attention.
 - The audit/idle recommend; the user accepts. Never mutate rejected suggestions; never re-rank fork-claimed items.
-- Janitor-hazard import is opt-in per pass — even when `.janitor/` is full of hazards.
+- Janitor-entry import is opt-in per pass — even when `.janitor/` is full of entries.
 - All four operations: epoch-checked writes, TodoWrite re-sync, convention #11 output discipline.

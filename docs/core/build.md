@@ -8,6 +8,7 @@ triggers:
   - self-review convergence
 when: Internal. Loaded by /smith and by implementation-loop roles (roles/coder-*, roles/tech-lead) to define how one unit of build work is verified and committed, and how a finished branch is delivered as a PR.
 related:
+  - core/completion
   - flows/build/smith
   - flows/build/forge
   - roles/tech-lead
@@ -28,7 +29,7 @@ One definition of "make a verified change and ship it," shared by every builder 
 
 A single unit of build work — one acceptance item, or one partitioned task — is committed only when it is green:
 
-1. **Smallest in-spec delta.** Implement just the change the current item/task needs. No drive-by refactors, no scope the spec didn't name; out-of-scope needs are hazards (disposed of per the caller's hazard rule), never folded in.
+1. **Smallest in-spec delta.** Implement just the change the current item/task needs. No drive-by refactors, no scope the spec didn't name; out-of-scope needs are disposed of per `core/completion`'s dispositions (a genuinely separate feature is a feature-split, a hard blocker is surfaced), never folded in.
 2. **TDD where a defining test exists.** When the item is defined by a failing test (always true in the parallel loop — `roles/coder-test-engineer` writes it; usual in `/smith`), "done" means that test goes green.
 3. **Verification is a hard gate, per commit.** Run the canonical verification command. It must complete **green** on this unit. A unit that fails verification does **not** commit — log the failure evidence (failing test, assertion, first error) as the next attempt's context and retry against it. Partial or unrun verification does not count.
 4. **Commit on green.** When verification is green and the item/task is actually met, commit. Accumulate units on one feature branch; do not open intermediate PRs.
