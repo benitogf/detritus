@@ -196,6 +196,49 @@ func estimateMapTokens(s string) int {
 	return len(s) / charsPerToken
 }
 
+// OutlinePath returns a raw, unranked signature view. For a file it outlines
+// that file; for a directory it outlines every source file under it (honouring
+// the same ignores as the map). Reads live from disk — no pack, no index.
+func OutlinePath(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	fi, err := os.Stat(abs)
+	if err != nil {
+		return "", err
+	}
+	if !fi.IsDir() {
+		content, err := os.ReadFile(abs)
+		if err != nil {
+			return "", err
+		}
+		return Outline(detectLanguage(filepath.ToSlash(abs)), content), nil
+	}
+
+	walkRes, err := Walk([]string{abs})
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	for _, f := range walkRes.Files {
+		content, rerr := os.ReadFile(filepath.Join(f.Root, filepath.FromSlash(f.PathRel)))
+		if rerr != nil {
+			continue
+		}
+		out := Outline(f.Language, content)
+		if out == "" {
+			continue
+		}
+		b.WriteString("=== ")
+		b.WriteString(f.PathRel)
+		b.WriteString(" ===\n")
+		b.WriteString(out)
+		b.WriteByte('\n')
+	}
+	return b.String(), nil
+}
+
 func (f *mapFile) matchesFocusPath(focus []string) bool {
 	for _, q := range focus {
 		if q != "" && strings.Contains(f.rel, q) {

@@ -169,6 +169,7 @@ func main() {
 	codeRegistry := code.NewRegistry()
 	defer codeRegistry.Close()
 	code.RegisterTools(server, codeRegistry, version)
+	code.RegisterSeamlessTools(server)
 
 	type ListArgs struct{}
 	mcp.AddTool(server, &mcp.Tool{

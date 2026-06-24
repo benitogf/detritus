@@ -19,7 +19,6 @@ func RegisterTools(server *mcp.Server, reg *Registry, detritusVersion string) {
 	registerTree(server, reg)
 	registerSearch(server, reg)
 	registerGet(server, reg)
-	registerOutline(server, reg)
 	registerPack(server, reg, detritusVersion)
 }
 
@@ -186,37 +185,6 @@ func registerGet(server *mcp.Server, reg *Registry) {
 			cleaned = SliceLines(cleaned, start, end)
 		}
 		return codeTextResult(cleaned), nil, nil
-	})
-}
-
-type outlineArgs struct {
-	Pack string `json:"pack" jsonschema:"Pack name (from code_list)."`
-	File string `json:"file" jsonschema:"File path (same format as code_get)."`
-}
-
-func registerOutline(server *mcp.Server, reg *Registry) {
-	mcp.AddTool(server, &mcp.Tool{
-		Name:        "code_outline",
-		Description: "Return a signature-only view of a file: package, imports, types, and function signatures. Much cheaper than code_get for understanding file shape before deciding what to read in full.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args outlineArgs) (*mcp.CallToolResult, any, error) {
-		if args.Pack == "" || args.File == "" {
-			return codeErrResult("pack and file required"), nil, nil
-		}
-		idx, err := reg.Open(args.Pack)
-		if err != nil {
-			return codeErrResult(err.Error()), nil, nil
-		}
-		doc, err := resolveDocument(idx, args.Pack, args.File, []string{"content", "language"})
-		if err != nil {
-			return codeErrResult(err.Error()), nil, nil
-		}
-		content, _ := doc.Fields["content"].(string)
-		language, _ := doc.Fields["language"].(string)
-		out := Outline(language, []byte(content))
-		if out == "" {
-			return codeTextResult("(no outline available for language " + language + "; fetch with code_get for full content)"), nil, nil
-		}
-		return codeTextResult(out), nil, nil
 	})
 }
 
