@@ -100,7 +100,7 @@ The shared scratchpad spine (current orientation, tick log, state block) is defi
 
 ## Audit Agent Contract
 
-Shared audit rules in `core/loop` → *Shared Audit Agent Rules* apply (per-tick report file, no pre-hypothesized root cause, no file edits, no long logs). On top of those, `/janitor`'s audit is a **discovery** audit: scan the target for safe improvements that match the topics (or the `/gh-self-review` rubric when no topics).
+Shared audit rules in `core/loop` → *Shared Audit Agent Rules* apply (per-tick report file, no pre-hypothesized root cause, no file edits, no long logs). On top of those, `/janitor`'s audit is a **discovery** audit: scan the target for safe improvements that match the topics (or the `/gh-self-review` rubric when no topics). Code context is zero-setup — `code_map`/`code_outline` for structure, `code_graph` for navigation, native Grep for text (`flows/project/code`); no pack/index step.
 
 Each finding must include:
 

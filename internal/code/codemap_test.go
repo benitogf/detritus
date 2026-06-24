@@ -99,6 +99,70 @@ func TestBuildCodeMapRespectsBudget(t *testing.T) {
 	}
 }
 
+// TestCodeMapTokenEconomy records and guards CS8's token claim: the map is
+// signature-only and budget-bounded, so it is leaner than reading the files in
+// full. Uses fat function bodies so full content dwarfs the signatures.
+func TestCodeMapTokenEconomy(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	root := t.TempDir()
+	writeGo(t, root, "go.mod", "module econ\n\ngo 1.25\n")
+	fat := "package econ\n\nfunc Big() int {\n\tn := 0\n"
+	for i := 0; i < 300; i++ {
+		fat += "\tn += 1 // a line of body that the signature view omits\n"
+	}
+	fat += "\treturn n\n}\n"
+	writeGo(t, root, "big.go", fat)
+
+	out, err := BuildCodeMap(MapOptions{Scope: root, Budget: DefaultMapBudget})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mapTokens := estimateMapTokens(out)
+
+	fullTokens := 0
+	filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
+		if err == nil && !fi.IsDir() && strings.HasSuffix(p, ".go") {
+			b, _ := os.ReadFile(p)
+			fullTokens += len(b) / charsPerToken
+		}
+		return nil
+	})
+	t.Logf("code_map ~%d tokens vs full-read ~%d tokens (budget %d)", mapTokens, fullTokens, DefaultMapBudget)
+	if mapTokens > DefaultMapBudget {
+		t.Errorf("map %d tokens exceeds budget %d", mapTokens, DefaultMapBudget)
+	}
+	if mapTokens >= fullTokens {
+		t.Errorf("map (%d tokens) is not leaner than reading files in full (%d tokens)", mapTokens, fullTokens)
+	}
+}
+
+// TestCodeMapWritesNothingIntoProject guards CS3/CS6: there is no stored index
+// in the repo — building a map must not create any file under the project (the
+// parse cache lives under DETRITUS_HOME, isolated here to a different dir).
+func TestCodeMapWritesNothingIntoProject(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	root := sampleProject(t)
+
+	snapshot := func() map[string]bool {
+		seen := map[string]bool{}
+		filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
+			if err == nil {
+				seen[p] = true
+			}
+			return nil
+		})
+		return seen
+	}
+	before := snapshot()
+	if _, err := BuildCodeMap(MapOptions{Scope: root, Budget: 100000}); err != nil {
+		t.Fatal(err)
+	}
+	after := snapshot()
+	if len(before) != len(after) {
+		t.Errorf("code_map changed the project tree: %d entries before, %d after (no in-repo index allowed)", len(before), len(after))
+	}
+}
+
 func TestBuildCodeMapFocusReorders(t *testing.T) {
 	t.Setenv("DETRITUS_HOME", t.TempDir())
 	root := sampleProject(t)

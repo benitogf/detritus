@@ -42,9 +42,11 @@ When the user provides requirements, feedback, or a task description, follow thi
 
 ## 2. Research the Codebase
 
-- Use code_search to find relevant existing code
-- Identify files/packages that will need changes
-- Understand current patterns and conventions
+Code context is zero-setup (no pack, no index — see `flows/project/code`):
+
+- `code_map` for a ranked structural overview of the area (optionally `focus` on a feature/symbol); `code_outline` for a file's signatures; `code_graph` for who-calls / implementers
+- native Grep for text/keyword search across files
+- Identify files/packages that will need changes; understand current patterns and conventions
 
 ## 3. Create Implementation Plan
 

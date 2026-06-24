@@ -172,6 +172,7 @@ The audit phase has no hard end. It runs until the user stops it OR the skip-str
 Shared audit rules in `core/loop` → *Shared Audit Agent Rules* apply. On top of those, the build-phase audit is a **verification + gap-finding** audit, not a discovery audit:
 
 - Read the scratchpad's *Feature spec* and *Acceptance criteria*.
+- Code context is zero-setup (no pack/index): use `code_map`/`code_outline` for structure, `code_graph` for navigation, native Grep for text (`flows/project/code`).
 - For each unchecked acceptance item, report current state: implemented (with evidence), partially implemented (with what's missing), or not started.
 - Propose the smallest next delta toward the next unchecked item. The proposal includes: files to touch, what changes, what verification proves the item is met.
 - Do **not** propose work outside the spec. Out-of-spec needs (a refactor that would help, a related cleanup) get reported as feature-splits/blockers into the State block's *Blockers & feature-splits*, not as deltas to implement.
