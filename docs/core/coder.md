@@ -9,6 +9,7 @@ when: Internal. Loaded by an implementation-loop role agent (roles/coder-*) spaw
 related:
   - core/build
   - core/completion
+  - core/coordination
   - roles/tech-lead
   - roles/coder-test-engineer
   - roles/coder-backend
@@ -38,7 +39,7 @@ The tech-lead hands each coder exactly four things — never the whole plan:
 - **Stay inside the partition.** Touch only the files in the assigned boundary. A change that needs a file outside the boundary is a **blocker to report**, not a license to reach across — reaching across is exactly the cross-dependency the fork-safe partition exists to prevent.
 - **Smallest delta to green.** Implement the task, not adjacent improvements. Out-of-scope needs are reported, never folded in (see *Out-of-scope work* below).
 - **No integration.** A coder never merges branches, resolves cross-task conflicts, or opens a PR. Integration is the tech-lead's sequential step.
-- **Emit status, don't narrate.** A coder's output is a structured status the driver consumes (the `/forge` sub-agent return value, or a candyland event): `working` → `green` (task done, test + verification green, files changed) or `blocked` (with the precise evidence — failing assertion, missing interface, out-of-boundary dependency). Status is the only product; raw logs stay out of the user's thread.
+- **Emit status, don't narrate.** A coder's output is a structured status the driver consumes (the `/forge` sub-agent return value, or a candyland event): `working` → `green` (task done, test + verification green, files changed) or `blocked` (with the precise evidence — failing assertion, missing interface, out-of-boundary dependency). In-process, a block ends the turn with `core/coordination`'s fenced `BLOCKED {json: {question, correlationId}}` line so the orchestrator can answer and re-spawn. Status is the only product; raw logs stay out of the user's thread.
 
 ## Out-of-scope work
 

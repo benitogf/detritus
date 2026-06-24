@@ -12,6 +12,7 @@ related:
   - roles/tech-lead
   - core/build
   - core/completion
+  - core/coordination
   - core/coder
   - flows/plan/plan
   - core/dream
@@ -37,7 +38,7 @@ The contract (shape in `flows/plan/plan`) carries the feature spec, acceptance c
 
 ## Execution — be the tech-lead, in-process
 
-Act as the tech-lead per `roles/tech-lead`, with the **in-process driver substrate**: spawn each coder as a **sub-agent via the Agent tool**, one per fork-safe task, each told only its single task and the context it depends on. Drive the full choreography — partition → test-first → parallel build → sequential integration (loop back to the owning coder on a dirty merge) → `/gh-self-review` convergence → one PR via `gh-issue-work` Phase 9.
+Act as the tech-lead per `roles/tech-lead`, with the **in-process driver substrate**: spawn each coder as a **sub-agent via the Agent tool**, one per fork-safe task, each told only its single task and the context it depends on. This is `core/coordination` Realization A — the Agent tool *is* the single-writer transport, the `.plan` checklist is the durable task-graph, and a blocked coder returns the fenced `BLOCKED {json}` line for you to answer and re-spawn (no bus). Drive the full choreography — partition → test-first → parallel build → sequential integration (loop back to the owning coder on a dirty merge) → `/gh-self-review` convergence → one PR via `gh-issue-work` Phase 9.
 
 ## How /forge relates to /smith and candyland
 

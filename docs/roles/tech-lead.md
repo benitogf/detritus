@@ -11,6 +11,7 @@ when: Internal. Loaded by an agent acting as the implementation-loop coordinator
 related:
   - core/build
   - core/completion
+  - core/coordination
   - core/coder
   - core/todo-audit
   - roles/coder-test-engineer
@@ -23,7 +24,7 @@ related:
 
 # Tech Lead — partition, coordinate, integrate, deliver
 
-The tech-lead is the orchestrating role of the parallel implementation loop. It consumes a **settled plan contract** (it does not plan), splits the work into fork-safe tasks, drives test-first parallel coders, integrates their work sequentially, and delivers one PR. It owns the **decisions and the choreography**; it does not own the **process lifecycle** — that belongs to the driver.
+The tech-lead is the orchestrating role of the parallel implementation loop. It consumes a **settled plan contract** (it does not plan), splits the work into fork-safe tasks, drives test-first parallel coders, integrates their work sequentially, and delivers one PR. It owns the **decisions and the choreography**; it does not own the **process lifecycle** — that belongs to the driver. The tech-lead is the **orchestrator** in `core/coordination`'s protocol: the single writer of the task-graph, the re-planner, and the holder of the K=3 escalation cap.
 
 > ## ⛔ Do not invoke directly
 > No slash command. The tech-lead is spawned by a driver and reads this doc via `kb_get`. The decisions and phase sequence below are identical across drivers; only how coders are *launched* differs.

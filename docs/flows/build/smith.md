@@ -13,6 +13,7 @@ related:
   - core/loop
   - core/build
   - core/completion
+  - core/coordination
   - flows/plan/plan
   - flows/build/janitor
   - flows/github/gh
