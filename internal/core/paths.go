@@ -1,4 +1,4 @@
-package code
+package core
 
 import (
 	"fmt"
@@ -9,10 +9,11 @@ import (
 
 var dataDirWarnOnce sync.Once
 
-// DataDir returns the detritus data directory.
-// Resolution order: $DETRITUS_HOME, $XDG_DATA_HOME/detritus, ~/.detritus.
-// If none of those resolve, falls back to $TMPDIR/detritus with a warning
-// — silently writing to CWD would hide the problem and pollute the repo.
+// DataDir returns the detritus data directory, shared by every local-knowledge
+// facet (code-tags cache, learned-memory store). Resolution order:
+// $DETRITUS_HOME, $XDG_DATA_HOME/detritus, ~/.detritus. If none resolve, falls
+// back to $TMPDIR/detritus with a warning — silently writing to CWD would hide
+// the problem and pollute the repo.
 func DataDir() string {
 	if p := os.Getenv("DETRITUS_HOME"); p != "" {
 		return p

@@ -9,6 +9,8 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+
+	"github.com/benitogf/detritus/internal/core"
 )
 
 // Tag is one symbol occurrence in a source file. Kind is "def" (a declaration)
@@ -33,7 +35,7 @@ type FileTags struct {
 // CodeTagsDir is the per-file parse cache root: ~/.detritus/code-tags/.
 // Derived, disposable, outside any project repo, never committed.
 func CodeTagsDir() string {
-	return filepath.Join(DataDir(), "code-tags")
+	return filepath.Join(core.DataDir(), "code-tags")
 }
 
 // TagsForFile returns the def/ref tags for a Go file, re-parsing only when the
