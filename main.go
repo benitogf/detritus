@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/benitogf/detritus/internal/code"
+	"github.com/benitogf/detritus/internal/memory"
 	"github.com/benitogf/detritus/internal/search"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -139,6 +140,7 @@ func main() {
 	}, nil)
 
 	code.RegisterSeamlessTools(server)
+	memory.RegisterTools(server)
 
 	type ListArgs struct{}
 	mcp.AddTool(server, &mcp.Tool{

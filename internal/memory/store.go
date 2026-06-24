@@ -115,7 +115,7 @@ func ensureStore() error {
 	}
 	gi := filepath.Join(MemoryDir(), ".gitignore")
 	if _, err := os.Stat(gi); err != nil {
-		_ = os.WriteFile(gi, []byte("# derived, rebuilt from lessons/ — never committed\nindex.bleve/\n"), 0o644)
+		_ = os.WriteFile(gi, []byte("# derived, rebuilt from lessons/ — never committed\nindex.bleve/\n.index.lock\n.index-built\n"), 0o644)
 	}
 	if _, err := os.Stat(filepath.Join(MemoryDir(), ".git")); err != nil {
 		cmd := exec.Command("git", "init", "-q")
