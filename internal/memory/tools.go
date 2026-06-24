@@ -20,12 +20,13 @@ func RegisterTools(server *mcp.Server) {
 }
 
 type putArgs struct {
-	ID      string   `json:"id" jsonschema:"Stable kebab-case lesson id. An existing id appends bullets; a new id creates a lesson."`
-	Kind    string   `json:"kind" jsonschema:"\"procedure\" (a reusable how-to) or \"fact\" (a durable fact)."`
-	Bullets []string `json:"bullets" jsonschema:"Itemized delta — the strategy/concept/failure-mode bullets to append. Never a wholesale rewrite."`
-	Run     string   `json:"run,omitempty" jsonschema:"Provenance: the run id that produced this lesson."`
-	Task    string   `json:"task,omitempty" jsonschema:"Provenance: the task id."`
-	Outcome string   `json:"outcome" jsonschema:"Verification outcome. Must be \"green\" — only verified-green work distils; anything else is rejected."`
+	ID         string   `json:"id" jsonschema:"Stable kebab-case lesson id. An existing id appends bullets; a new id creates a lesson."`
+	Kind       string   `json:"kind" jsonschema:"\"procedure\" (a reusable how-to) or \"fact\" (a durable fact)."`
+	Bullets    []string `json:"bullets" jsonschema:"Itemized delta — the strategy/concept/failure-mode bullets to append. Never a wholesale rewrite."`
+	Run        string   `json:"run,omitempty" jsonschema:"Provenance: the run id that produced this lesson."`
+	Task       string   `json:"task,omitempty" jsonschema:"Provenance: the task id."`
+	Outcome    string   `json:"outcome" jsonschema:"Verification outcome. Must be \"green\" — only verified-green work distils; anything else is rejected."`
+	Supersedes string   `json:"supersedes,omitempty" jsonschema:"Optional: id of a lesson this one contradicts/replaces. It is marked stale (kept for audit), not deleted."`
 }
 
 func registerPut(server *mcp.Server) {
@@ -38,7 +39,15 @@ func registerPut(server *mcp.Server) {
 		if err != nil {
 			return errResult(err.Error()), nil, nil
 		}
-		return textResult(fmt.Sprintf("distilled lesson %q (%s)", id, args.Kind)), nil, nil
+		msg := fmt.Sprintf("distilled lesson %q (%s)", id, args.Kind)
+		if args.Supersedes != "" {
+			if err := Supersede(args.Supersedes); err != nil {
+				msg += fmt.Sprintf("; supersede %q skipped: %v", args.Supersedes, err)
+			} else {
+				msg += fmt.Sprintf("; superseded %q (marked stale)", args.Supersedes)
+			}
+		}
+		return textResult(msg), nil, nil
 	})
 }
 

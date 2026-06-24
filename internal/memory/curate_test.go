@@ -71,6 +71,26 @@ func TestCurateHardCapArchivesLeastRecentlyUsed(t *testing.T) {
 	assertStatus(t, "c", "archived")
 }
 
+// TestPutRunsCurationPass proves the curation pass actually runs on the write
+// path — the cap fires from a plain Put, with no explicit Curate call.
+func TestPutRunsCurationPass(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	old := defaultMaxActive
+	defaultMaxActive = 1
+	defer func() { defaultMaxActive = old }()
+
+	if _, err := Put("older", "fact", []string{"x"}, greenSource()); err != nil {
+		t.Fatal(err)
+	}
+	setLastUsed(t, "older", time.Now().Add(-time.Hour)) // make it the LRU
+	// This Put's curation pass (cap=1) must archive the least-recently-used.
+	if _, err := Put("newer", "fact", []string{"y"}, greenSource()); err != nil {
+		t.Fatal(err)
+	}
+	assertStatus(t, "older", "archived")
+	assertStatus(t, "newer", "active")
+}
+
 func TestSupersedeMarksStaleNotDeleted(t *testing.T) {
 	t.Setenv("DETRITUS_HOME", t.TempDir())
 	if _, err := Put("contradicted", "fact", []string{"old belief"}, greenSource()); err != nil {

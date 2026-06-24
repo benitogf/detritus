@@ -53,18 +53,24 @@ lesson used (refreshing its recency), so lessons you actually rely on stay activ
 
 Cross-lesson consolidation is **your** judgement, expressed through the `id` you choose at `skill_put`:
 search first, then ADD (new `id`), UPDATE (append to the matching `id`), or NOOP (don't write — it's
-already captured). The store mechanically dedups identical bullets; deciding that two differently-worded
-lessons are *the same* is the on-session judgement, not a code heuristic.
+already captured). When a new lesson **contradicts** an old one, pass `supersedes: <old-id>` to
+`skill_put` — the old lesson is marked stale (kept for audit), not deleted. The store mechanically dedups
+identical bullets; deciding that two differently-worded lessons are *the same* is the on-session
+judgement, not a code heuristic.
 
 ## Curation (how the corpus stays bounded without embeddings)
 
-Bounded, keyword-rich corpora are exactly where FTS is strong, so curation is load-bearing:
+Bounded, keyword-rich corpora are exactly where FTS is strong, so curation is load-bearing — and it runs
+**automatically on the write path**: every `skill_put` triggers a single-writer curation pass, and
+`skill_get` refreshes recency, so the corpus self-bounds with no separate maintenance step.
 
 - **Dedup-at-write** — a re-distilled insight (case/whitespace-insensitive) is not duplicated.
-- **Age** — `active → stale → archived` by last-used; **`Touch`** on retrieval keeps used lessons active.
-- **Hard cap** — beyond a cap, the least-recently-used active lessons are archived.
-- **Supersede-not-delete** — a contradicted lesson is marked `stale` (kept on disk for audit), never
-  deleted. Archived/superseded lessons drop out of retrieval but remain auditable.
+- **Age** — `active → stale → archived` by last-used; retrieval (`skill_get`) keeps used lessons active.
+- **Hard cap** — beyond a cap, the least-recently-used active lessons are archived. (Both age and cap run
+  in the per-`skill_put` curation pass.)
+- **Supersede-not-delete** — a contradicted lesson (`skill_put supersedes: <id>`) is marked `stale`
+  (kept on disk for audit), never deleted. Archived/superseded lessons drop out of retrieval but remain
+  auditable.
 
 ## The dense-arm question (measured, not guessed)
 

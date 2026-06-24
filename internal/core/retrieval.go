@@ -6,7 +6,10 @@
 // second engine.
 package core
 
-import "math"
+import (
+	"math"
+	"unicode/utf8"
+)
 
 // Result is one retrieval hit. Trust/Source carry provenance: they are empty
 // for curated KB docs (trusted, no agent-write path) and populated for learned
@@ -90,10 +93,15 @@ func docSimilarity(a, b Result) float64 {
 	return 0.0
 }
 
-// Truncate clips s to maxLen runes-ish (bytes), appending an ellipsis.
+// Truncate clips s to at most maxLen bytes (backing off to a rune boundary so
+// a multi-byte rune is never split), appending an ellipsis.
 func Truncate(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s
 	}
-	return s[:maxLen] + "..."
+	end := maxLen
+	for end > 0 && !utf8.RuneStart(s[end]) {
+		end--
+	}
+	return s[:end] + "..."
 }

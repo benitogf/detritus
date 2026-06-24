@@ -74,6 +74,7 @@ func Put(id, kind string, bullets []string, src Source) (string, error) {
 		return "", err
 	}
 
+	var lesson Lesson
 	if existing, err := Get(id); err == nil {
 		// Itemized-delta append — never collapse or rewrite prior bullets (ACE).
 		existing.Bullets = appendUnique(existing.Bullets, bullets)
@@ -82,19 +83,26 @@ func Put(id, kind string, bullets []string, src Source) (string, error) {
 		if existing.Kind == "" {
 			existing.Kind = kind
 		}
-		return id, write(existing)
+		lesson = existing
+	} else {
+		lesson = Lesson{
+			ID:       id,
+			Kind:     kind,
+			Status:   "active",
+			Trust:    "verified",
+			Source:   src,
+			LastUsed: nowRFC3339(),
+			Title:    id,
+			Bullets:  appendUnique(nil, bullets),
+		}
 	}
-
-	return id, write(Lesson{
-		ID:       id,
-		Kind:     kind,
-		Status:   "active",
-		Trust:    "verified",
-		Source:   src,
-		LastUsed: nowRFC3339(),
-		Title:    id,
-		Bullets:  appendUnique(nil, bullets),
-	})
+	if err := write(lesson); err != nil {
+		return "", err
+	}
+	// Single-writer curation pass: age + hard-cap on every distillation so the
+	// corpus stays bounded. Best-effort — a curation error never fails a write.
+	_, _ = Curate(CurateOptions{})
+	return id, nil
 }
 
 // Get reads a lesson by id from disk (the source of truth).

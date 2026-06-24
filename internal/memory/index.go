@@ -16,9 +16,14 @@ func markerPath() string { return filepath.Join(MemoryDir(), ".index-built") }
 
 // Search returns ranked snippets for verified lessons matching the query. The
 // derived Bleve index is rebuilt from the lesson files whenever they have
-// changed (mtime sentinel), and the whole rebuild+search is serialized across
-// sessions by a flock — so concurrent writes/rebuilds never corrupt the index
-// (LM3). Results carry only keys + snippets (JIT, never the whole corpus — LM7).
+// changed (mtime sentinel), and the rebuild+search is serialized across
+// sessions by a flock — so concurrent rebuilds never leave a half-written index
+// (LM3; the index is derived and always recoverable by re-deriving from disk).
+// Lesson-file writes (Put/Touch/Curate) are not under this lock: within a
+// session MCP stdio serializes them, and the cross-session case (two processes
+// sharing ~/.detritus) is a documented v1 boundary — a lost append at worst,
+// never index corruption, since files are the source of truth and git handles
+// their merge. Results carry only keys + snippets (JIT, never the corpus — LM7).
 func Search(query string, topN int) ([]core.Result, error) {
 	if topN <= 0 {
 		topN = 10

@@ -1,6 +1,10 @@
 package core
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"unicode/utf8"
+)
 
 func TestRankNormalizesToTopHit(t *testing.T) {
 	raw := []Result{
@@ -56,5 +60,11 @@ func TestTruncate(t *testing.T) {
 	}
 	if got := Truncate("hello world", 5); got != "hello..." {
 		t.Errorf("long string should clip+ellipsis, got %q", got)
+	}
+	// Multi-byte runes must not be split: "é" is 2 bytes; clipping at a byte
+	// that lands mid-rune backs off to a rune boundary and stays valid UTF-8.
+	got := Truncate("aéb", 2) // byte 2 is the middle of "é"
+	if !utf8.ValidString(strings.TrimSuffix(got, "...")) {
+		t.Errorf("Truncate split a multi-byte rune: %q is not valid UTF-8", got)
 	}
 }

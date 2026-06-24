@@ -30,7 +30,7 @@ related:
 The one authoritative definition of "done." Every builder and every loop inherits it, so silent
 deferral of handle-able in-scope work is impossible by contract — no one has to forbid it by hand each
 run. The durable acceptance ledger this doctrine defines is also the **in-process coordination
-substrate** (`coordination-protocol.md` Realization A) and the firewall for learned memory (only
+substrate** (`core/coordination` Realization A) and the firewall for learned memory (only
 verified-green work distils).
 
 > ## ⛔ Do not invoke directly
@@ -109,7 +109,7 @@ reusable, cross-project lesson (`core/memory` → *When to distil*); an unverifi
 - **Re-grounding is selective.** Re-derive only the *open* items — a cheap grep of unchecked `[ ]`
   lines — never reload the whole document. This is the token-economy lever: the orchestrator sheds
   state to the ledger and re-derives open work each tick, keeping its own context lean.
-- This is the substrate `coordination-protocol.md` Realization A uses **in place of an in-process bus**.
+- This is the substrate `core/coordination` Realization A uses **in place of an in-process bus**.
   The multi-process realization (Realization B) mirrors it in ooo: a server-side open-items read filter
   over `graph/nodes/*` returns only non-`done` nodes — same discipline, different transport.
 
@@ -143,7 +143,7 @@ Verify** (exit gates), and **Persist** (the durable ledger).
     it exits only at zero-open + green (the exit gate above). No separate process controls it.
   - **Multi-process (candyland):** the **tech-lead / conductor** re-spawns a coder that stopped before
     its task's acceptance criteria + tests are green, and marks `blocked` only on a real blocker
-    (`coordination-protocol.md`).
+    (`core/coordination`).
   - Both pair with a **circuit breaker**: after **K=3** failed attempts on one unit, escalate to a
     blocker (push the branch + record it) rather than thrash the subscription quota.
   - A Claude Code Stop hook (`setup-extra-rules`) is **optional local hardening** a developer may opt

@@ -17,8 +17,11 @@ import (
 const (
 	defaultStaleAfter   = 90 * 24 * time.Hour
 	defaultArchiveAfter = 180 * 24 * time.Hour
-	defaultMaxActive    = 500
 )
+
+// defaultMaxActive is the hard cap on active lessons (a var, not a const, so
+// tests can lower it to exercise the cap without writing hundreds of lessons).
+var defaultMaxActive = 500
 
 // CurateOptions tunes a curation pass. Zero fields take defaults; Now is
 // injectable for tests.
