@@ -56,7 +56,7 @@ func registerSearch(server *mcp.Server) {
 		if limit <= 0 {
 			limit = 5
 		}
-		results, err := Search(args.Query, limit)
+		results, err := SearchAndLog(args.Query, limit)
 		if err != nil {
 			return errResult("skill_search: " + err.Error()), nil, nil
 		}
