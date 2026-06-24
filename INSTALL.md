@@ -53,14 +53,8 @@ detritus --update
 `detritus --update` downloads the latest release and runs setup with the new
 binary.
 
-## Workspace Pack CLI
+## Code context
 
-Most users should use `/code`. These commands are available for tools and
-maintainers that need direct pack management:
-
-```bash
-detritus --pack my-project /absolute/path/to/project
-detritus --packs
-detritus --refresh my-project
-detritus --unpack my-project
-```
+Code context is zero-setup — there is no pack to build or manage. Use `/code`
+(or the `code_map` / `code_outline` / `code_graph` MCP tools directly); they
+read the working tree live, so there are no install or maintenance commands.

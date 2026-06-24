@@ -100,7 +100,10 @@ func Put(id, kind string, bullets []string, src Source) (string, error) {
 		return "", err
 	}
 	// Single-writer curation pass: age + hard-cap on every distillation so the
-	// corpus stays bounded. Best-effort — a curation error never fails a write.
+	// corpus stays bounded with no separate maintenance step. Best-effort — a
+	// curation error never fails a write. Cost is O(lessons) per distil (a dir
+	// read + parse), bounded by the active-cap (~500) and writing only on a
+	// status transition; distillation is infrequent, so this is acceptable.
 	_, _ = Curate(CurateOptions{})
 	return id, nil
 }
@@ -123,7 +126,7 @@ func ensureStore() error {
 	}
 	gi := filepath.Join(MemoryDir(), ".gitignore")
 	if _, err := os.Stat(gi); err != nil {
-		_ = os.WriteFile(gi, []byte("# derived, rebuilt from lessons/ — never committed\nindex.bleve/\n.index.lock\n.index-built\nrecall.log\n"), 0o644)
+		_ = os.WriteFile(gi, []byte("# derived, rebuilt from lessons/ — never committed\nindex.bleve/\n.index.lock\n.index-built\nrecall.log\nlessons/*.tmp\n"), 0o644)
 	}
 	if _, err := os.Stat(filepath.Join(MemoryDir(), ".git")); err != nil {
 		cmd := exec.Command("git", "init", "-q")
@@ -133,8 +136,31 @@ func ensureStore() error {
 	return nil
 }
 
+// write persists a lesson atomically (temp + rename) so a concurrent reader —
+// the index rebuild, or another session — never observes a half-written lesson
+// file. (Lost-update under concurrent same-id read-modify-write across sessions
+// remains a documented v1 boundary; see index.go.)
 func write(l Lesson) error {
-	return os.WriteFile(lessonPath(l.ID), []byte(marshalLesson(l)), 0o644)
+	dst := lessonPath(l.ID)
+	tmp, err := os.CreateTemp(LessonsDir(), "lesson-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write([]byte(marshalLesson(l))); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, dst); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return nil
 }
 
 // appendUnique appends bullets that aren't already present, comparing on a
