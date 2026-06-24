@@ -84,6 +84,7 @@ func registerGet(server *mcp.Server) {
 		if err != nil {
 			return errResult(err.Error()), nil, nil
 		}
+		_ = Touch(args.ID) // mark use: refresh last_used, reactivate if stale (best-effort)
 		var b strings.Builder
 		fmt.Fprintf(&b, "# %s  [%s · %s · trust=%s]\n", l.Title, l.Kind, l.Status, l.Trust)
 		for _, bullet := range l.Bullets {

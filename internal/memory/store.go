@@ -93,7 +93,7 @@ func Put(id, kind string, bullets []string, src Source) (string, error) {
 		Source:   src,
 		LastUsed: nowRFC3339(),
 		Title:    id,
-		Bullets:  bullets,
+		Bullets:  appendUnique(nil, bullets),
 	})
 }
 
@@ -129,18 +129,26 @@ func write(l Lesson) error {
 	return os.WriteFile(lessonPath(l.ID), []byte(marshalLesson(l)), 0o644)
 }
 
+// appendUnique appends bullets that aren't already present, comparing on a
+// normalized form (case- and whitespace-insensitive) so re-distilling the same
+// insight doesn't duplicate it (dedup-at-write). Original text is preserved.
 func appendUnique(existing, add []string) []string {
 	seen := map[string]bool{}
 	for _, b := range existing {
-		seen[b] = true
+		seen[normalizeBullet(b)] = true
 	}
 	for _, b := range add {
-		if !seen[b] {
+		n := normalizeBullet(b)
+		if !seen[n] {
 			existing = append(existing, b)
-			seen[b] = true
+			seen[n] = true
 		}
 	}
 	return existing
+}
+
+func normalizeBullet(s string) string {
+	return strings.Join(strings.Fields(strings.ToLower(s)), " ")
 }
 
 // marshalLesson renders a lesson as flat-frontmatter markdown. source.* is
