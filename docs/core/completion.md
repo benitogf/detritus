@@ -20,6 +20,7 @@ related:
   - flows/plan/vibe
   - roles/tech-lead
   - core/coder
+  - core/memory
   - flows/github/gh-self-review
   - flows/principles/truthseeker
 ---
@@ -94,6 +95,9 @@ a deferral.
 The only legitimate hand-backs are three: **milestone / PR-open**, a **hard blocker** (disposition 3),
 or an **explicit user halt**. Anywhere else, the loop owes a next step (see `core/loop` →
 self-continuation).
+
+This same verified-green gate is the firewall for **learned memory**: only verified-green work distils a
+reusable, cross-project lesson (`core/memory` → *When to distil*); an unverified run distils nothing.
 
 ## The durable ledger (also the coordination substrate)
 
