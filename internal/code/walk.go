@@ -17,8 +17,8 @@ const (
 
 // FileInfo describes a single file found during a walk.
 type FileInfo struct {
-	Root     string    // absolute path to the pack root this file lives under
-	PathRel  string    // slash-separated path inside the root
+	Root     string // absolute path to the walk root this file lives under
+	PathRel  string // slash-separated path inside the root
 	Size     int64
 	MTime    time.Time
 	Language string

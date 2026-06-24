@@ -47,19 +47,15 @@ func TestOutlinePathMissing(t *testing.T) {
 	}
 }
 
-// TestToolRegistrationNoCollision guards that the legacy code_* tools and the
-// seamless tools register on one server without a duplicate-name panic — the
-// pack-based code_outline was replaced, not duplicated.
-func TestToolRegistrationNoCollision(t *testing.T) {
+// TestSeamlessToolsRegister guards that the seamless tools register on a server
+// without a duplicate-name panic (code_map, code_outline, code_graph).
+func TestSeamlessToolsRegister(t *testing.T) {
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("tool registration panicked (likely a duplicate tool name): %v", r)
 		}
 	}()
 	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "test"}, nil)
-	reg := NewRegistry()
-	defer reg.Close()
-	RegisterTools(server, reg, "test")
 	RegisterSeamlessTools(server)
 }
 

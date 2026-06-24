@@ -2,6 +2,7 @@ package code
 
 import (
 	"context"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -78,4 +79,28 @@ func registerSeamlessOutline(server *mcp.Server) {
 		}
 		return codeTextResult(out), nil, nil
 	})
+}
+
+// --- shared helpers ---
+
+func codeTextResult(text string) *mcp.CallToolResult {
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: text}},
+	}
+}
+
+func codeErrResult(text string) *mcp.CallToolResult {
+	return &mcp.CallToolResult{
+		Content: []mcp.Content{&mcp.TextContent{Text: text}},
+		IsError: true,
+	}
+}
+
+// lastSegment returns the final slash-separated segment of p.
+func lastSegment(p string) string {
+	i := strings.LastIndex(p, "/")
+	if i < 0 {
+		return p
+	}
+	return p[i+1:]
 }
