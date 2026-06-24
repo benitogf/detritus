@@ -7,6 +7,7 @@ require (
 	github.com/dcadenas/pagerank v0.0.0-20231224215204-32a14b9c24a7
 	github.com/modelcontextprotocol/go-sdk v1.4.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
+	golang.org/x/tools v0.43.0
 )
 
 require (
@@ -40,9 +41,9 @@ require (
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.etcd.io/bbolt v1.4.0 // indirect
+	golang.org/x/mod v0.34.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/tools v0.43.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )

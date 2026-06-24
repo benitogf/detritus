@@ -14,6 +14,7 @@ import (
 func RegisterSeamlessTools(server *mcp.Server) {
 	registerMap(server)
 	registerSeamlessOutline(server)
+	registerGraph(server)
 }
 
 type mapToolArgs struct {
@@ -33,6 +34,24 @@ func registerMap(server *mcp.Server) {
 		}
 		if out == "" {
 			return codeTextResult("(no Go files found in scope)"), nil, nil
+		}
+		return codeTextResult(out), nil, nil
+	})
+}
+
+type graphToolArgs struct {
+	Symbol string `json:"symbol" jsonschema:"A function or interface name to navigate (who-calls + reachable-from for a function; implementers for an interface)."`
+	Scope  string `json:"scope,omitempty" jsonschema:"Directory to load (must compile). Default: the caller's current project."`
+}
+
+func registerGraph(server *mcp.Server) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "code_graph",
+		Description: "Precise, type-resolved navigation for a Go symbol: who-calls and reachable-from for a function, or implementers for an interface. Heavier than code_map (loads full type info) — use when you need exact call/implementation relationships, not a broad overview. Falls back to the structural map when the package does not compile.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args graphToolArgs) (*mcp.CallToolResult, any, error) {
+		out, err := BuildCodeGraph(GraphQuery{Symbol: args.Symbol, Scope: args.Scope})
+		if err != nil {
+			return codeErrResult("code_graph: " + err.Error()), nil, nil
 		}
 		return codeTextResult(out), nil, nil
 	})
