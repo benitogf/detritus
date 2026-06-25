@@ -12,6 +12,8 @@ when: User invokes /smith with a feature description to build. The first tick pa
 related:
   - core/loop
   - core/build
+  - core/completion
+  - core/coordination
   - flows/plan/plan
   - flows/build/janitor
   - flows/github/gh
@@ -57,13 +59,13 @@ The first invocation of `/smith` does **not** schedule the loop. It dispatches t
 1. Hand the feature description to `/plan`. `/plan` runs its standard analysis → findings → plan → insights → questions flow.
 2. The user answers `/plan`'s questions. The conversation iterates until `/plan` has a settled implementation plan with concrete steps and no open questions.
 3. The user explicitly approves (`yes go`, `proceed`, `implement`, etc.) — this is `/plan`'s standard pre-implementation gate.
-4. `/smith` **captures the settled state**: it reads the latest Plan section from `/plan`'s output, lists each step as an acceptance item in the scratchpad, copies the user's relevant constraints verbatim into the scratchpad's *User-stated rules*, and notes any risks from `/plan`'s Insights into the scratchpad's *Hazards / Deferred*.
+4. `/smith` **captures the settled state**: it reads the latest Plan section from `/plan`'s output, lists each step as an acceptance item in the scratchpad, copies the user's relevant constraints verbatim into the scratchpad's *User-stated rules*, and records any genuinely-separate features or hard blockers from `/plan`'s Insights into the scratchpad's *Blockers & feature-splits* (`core/completion` dispositions — in-scope risks are built, not parked).
 5. `/smith` then loads the platform adapter (`core/janitor-platforms`) and schedules the recurring loop. Cadence handling is the same as `/janitor`; durability is **not** — the build phase requires a durable runner (see *Build Phase Durability* below). **A live trigger must actually exist before the first report.** Declaring "I'll be the in-session runner" is *not* a schedule: if no platform scheduler is created, the agent itself owns firing the next tick (see *Self-continuation* below). Skipping this is the canonical stall — one tick runs, a report is emitted, and nothing ever wakes the loop again.
 6. The first scheduled tick begins the build phase.
 
 `/plan` runs only at first invocation. Subsequent scheduled ticks read the captured spec from the scratchpad — no interactive `/plan` inside autonomous ticks, since fresh-session schedulers have no user to converse with.
 
-The captured spec is the build-phase contract. Treat it as immutable after scheduling unless an explicit pivot revises the scratchpad. Implementation discoveries may update hazards, verification evidence, changed files, and next-tick plans, but they do not quietly rewrite the feature spec or acceptance criteria. If reality proves the spec wrong or incomplete, stop the build delta, record the evidence, and route the change through the pivot path below before continuing.
+The captured spec is the build-phase contract. Treat it as immutable after scheduling unless an explicit pivot revises the scratchpad. Implementation discoveries may update blockers & feature-splits, verification evidence, changed files, and next-tick plans, but they do not quietly rewrite the feature spec or acceptance criteria. If reality proves the spec wrong or incomplete, stop the build delta, record the evidence, and route the change through the pivot path below before continuing.
 
 ### Self-continuation (who fires the next tick)
 
@@ -98,7 +100,7 @@ The shared scratchpad spine (current orientation, tick log, state block) is defi
 - **Acceptance criteria** — checklist of objectively-verifiable items derived from `/plan`'s steps or `/vibe`'s settled spec. Each item: `- [ ] <item description> — <verification: test name, function signature, endpoint shape, etc.>`. Items tick green during the build phase; when all are checked, the phase transitions. Do not add, remove, or reinterpret acceptance items during build except through an explicit pivot.
 - **Current phase** — `build` or `audit`. Drives loop behavior at every wake.
 
-The State block (defined in `core/loop`) gets these `/smith`-specific fields added; the generic fields `core/loop`'s *State block* already requires (in-flight work, metric + delta, loop-end progress, skip-streak counter, hazards, next-tick plan, last directive) are not re-listed here:
+The State block (defined in `core/loop`) gets these `/smith`-specific fields added; the generic fields `core/loop`'s *State block* already requires (in-flight work, metric + delta, loop-end progress, skip-streak counter, blockers & feature-splits, next-tick plan, last directive) are not re-listed here:
 
 - **Acceptance items checked** — `N/M`, naming the **current acceptance item** the build phase is working (the one-line summary of which item is next).
 - **Changed files** — the files touched on `feat/<slug>` so far, so a fresh agent sees the build surface without re-diffing.
@@ -106,6 +108,12 @@ The State block (defined in `core/loop`) gets these `/smith`-specific fields add
 - **Last verification result** — `green` / `red`, dated; on red, the failure evidence (failing test name, assertion, or first error) the next tick retries against.
 - **Feature branch** — `feat/<slug>` long-lived branch where build-phase commits accumulate.
 - **Build-phase PR** — the open PR if build phase ended and PR is in review; otherwise empty.
+
+## Completion
+
+`/smith`'s definition of done is `core/completion`'s, not a local variant. The build phase's **exit gate is the four done-conditions** there — every acceptance box `[x]` with evidence, the verification gate green, a clean `/gh-self-review` pass, and no new deferral markers — computed from the durable ledger (the scratchpad's *Acceptance criteria*), never from memory. The loop continues until all four hold; it does not exit, hand back as "done", or convert a remaining in-scope item into a deferral (`core/completion` → *Exit gate*).
+
+Disposition of anything the build encounters follows `core/completion`'s three dispositions: in-scope & handle-able now is **done now** (the default — no phases, no "future work", no stub); a **genuinely separate feature** is a disposition-2 feature-split surfaced in the State block's *Blockers & feature-splits* for the user to triage (never a silent park); a **hard blocker** beyond the loop's authority is surfaced (disposition 3). "Hazard" is not a parking lot for handle-able in-scope work.
 
 ## Smith Loop
 
@@ -120,11 +128,11 @@ Each scheduled wake during the build phase follows this order:
 3. Check whether the feature branch (`feat/<slug>`) has commits the next tick must continue, and whether any in-flight sub-agent work is still running.
 4. If work is pending, continue or integrate that work.
 5. If no work is pending, spawn an audit sub-agent with the **verification audit** brief (see *Build Phase Audit Agent Contract* below): read the spec and acceptance checklist, report current state per item, propose the smallest next delta toward the next unchecked item.
-6. Critically review the audit findings. Drop deltas that fall outside the spec (those become hazards, not commits).
+6. Critically review the audit findings. Drop deltas that fall outside the spec (those become disposition-2 feature-splits or disposition-3 blockers per `core/completion`, not commits).
 7. Implement the smallest in-spec delta on `feat/<slug>`.
 8. Run the canonical verification command. Verification must complete green on this tick — partial-tick verification does not count, and a tick that fails verification does **not** commit.
 9. If verification is green and at least one acceptance item moves from `[ ]` to `[x]`, commit + push to `feat/<slug>`. Do **not** open a PR yet — commits accumulate on the branch until all acceptance items are checked.
-10. Update the scratchpad — this is a **compaction checkpoint** (`core/loop` → *Compaction checkpoint*): tick log entry, State block (acceptance items checked, changed files, verification command + last result/failure evidence, next-tick plan, hazards if any), Acceptance criteria section (move ticked items to `[x]`) — left sufficient for a fresh agent to resume from scratchpad + git alone. The build phase's checkpoint events are: each completed acceptance item, each failed-verification cluster (serialize the failure evidence — this never softens step 8's hard gate or commits on red), the self-review pass (Build-to-Audit Transition step 1), and the build-to-audit phase transition. Manual context clearing is allowed only after this update lands.
+10. Update the scratchpad — this is a **compaction checkpoint** (`core/loop` → *Compaction checkpoint*): tick log entry, State block (acceptance items checked, changed files, verification command + last result/failure evidence, next-tick plan, blockers & feature-splits if any), Acceptance criteria section (move ticked items to `[x]`) — left sufficient for a fresh agent to resume from scratchpad + git alone. The build phase's checkpoint events are: each completed acceptance item, each failed-verification cluster (serialize the failure evidence — this never softens step 8's hard gate or commits on red), the self-review pass (Build-to-Audit Transition step 1), and the build-to-audit phase transition. Manual context clearing is allowed only after this update lands.
 11. If all acceptance items are now checked, transition to the *Build-to-Audit Transition* below. Otherwise, the next wake continues the build phase.
 
 Do not pollute the user's main thread with raw audit logs.
@@ -165,9 +173,10 @@ The audit phase has no hard end. It runs until the user stops it OR the skip-str
 Shared audit rules in `core/loop` → *Shared Audit Agent Rules* apply. On top of those, the build-phase audit is a **verification + gap-finding** audit, not a discovery audit:
 
 - Read the scratchpad's *Feature spec* and *Acceptance criteria*.
+- Code context is zero-setup (no pack/index): use `code_map`/`code_outline` for structure, `code_graph` for navigation, native Grep for text (`flows/project/code`).
 - For each unchecked acceptance item, report current state: implemented (with evidence), partially implemented (with what's missing), or not started.
 - Propose the smallest next delta toward the next unchecked item. The proposal includes: files to touch, what changes, what verification proves the item is met.
-- Do **not** propose work outside the spec. Out-of-spec needs (a refactor that would help, a related cleanup) get reported as hazards into the State block, not as deltas to implement.
+- Do **not** propose work outside the spec. Out-of-spec needs (a refactor that would help, a related cleanup) get reported as feature-splits/blockers into the State block's *Blockers & feature-splits*, not as deltas to implement.
 - Do **not** propose multi-item deltas. One item at a time, in checklist order, unless two items share a single fix obviously and the agent can name both.
 
 GOOD tasks to delegate — each a single bounded read against the current item: audit the **current acceptance item**, inspect the **failing verification output**, map the **affected files** for the next delta, review the `feat/<slug>` **diff for blockers**, summarize **missing tests** for the item. The BAD tasks — implementing the feature, deciding scope, or owning the loop — belong to the main agent, never the sub-agent (`core/loop` → *Shared Audit Agent Rules*: the main agent is the only loop owner).
@@ -186,7 +195,7 @@ Shared main-agent rules in `core/loop` → *Shared Main Agent Rules* apply. On t
 - Treat the captured Feature spec, User-stated rules, and Acceptance criteria as the source of truth. Code, tasks, and implementation notes conform to the scratchpad; they do not redefine it.
 - Implement only the proposed in-spec delta. No drive-by refactors, no scope creep.
 - Verification is a hard gate per commit — a failing verification does not commit, the tick logs the failure as next-tick context, and the next wake retries with the gap evidence in hand.
-- If the proposed delta would require touching files or APIs outside what the spec named, **stop** and report as a hazard. The user pivots the spec if it should be expanded; the loop does not silently expand its own scope.
+- If the proposed delta would require touching files or APIs outside what the spec named, **stop** and report as a feature-split or blocker (`core/completion` disposition 2/3). The user pivots the spec if it should be expanded; the loop does not silently expand its own scope.
 - One feature branch (`feat/<slug>`) accumulates all build-phase commits. Do not open intermediate PRs; the PR opens only when all acceptance items tick (see *Build-to-Audit Transition*).
 
 ## Audit Phase Main Agent Contract
@@ -204,11 +213,11 @@ Build phase — allowed:
 
 Build phase — not allowed:
 
-- Work outside the spec (touches files the spec didn't name, adds behavior not in the acceptance checklist). This is a hazard, not a finding.
+- Work outside the spec (touches files the spec didn't name, adds behavior not in the acceptance checklist). This is a feature-split (disposition 2), not a finding.
 - Quietly mutating the captured Feature spec, User-stated rules, or Acceptance criteria during build. Spec changes require an explicit pivot and scratchpad revision before more build work continues.
 - Refactoring unrelated to acceptance items.
 - API changes beyond what an acceptance item explicitly requires.
-- Dependency additions not in the spec. If the spec implies a new dependency, name it in a hazard and ask before adding.
+- Dependency additions not in the spec. If the spec implies a new dependency, name it as a feature-split and ask before adding.
 - Skipping verification. A build-phase tick that doesn't verify green does not commit.
 - Opening a PR before all acceptance items are checked.
 - Opening a PR with a stale self-review (*restated from Build-to-Audit Transition step 1*). If `/gh-self-review` forced any amendment to the diff — blocker fix, non-blocker cleanup, anything — the prior clean read is stale and the self-review MUST re-run before delegating to `gh-issue-work`'s Phase 9.

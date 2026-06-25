@@ -8,6 +8,8 @@ triggers:
 when: Internal. Loaded by an implementation-loop role agent (roles/coder-*) spawned by a tech-lead, to define how a single coder works one partitioned task in isolation.
 related:
   - core/build
+  - core/completion
+  - core/coordination
   - roles/tech-lead
   - roles/coder-test-engineer
   - roles/coder-backend
@@ -35,10 +37,10 @@ The tech-lead hands each coder exactly four things — never the whole plan:
 
 - **TDD gate.** The task is defined by a failing test (written by the test-engineer role). "Done" means that test goes green and the canonical verification command passes — the same gate `core/build` enforces for a single build unit. A coder does not declare done on a red or unrun test.
 - **Stay inside the partition.** Touch only the files in the assigned boundary. A change that needs a file outside the boundary is a **blocker to report**, not a license to reach across — reaching across is exactly the cross-dependency the fork-safe partition exists to prevent.
-- **Smallest delta to green.** Implement the task, not adjacent improvements. Out-of-scope needs are reported, never folded in (see *Hazards* below).
+- **Smallest delta to green.** Implement the task, not adjacent improvements. Out-of-scope needs are reported, never folded in (see *Out-of-scope work* below).
 - **No integration.** A coder never merges branches, resolves cross-task conflicts, or opens a PR. Integration is the tech-lead's sequential step.
-- **Emit status, don't narrate.** A coder's output is a structured status the driver consumes (the `/forge` sub-agent return value, or a candyland event): `working` → `green` (task done, test + verification green, files changed) or `blocked` (with the precise evidence — failing assertion, missing interface, out-of-boundary dependency). Status is the only product; raw logs stay out of the user's thread.
+- **Emit status, don't narrate.** A coder's output is a structured status the driver consumes (the `/forge` sub-agent return value, or a candyland event): `working` → `green` (task done, test + verification green, files changed) or `blocked` (with the precise evidence — failing assertion, missing interface, out-of-boundary dependency). In-process, a block ends the turn with `core/coordination`'s fenced `BLOCKED {json: {question, correlationId}}` line so the orchestrator can answer and re-spawn. Status is the only product; raw logs stay out of the user's thread.
 
-## Hazards
+## Out-of-scope work
 
-A coder reports hazards (out-of-scope needs, risky adjacent code) to the tech-lead as part of its status — it does not act on them. How the tech-lead disposes of a hazard depends on the driver: under `/vibe` (non-technical stakeholder, autonomous-to-PR) hazards are dealt with inside the delivery and never deferred or filed back to the user (`roles/tech-lead` → *Hazards*); under a developer-driven `/forge` they surface for the developer to decide.
+A coder reports out-of-scope needs or risky adjacent code to the tech-lead as part of its `blocked`/status output — it never acts on them or folds them in. Disposition is the tech-lead's call per `core/completion`'s three dispositions (`roles/tech-lead` → *Dispositions*): in-scope work is done now, a genuinely separate feature becomes a feature-split, a hard blocker is surfaced. A coder never converts an in-scope need into a deferral.

@@ -4,6 +4,7 @@ triggers:
   - loop-core
 when: Loaded by /janitor and /smith (and any future recurring-loop command) to define the shared scratchpad, durability rule, cadence guidelines, skip-streak guardrail, and delivery routing. Not a standalone workflow — invoke one of the wrapping commands instead.
 related:
+  - core/completion
   - flows/build/janitor
   - flows/build/smith
   - core/janitor-platforms
@@ -79,7 +80,7 @@ The State block is the only mutable section. Every tick overwrites it. Required 
 - Current metric value (if tracked) and delta since baseline.
 - Loop-end criteria progress (if criteria exist).
 - Skip-streak counter — see *Skip-streak guardrail* below.
-- **Hazards / Deferred** — ranked list of issues the loop surfaced but couldn't safely fix in isolation. Each entry: title; evidence (file:line if applicable); why it's outside the loop's safe-action scope; suggested grouping for a separate user-led fix.
+- **Blockers & feature-splits** — only disposition-2 (genuinely separate features) and disposition-3 (hard blockers) per `core/completion`. **Nothing handle-able in-scope is recorded here** — in-scope work is disposition 1 (do it now), never parked. Each entry: title; evidence (file:line if applicable); why it is a genuinely separate feature or a blocker beyond the loop's authority; suggested grouping for a separate fix.
 - Next-tick plan — concrete first move for the next wake.
 - Last user directive — most recent pivot or scope change, dated.
 
@@ -106,7 +107,7 @@ The scratchpad pattern assumes `<loop>/<slug>.md` persists on disk between ticks
 On **disposable runners** that discard the workspace between ticks — Codex `worktree` execution, Claude Code Cloud Routines (each tick clones the repository fresh), stateless GitHub Actions runners — the gitignored scratchpad does not survive. Each platform adapter must declare how it handles this in one of three modes:
 
 1. **Use a durable execution mode** for that platform when one exists (e.g. Codex `local` instead of `worktree`; Claude Code Desktop Routines or the external scheduler fallback instead of Cloud).
-2. **Operate GitHub-state-only.** The loop reconstructs everything it needs from open branches, draft PRs, and open issues every tick. No cross-tick scratchpad; the State block lives in the issue or PR bodies the loop maintains, hazards become open issues, the tick log becomes commit history. Acceptable for narrow loops that don't need rolling metric history or per-tick narrative.
+2. **Operate GitHub-state-only.** The loop reconstructs everything it needs from open branches, draft PRs, and open issues every tick. No cross-tick scratchpad; the State block lives in the issue or PR bodies the loop maintains, feature-splits and blockers become open issues, the tick log becomes commit history. Acceptable for narrow loops that don't need rolling metric history or per-tick narrative.
 3. **Report the incompatibility at setup.** If neither option fits, the adapter reports that the requested scheduling mode cannot persist the scratchpad and asks the user to choose between a durable mode, stateless mode, or a different platform.
 
 Per-tick report files inherit the same rule. On disposable runners they must be folded into the scratchpad — or into GitHub-side state under mode 2 — synchronously within the same tick, before the wake ends.
@@ -164,7 +165,7 @@ These rules apply to every audit sub-agent spawned by a recurring-loop command. 
 Whether or not end criteria are set, every loop protects against silent drift via a skip-streak counter:
 
 - A tick counts as a *skip* when the audit returned no actionable findings AND no in-flight work was continued AND the next-tick plan is empty.
-- A tick that does real work — commit, PR opened, hazard added, metric moved, in-flight work continued — resets the counter to zero.
+- A tick that does real work — commit, PR opened, blocker or feature-split recorded, metric moved, in-flight work continued — resets the counter to zero.
 - When the streak reaches the threshold — default **eight ticks OR two hours of skip-only wakes, whichever comes first** — the loop pauses, summarizes what was reviewed during the streak, and asks the user: keep going / pivot orientation / stop.
 
 Threshold is configurable per loop at setup. The "or two hours" floor protects against slow-cadence loops (daily/weekly cron) where eight ticks would be too long to wait for a drift signal.

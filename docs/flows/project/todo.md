@@ -356,7 +356,7 @@ A new Claude Code session always starts with an empty TodoWrite UI; the persiste
 
 ## Working with /janitor
 
-When the cwd contains a `.janitor/` scratchpad, the audit pass (`core/todo-audit` → *Janitor import*) MAY read the State block's `Hazards / Deferred` section and offer to import entries as todos — always user-confirmed, never automatic.
+When the cwd contains a `.janitor/` scratchpad, the audit pass (`core/todo-audit` → *Janitor import*) MAY read the State block's `Blockers & feature-splits` section and offer to import entries as todos — always user-confirmed, never automatic.
 
 ## Router guardrails
 

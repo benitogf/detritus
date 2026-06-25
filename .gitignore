@@ -8,3 +8,7 @@
 /agents/
 /instructions/
 /templates/
+
+.janitor/
+.smith/
+.plan/

@@ -11,6 +11,8 @@ when: User has a settled plan (from /plan or /dream) and wants it implemented by
 related:
   - roles/tech-lead
   - core/build
+  - core/completion
+  - core/coordination
   - core/coder
   - flows/plan/plan
   - core/dream
@@ -32,11 +34,11 @@ Resolve the plan to implement, in order:
 2. Otherwise the most recent `.plan/*.md` in the workspace.
 3. If none exists, stop and say so: `/forge` needs a settled plan. Point the user at `/plan` (developer) or `/vibe` (non-technical) first.
 
-The contract (shape in `flows/plan/plan`) carries the feature spec, acceptance criteria checklist, user-stated rules, decisions made on the user's behalf, and hazards. It is the build-phase source of truth.
+The contract (shape in `flows/plan/plan`) carries the feature spec, acceptance criteria checklist, user-stated rules, decisions made on the user's behalf, and any feature-splits/blockers (`core/completion` dispositions — not a parking lot for in-scope work). It is the build-phase source of truth.
 
 ## Execution — be the tech-lead, in-process
 
-Act as the tech-lead per `roles/tech-lead`, with the **in-process driver substrate**: spawn each coder as a **sub-agent via the Agent tool**, one per fork-safe task, each told only its single task and the context it depends on. Drive the full choreography — partition → test-first → parallel build → sequential integration (loop back to the owning coder on a dirty merge) → `/gh-self-review` convergence → one PR via `gh-issue-work` Phase 9.
+Act as the tech-lead per `roles/tech-lead`, with the **in-process driver substrate**: spawn each coder as a **sub-agent via the Agent tool**, one per fork-safe task, each told only its single task and the context it depends on. This is `core/coordination` Realization A — the Agent tool *is* the single-writer transport, the `.plan` checklist is the durable task-graph, and a blocked coder returns the fenced `BLOCKED {json}` line for you to answer and re-spawn (no bus). Drive the full choreography — partition → test-first → parallel build → sequential integration (loop back to the owning coder on a dirty merge) → `/gh-self-review` convergence → one PR via `gh-issue-work` Phase 9.
 
 ## How /forge relates to /smith and candyland
 
@@ -51,5 +53,6 @@ Act as the tech-lead per `roles/tech-lead`, with the **in-process driver substra
 ## Boundaries
 
 - Never plan inside `/forge` — consume the contract; if it's missing or ambiguous, stop and route to `/plan` or `/vibe`.
+- Completion (the exit gate — every acceptance box green, verification green, clean self-review, no new deferral markers) and disposition of out-of-scope work follow `core/completion`, inherited via `roles/tech-lead` and `core/build` — not restated here. In-scope work is done now; only a genuinely separate feature or a hard blocker surfaces for the developer to triage.
 - Don't reimplement `roles/tech-lead`, `core/build`, or PR creation — compose them.
 - Deliver one PR for the plan; merging and anything irreversible stay the human's call.

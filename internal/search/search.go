@@ -4,9 +4,9 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io/fs"
-	"math"
 	"strings"
 
+	"github.com/benitogf/detritus/internal/core"
 	"github.com/blevesearch/bleve/v2"
 )
 
@@ -41,13 +41,9 @@ type GeneratedData struct {
 	DocMetadata []DocEntry
 }
 
-type Result struct {
-	DocName  string
-	Section  string
-	Score    float64
-	Snippet  string
-	Position int
-}
+// Result is the shared retrieval hit type (core.Result), aliased so kb_* callers
+// keep referencing search.Result unchanged.
+type Result = core.Result
 
 type Engine struct {
 	data         GeneratedData
@@ -104,32 +100,12 @@ func (e *Engine) Search(query string, topN int) ([]Result, error) {
 		topN = 10
 	}
 
-	results, err := e.bleveSearch(query, topN*3)
+	raw, err := e.bleveSearch(query, topN*3)
 	if err != nil {
 		return nil, err
 	}
-	if len(results) == 0 {
-		return nil, nil
-	}
-
-	// Normalize scores to [0, 1] relative to best match
-	max := results[0].Score
-	if max > 0 {
-		for i := range results {
-			results[i].Score /= max
-		}
-	}
-
-	results = e.mmrRerank(results, 0.7, topN)
-
-	// Filter low-quality matches (below 10% of best result)
-	var filtered []Result
-	for _, r := range results {
-		if r.Score >= 0.1 {
-			filtered = append(filtered, r)
-		}
-	}
-	return filtered, nil
+	// Shared pipeline: normalize → MMR-rerank → threshold-filter.
+	return core.Rank(raw, core.DefaultMMRLambda, topN, core.DefaultMinScore), nil
 }
 
 func (e *Engine) ToolDescription() string {
@@ -188,44 +164,10 @@ func (e *Engine) bleveSearch(query string, topN int) ([]Result, error) {
 			DocName: docName,
 			Section: section,
 			Score:   hit.Score,
-			Snippet: truncate(content, 200),
+			Snippet: core.Truncate(content, 200),
 		})
 	}
 	return results, nil
-}
-
-func (e *Engine) mmrRerank(results []Result, lambda float64, topN int) []Result {
-	if len(results) <= 1 {
-		return results
-	}
-
-	selected := []Result{results[0]}
-	remaining := results[1:]
-
-	for len(selected) < topN && len(remaining) > 0 {
-		var bestIdx int
-		var bestScore float64 = -math.MaxFloat64
-
-		for i, candidate := range remaining {
-			var maxSim float64
-			for _, sel := range selected {
-				sim := docSimilarity(candidate, sel)
-				if sim > maxSim {
-					maxSim = sim
-				}
-			}
-			mmrScore := lambda*candidate.Score - (1-lambda)*maxSim
-			if mmrScore > bestScore {
-				bestScore = mmrScore
-				bestIdx = i
-			}
-		}
-
-		selected = append(selected, remaining[bestIdx])
-		remaining = append(remaining[:bestIdx], remaining[bestIdx+1:]...)
-	}
-
-	return selected
 }
 
 func buildIndex(data GeneratedData, chunkContent []string) (bleve.Index, error) {
@@ -318,21 +260,4 @@ func extractSection(content, section string) string {
 		return content
 	}
 	return strings.TrimSpace(strings.Join(sectionLines, "\n"))
-}
-
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
-}
-
-func docSimilarity(a, b Result) float64 {
-	if a.DocName == b.DocName {
-		if a.Section == b.Section {
-			return 1.0
-		}
-		return 0.5
-	}
-	return 0.0
 }

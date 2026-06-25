@@ -13,7 +13,7 @@ to install and use Detritus.
 - Simple command descriptions that do not require knowing the internal workflow
   docs.
 
-Shell install commands, update commands, pack CLI commands, raw MCP tool names,
+Shell install commands, update commands, raw MCP tool names,
 sub-skill families, schema details, and routing mechanics belong in
 `INSTALL.md`, this file, or the relevant `docs/` knowledge documents. Do
 not expand `README.md` with implementation entry points.
@@ -27,17 +27,22 @@ The MCP knowledge tools are registered in `main.go`:
 - `kb_search`
 - `kb_sections`
 
-The MCP workspace-pack tools are registered in `internal/code/tools.go`:
+The seamless code-context tools are registered by `code.RegisterSeamlessTools`
+(`internal/code/codetools.go`) — live, zero-setup, no pack or stored index:
 
-- `code_pack`
-- `code_list`
-- `code_tree`
-- `code_search`
-- `code_outline`
-- `code_get`
+- `code_map` — PageRank-ranked, token-budgeted structural map
+- `code_outline` — go/ast signatures for a file or directory
+- `code_graph` — type-resolved who-calls / reachable / implementers
+
+The learned-memory tools are registered by `memory.RegisterTools`
+(`internal/memory/tools.go`):
+
+- `skill_put` — distil a verified lesson (the only, gated, write path)
+- `skill_search` — retrieve ranked lesson snippets
+- `skill_get` — fetch one lesson by id
 
 These MCP tool names are implementation details. README should describe the
-capability ("Detritus guidance", "workspace packs", "/code") rather than naming
+capability ("Detritus guidance", "code context", "/code") rather than naming
 these tools.
 
 ## Command Surface (generated from docs/flows/)
@@ -65,23 +70,24 @@ There is therefore no hand-maintained "keep X out of the README" list:
 - The gh sub-skills invoked directly (`gh-issue-work`, `gh-feedback-work`,
   `gh-self-review`, `gh-pr`) live in `docs/flows/github/` and are documented
   commands; the `/gh` router lives beside them.
-- MCP tools (`code_search`, `code_get`, …) are not docs and never appear.
+- MCP tools (`code_map`, `code_graph`, `skill_search`, …) are not docs and never appear.
 
 To change the command surface, add or move a doc under `docs/flows/` (or out of
 it into `docs/core/`), then run `detritus --readme && detritus --plugin-commands`;
 the drift tests fail until both the README and the shims are regenerated.
 
-## Workspace Pack Entry Points
+## Code Context Entry Points
 
-Workspace pack behavior is exposed in three places:
+Code context is **zero-setup** — there is no pack to build, no stored index, and
+no pack CLI. It is exposed in two places:
 
-- The `/code` router in `docs/flows/project/code.md`.
-- MCP tools in `internal/code/tools.go`.
-- CLI flags in `main.go`: `--pack`, `--packs`, `--refresh`, and `--unpack`.
+- The `/code` router in `docs/flows/project/code.md` (the user-facing command).
+- MCP tools in `internal/code/codetools.go` (`code_map`/`code_outline`/`code_graph`),
+  backed by `internal/code/{scope,tags,codemap,codegraph}.go` (a go/ast map with an
+  mtime-keyed parse cache under `~/.detritus/code-tags`) and native Grep for text.
 
-README should document `/code` as the user-facing workspace-pack command. Pack
-CLI flags live in `INSTALL.md`; `code_*` MCP tools stay in this maintainer
-document.
+README should document `/code` as the user-facing command; the `code_*` MCP tool
+names stay in this maintainer document.
 
 ## Generated Knowledge Data
 

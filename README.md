@@ -61,7 +61,7 @@ and intentionally absent — they are not commands.
 
 | Command | Use it for |
 | --- | --- |
-| `/code` | Router for the /code workspace-pack workflow — user-invoked entry point for pack-backed code exploration. |
+| `/code` | Explicit entry point for code exploration backed by the zero-setup code_* tools (code_map, code_outline, code_graph) plus native Grep. |
 | `/todo` | Cross-session todo management — router, conventions, and ALL everyday item operations (view, add, done, edit, defer, clear, file) in one doc. |
 
 ### Testing

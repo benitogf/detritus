@@ -10,6 +10,8 @@ triggers:
 when: Internal. Loaded by an agent acting as the implementation-loop coordinator, spawned by a driver (/forge or candyland) against a settled plan contract.
 related:
   - core/build
+  - core/completion
+  - core/coordination
   - core/coder
   - core/todo-audit
   - roles/coder-test-engineer
@@ -22,7 +24,7 @@ related:
 
 # Tech Lead — partition, coordinate, integrate, deliver
 
-The tech-lead is the orchestrating role of the parallel implementation loop. It consumes a **settled plan contract** (it does not plan), splits the work into fork-safe tasks, drives test-first parallel coders, integrates their work sequentially, and delivers one PR. It owns the **decisions and the choreography**; it does not own the **process lifecycle** — that belongs to the driver.
+The tech-lead is the orchestrating role of the parallel implementation loop. It consumes a **settled plan contract** (it does not plan), splits the work into fork-safe tasks, drives test-first parallel coders, integrates their work sequentially, and delivers one PR. It owns the **decisions and the choreography**; it does not own the **process lifecycle** — that belongs to the driver. The tech-lead is the **orchestrator** in `core/coordination`'s protocol: the single writer of the task-graph, the re-planner, and the holder of the K=3 escalation cap.
 
 > ## ⛔ Do not invoke directly
 > No slash command. The tech-lead is spawned by a driver and reads this doc via `kb_get`. The decisions and phase sequence below are identical across drivers; only how coders are *launched* differs.
@@ -36,7 +38,7 @@ The critical invariant in both: **the tech-lead decides and emits; it never hide
 
 ## Input — the plan contract
 
-The tech-lead reads `.plan/<slug>.md`, the settled plan-contract artifact written by `/plan` or `/dream` (canonical shape in `flows/plan/plan`): feature spec, acceptance criteria checklist, user-stated rules, decisions made on the user's behalf, and any hazards. The contract is the build-phase source of truth — the tech-lead conforms to it and never silently rewrites it.
+The tech-lead reads `.plan/<slug>.md`, the settled plan-contract artifact written by `/plan` or `/dream` (canonical shape in `flows/plan/plan`): feature spec, acceptance criteria checklist, user-stated rules, decisions made on the user's behalf, and any feature-splits/blockers (`core/completion` dispositions). The contract is the build-phase source of truth — the tech-lead conforms to it and never silently rewrites it.
 
 ## Phase choreography
 
@@ -56,12 +58,12 @@ PARTITION [{"id":"tests","title":"Failing tests for the export","role":"Test eng
 
 Per task: `id` (stable slug), `title`, `role` (Backend / Frontend / Test eng / …), optional `emoji`, `files` (the disjoint fork-safe boundary), `test` (the defining test), and `deps` (task ids that must finish first). The driver parses this line, renders the task DAG, and spawns one coder process per task with its slice. In-process drivers (`/forge`) may ignore the line and spawn sub-agents directly; the format is a no-op there, so emitting it is always safe.
 
-## Hazards
+## Dispositions
 
-How the tech-lead disposes of a hazard depends on the driver:
+Anything the loop encounters falls under one of `core/completion`'s three dispositions — in-scope & handle-able now (do it now), a genuinely separate feature (feature-split), or a hard blocker (surface). The default is disposition 1: **in-scope work is built inside this PR**, never split into a "phase 2", a `TODO`, a follow-up issue, or a stub. Only the *surface-for-later* half differs by driver:
 
-- **Under `/vibe` (non-technical stakeholder, autonomous-to-PR):** every hazard surfaced during the loop is **dealt with inside this PR** — resolved as the architect within the feature's scope. Never defer it, never auto-file an issue, never hand it back: a non-technical stakeholder cannot action a deferred note, so deferral is a silent drop. Scope discipline lives in planning (`core/dream`): if something genuinely is a separate feature, that was a planning split, not a mid-build deferral.
-- **Under a developer-driven `/forge`:** surface hazards for the developer to decide, the same way `/plan` records them.
+- **Under `/vibe` (non-technical stakeholder, autonomous-to-PR):** a genuinely separate feature was a planning split (`core/dream`), not a mid-build deferral; the tech-lead never hands the stakeholder a deferred note, an auto-filed issue, or a "for later" item — they cannot action it.
+- **Under a developer-driven `/forge`:** a genuinely separate feature (disposition 2) or a hard blocker (disposition 3) surfaces in the State block's *Blockers & feature-splits* for the developer to triage — the same things `/plan` records, never a deferral of in-scope work.
 
 ## Boundaries
 

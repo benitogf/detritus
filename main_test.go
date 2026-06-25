@@ -55,7 +55,8 @@ func TestMCPServer(t *testing.T) {
 	}
 	for _, name := range []string{
 		"kb_list", "kb_get", "kb_search", "kb_sections",
-		"code_list", "code_tree", "code_search", "code_get", "code_outline", "code_pack",
+		"code_map", "code_outline", "code_graph",
+		"skill_put", "skill_search", "skill_get",
 	} {
 		if !toolNames[name] {
 			t.Errorf("missing tool: %s", name)

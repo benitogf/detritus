@@ -125,7 +125,7 @@ Use only when the user explicitly opts into a janitor that operates without loca
 5. Trigger one immediate "Run now" so the user sees a first tick in the same conversation.
 6. Report the effective cadence in human terms and include the routines management URL (`https://claude.ai/code/routines`).
 
-Non-overlap on Cloud Routines is not automatic — the platform may fire overlapping ticks. The janitor loop handles this by inspecting open branches, draft PRs, and open issues on the target at every wake (loop step 3), since each run is a fresh session with no in-memory state from prior ticks. Hazards and rolling state that would have lived in the scratchpad live in issue or PR bodies instead.
+Non-overlap on Cloud Routines is not automatic — the platform may fire overlapping ticks. The janitor loop handles this by inspecting open branches, draft PRs, and open issues on the target at every wake (loop step 3), since each run is a fresh session with no in-memory state from prior ticks. Blockers, feature-splits, and rolling state that would have lived in the scratchpad live in issue or PR bodies instead.
 
 ## GitHub Actions
 

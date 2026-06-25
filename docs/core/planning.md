@@ -10,6 +10,7 @@ when: Internal. Loaded by /plan or /dream to define the settled-plan deliverable
 related:
   - flows/plan/plan
   - core/dream
+  - core/completion
   - flows/build/forge
   - flows/build/smith
   - core/todo-import
@@ -30,7 +31,7 @@ A settled plan captures, in plain language:
 - **Acceptance criteria** — a checklist, each item objectively verifiable by test, command output, UI check, or a documented manual check.
 - **User-stated rules** — verbatim constraints from the conversation.
 - **Decisions made on the user's behalf** — each non-trivial technical choice with a one-line why (the audit trail a reviewer needs in place of a conversation they didn't see).
-- **Hazards** — risks and adjacent concerns. How hazards are *disposed of* is intake-specific: `/plan` records them for the developer to act on; `/dream` (autonomous, non-technical path) resolves them rather than handing the user a note they can't action (`core/dream` → *Hazards*).
+- **Feature-splits & blockers** — genuinely separate features and hard blockers per `core/completion`'s three dispositions. This is **not** a parking lot for in-scope work, which is always built (disposition 1). Disposition is intake-specific: `/plan` records genuinely-separate features for the developer to triage; `/dream` (autonomous, non-technical path) resolves in-scope concerns into the plan and splits genuinely-separate features into their own plans rather than handing the user a note they can't action (`core/dream` → *Hazards — deal with them, never defer*).
 
 ## Readiness check
 
@@ -47,7 +48,7 @@ Before declaring ready:
 
 - Feature spec, acceptance criteria, verification plan, and decisions must agree with each other.
 - Any requirement that cannot be verified, contradicts another, or expands beyond the feature boundary is resolved first.
-- Helpful but out-of-scope work is handled per the intake's hazard rule — never silently folded into the plan.
+- Helpful but out-of-scope work is handled per the intake's disposition rule (`core/completion`) — a genuinely separate feature is split out, never silently folded into the plan; in-scope work is built, never parked.
 
 ## The plan contract — `.plan/<slug>.md`
 
