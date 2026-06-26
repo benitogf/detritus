@@ -58,6 +58,11 @@ func RunSetup(binaryPath string, dryRun bool) error {
 
 	home := homeDir()
 
+	// Fetch the candyland sidecar binary beside detritus FIRST, so the per-host
+	// MCP registrations below find it and wire up the candyland control-mcp.
+	// Best-effort: skips cleanly when there's no release yet.
+	fetchCandylandBinary(binaryPath, dryRun)
+
 	// Windsurf
 	setupWindsurf(home, binaryPath, docs, dryRun)
 
@@ -99,6 +104,7 @@ func setupWindsurf(home, binaryPath string, _ []docEntry, dryRun bool) {
 	cfgFile := filepath.Join(home, ".codeium", "windsurf", "mcp_config.json")
 	if dryRun {
 		fmt.Printf("[dry-run] Would upsert detritus into %s (mcpServers)\n", cfgFile)
+		previewCandyland(cfgFile+" (mcpServers)", binaryPath)
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(cfgFile), 0o755); err != nil {
@@ -106,6 +112,7 @@ func setupWindsurf(home, binaryPath string, _ []docEntry, dryRun bool) {
 		return
 	}
 	upsertMCP(cfgFile, "mcpServers", binaryPath)
+	registerCandylandJSON(cfgFile, "mcpServers", binaryPath)
 }
 
 // ---- VS Code ----------------------------------------------------------------
@@ -136,9 +143,11 @@ func setupVSCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 		}
 		if dryRun {
 			fmt.Printf("[dry-run] Would upsert detritus into %s/mcp.json (servers)\n", dir)
+			previewCandyland(filepath.Join(dir, "mcp.json")+" (servers)", binaryPath)
 			fmt.Printf("[dry-run] Would upsert VS Code settings in %s/settings.json\n", dir)
 		} else {
 			upsertMCP(filepath.Join(dir, "mcp.json"), "servers", binaryPath)
+			registerCandylandJSON(filepath.Join(dir, "mcp.json"), "servers", binaryPath)
 			upsertVSCodeSettings(filepath.Join(dir, "settings.json"))
 			cleanOldUserPrompts(filepath.Join(dir, "prompts"))
 		}
@@ -328,8 +337,10 @@ func setupCursor(home, binaryPath string, dryRun bool) {
 		cfgFile := filepath.Join(dir, "mcp.json")
 		if dryRun {
 			fmt.Printf("[dry-run] Would upsert detritus into %s (mcpServers)\n", cfgFile)
+			previewCandyland(cfgFile+" (mcpServers)", binaryPath)
 		} else {
 			upsertMCP(cfgFile, "mcpServers", binaryPath)
+			registerCandylandJSON(cfgFile, "mcpServers", binaryPath)
 			fmt.Printf("Cursor MCP config: %s\n", cfgFile)
 		}
 	}
@@ -341,11 +352,13 @@ func setupClaudeCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 	cfgFile := filepath.Join(home, ".claude.json")
 	if dryRun {
 		fmt.Printf("[dry-run] Would upsert detritus into %s (mcpServers)\n", cfgFile)
+		previewCandyland(cfgFile+" (mcpServers)", binaryPath)
 		fmt.Printf("[dry-run] Would write %d skill files to %s\n", len(docs), filepath.Join(home, ".claude", "skills"))
 		setupClaudeTodoGuard(home, binaryPath, hasTodoDoc(docs), true)
 		return
 	}
 	upsertMCP(cfgFile, "mcpServers", binaryPath)
+	registerCandylandJSON(cfgFile, "mcpServers", binaryPath)
 	fmt.Printf("Claude Code MCP config: %s\n", cfgFile)
 
 	generateClaudeSkills(home, docs)
@@ -409,6 +422,7 @@ func setupCodex(home, binaryPath string, docs []docEntry, dryRun bool) {
 	configFile := filepath.Join(codexDir, "config.toml")
 	if dryRun {
 		fmt.Printf("[dry-run] Would upsert detritus into %s (mcp_servers)\n", configFile)
+		previewCandyland(configFile+" (mcp_servers.candyland)", binaryPath)
 		fmt.Printf("[dry-run] Would write %d Codex skill files to %s\n", len(docs), skillsDir)
 		return
 	}
@@ -429,6 +443,15 @@ func upsertCodexMCPConfig(file, command string) {
 		"command = " + tomlString(command),
 		"args = []",
 	})
+
+	// Register the candyland control-mcp alongside detritus when its binary is
+	// installed beside detritus (the detritus installer fetches it).
+	if cbin, ok := candylandBinFor(command); ok {
+		content = upsertTOMLTable(content, "mcp_servers.candyland", []string{
+			"command = " + tomlString(cbin),
+			`args = ["control-mcp"]`,
+		})
+	}
 
 	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create Codex config directory: %v\n", err)
@@ -718,6 +741,7 @@ func setupVerdent(home, binaryPath string, docs []docEntry, dryRun bool) {
 
 	if dryRun {
 		fmt.Printf("[dry-run] Would upsert detritus into %s (mcpServers)\n", mcpFile)
+		previewCandyland(mcpFile+" (mcpServers)", binaryPath)
 		fmt.Printf("[dry-run] Would upsert DETRITUS-RULES block in %s\n", rulesFile)
 		fmt.Printf("[dry-run] Would write %d skill files to %s\n", len(docs), skillsDir)
 		return
@@ -730,6 +754,7 @@ func setupVerdent(home, binaryPath string, docs []docEntry, dryRun bool) {
 
 	// MCP config
 	upsertMCPJSON(mcpFile, "mcpServers", binaryPath)
+	registerCandylandJSON(mcpFile, "mcpServers", binaryPath)
 
 	// VERDENT.md rules block
 	upsertVerdentRules(rulesFile, docs)

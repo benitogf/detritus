@@ -60,7 +60,8 @@ if ($userPath -notlike "*$installDir*") {
     Write-Host "Added $installDir to user PATH (restart terminal for effect)"
 }
 
-# Run setup to configure all detected IDEs
+# Run setup to configure all detected IDEs. --setup also fetches + registers the
+# candyland sidecar binary (cross-platform, in Go — no install-script logic).
 Write-Host "Configuring IDEs..."
 & $binaryPath --setup
 

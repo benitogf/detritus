@@ -80,7 +80,8 @@ BINARY_PATH="${INSTALL_DIR}/${BINARY_NAME}"
 echo "Installed ${BINARY} ${VERSION} to ${BINARY_PATH}"
 echo ""
 
-# Run setup to configure all detected IDEs
+# Run setup to configure all detected IDEs. --setup also fetches + registers the
+# candyland sidecar binary (cross-platform, in Go — no shell logic here).
 echo "Configuring IDEs..."
 "$BINARY_PATH" --setup
 

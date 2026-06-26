@@ -86,8 +86,14 @@ type githubRelease struct {
 }
 
 func fetchLatestVersion() (string, error) {
+	return fetchLatestReleaseTag("benitogf/detritus")
+}
+
+// fetchLatestReleaseTag returns the latest release tag for a GitHub repo
+// (owner/name). Shared by the detritus self-update and the candyland fetch.
+func fetchLatestReleaseTag(repo string) (string, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
-	req, _ := http.NewRequest("GET", "https://api.github.com/repos/benitogf/detritus/releases/latest", nil)
+	req, _ := http.NewRequest("GET", "https://api.github.com/repos/"+repo+"/releases/latest", nil)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	resp, err := client.Do(req)
 	if err != nil {
