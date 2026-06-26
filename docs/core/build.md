@@ -1,5 +1,5 @@
 ---
-description: Shared build contract — the single build unit (smallest delta → verification hard gate → commit) and delivery (self-review convergence → one PR via gh-issue-work). Do not invoke directly; composed by /smith (sequential) and the implementation loop (parallel, per-coder) under /forge / candyland.
+description: Shared build contract — the single build unit (smallest delta → verification hard gate → commit) and delivery (self-review convergence → one PR per impacted repo via gh-issue-work). Do not invoke directly; composed by /smith (sequential) and the implementation loop (parallel, per-coder) under /forge / candyland.
 triggers:
   - build unit
   - build contract
@@ -34,15 +34,24 @@ A single unit of build work — one acceptance item, or one partitioned task —
 3. **Verification is a hard gate, per commit.** Run the canonical verification command. It must complete **green** on this unit. A unit that fails verification does **not** commit — log the failure evidence (failing test, assertion, first error) as the next attempt's context and retry against it. Partial or unrun verification does not count.
 4. **Commit on green.** When verification is green and the item/task is actually met, commit. Accumulate units on one feature branch; do not open intermediate PRs.
 
-## Delivery — converge a clean self-review, then one PR
+## Delivery — converge a clean self-review, then a PR per impacted repo
 
 When all the work for the branch is green:
 
 1. **Loop `/gh-self-review` to a clean read.** Review the full branch diff. If it reports blockers **or forces any amendment** — blocker fix, non-blocker cleanup, anything — make the fix as more build units, then **re-review the updated diff**. Stop only when a no-blocker pass is observed against a diff that has not changed since that pass. Every amendment invalidates the prior read: a review of a diff that just changed has not reviewed what you're about to ship.
 2. **Push the branch.**
-3. **Open exactly one PR via `gh-issue-work` Phase 9.** Do not reimplement `gh pr create`. If no issue is linked, seed one via `gh-issue-create` first. Entering at Phase 9 keeps PR shape, footer, and base-branch detection owned by the `/gh` flow, so tightening there propagates for free.
+3. **Open one PR per impacted repo via `gh-issue-work` Phase 9.** Do not reimplement `gh pr create`. If no issue is linked, seed one via `gh-issue-create` first. Entering at Phase 9 keeps PR shape, footer, and base-branch detection owned by the `/gh` flow, so tightening there propagates for free.
 
 Merging, deploying, and any irreversible/external action stay outside the build contract — the human's call.
+
+## Multi-repo delivery — one feature, a PR per impacted repo
+
+A single feature may legitimately span **N repos** (N ≥ 1, no cap) — e.g. a backend change in one repo plus the doctrine/docs that describe it in another. This is **disposition 1** (in-scope, handle now per `core/completion`), delivered as **one PR per impacted repo**, branched and committed in each repo independently:
+
+- Each impacted repo gets its own branch, its own self-review convergence, and its own PR via `gh-issue-work` Phase 9 — the same delivery, run once per repo. Cross-reference the sibling PRs in each body so the set reviews as one feature.
+- The cross-repo nature is **never** a reason to feature-split (disposition 2), defer, or surface as a blocker (disposition 3). A change co-required in another repo is part of *this* feature, not a separate one.
+- **Partial failure is honest, not contagious.** If one repo's PR can't open (missing remote, auth), report that repo precisely and still open every PR that can — one repo's delivery failure does not fail the others.
+- The feature is **done** only when every impacted repo's PR is open (or its specific failure is surfaced) — not when the first repo's PR opens.
 
 ## What this is not
 

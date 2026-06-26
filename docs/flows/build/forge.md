@@ -22,7 +22,7 @@ related:
 
 # /forge — In-Process Implementation Loop
 
-`/forge` takes an **already-settled plan** and drives it to a single PR using the parallel implementation loop: a tech-lead partitions the work into fork-safe tasks, a test-engineer defines each with a failing test, backend/frontend coders build them concurrently, and the tech-lead integrates and delivers. `/forge` does **not** plan — it consumes a plan contract produced by `/plan` (developer) or `/dream` (executive intake, via `/vibe`).
+`/forge` takes an **already-settled plan** and drives it to one PR per impacted repo using the parallel implementation loop: a tech-lead partitions the work into fork-safe tasks, a test-engineer defines each with a failing test, backend/frontend/fullstack coders build them concurrently, and the tech-lead integrates and delivers. `/forge` does **not** plan — it consumes a plan contract produced by `/plan` (developer) or `/dream` (executive intake, via `/vibe`).
 
 `/forge` is a **thin driver**: it composes `roles/tech-lead` (decisions + choreography), `core/build` (build unit + delivery), and `core/coder` (coder behavior). It restates none of them — when those tighten, `/forge` inherits it.
 
@@ -38,7 +38,7 @@ The contract (shape in `flows/plan/plan`) carries the feature spec, acceptance c
 
 ## Execution — be the tech-lead, in-process
 
-Act as the tech-lead per `roles/tech-lead`, with the **in-process driver substrate**: spawn each coder as a **sub-agent via the Agent tool**, one per fork-safe task, each told only its single task and the context it depends on. This is `core/coordination` Realization A — the Agent tool *is* the single-writer transport, the `.plan` checklist is the durable task-graph, and a blocked coder returns the fenced `BLOCKED {json}` line for you to answer and re-spawn (no bus). Drive the full choreography — partition → test-first → parallel build → sequential integration (loop back to the owning coder on a dirty merge) → `/gh-self-review` convergence → one PR via `gh-issue-work` Phase 9.
+Act as the tech-lead per `roles/tech-lead`, with the **in-process driver substrate**: spawn each coder as a **sub-agent via the Agent tool**, one per fork-safe task, each told only its single task and the context it depends on. This is `core/coordination` Realization A — the Agent tool *is* the single-writer transport, the `.plan` checklist is the durable task-graph, and a blocked coder returns the fenced `BLOCKED {json}` line for you to answer and re-spawn (no bus). Drive the full choreography — partition → test-first → parallel build → sequential integration (loop back to the owning coder on a dirty merge) → `/gh-self-review` convergence → one PR per impacted repo via `gh-issue-work` Phase 9 (`core/build` → *Multi-repo delivery*).
 
 ## How /forge relates to /smith and candyland
 
@@ -55,4 +55,4 @@ Act as the tech-lead per `roles/tech-lead`, with the **in-process driver substra
 - Never plan inside `/forge` — consume the contract; if it's missing or ambiguous, stop and route to `/plan` or `/vibe`.
 - Completion (the exit gate — every acceptance box green, verification green, clean self-review, no new deferral markers) and disposition of out-of-scope work follow `core/completion`, inherited via `roles/tech-lead` and `core/build` — not restated here. In-scope work is done now; only a genuinely separate feature or a hard blocker surfaces for the developer to triage.
 - Don't reimplement `roles/tech-lead`, `core/build`, or PR creation — compose them.
-- Deliver one PR for the plan; merging and anything irreversible stay the human's call.
+- Deliver one PR per impacted repo for the plan; merging and anything irreversible stay the human's call.

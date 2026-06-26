@@ -1,5 +1,5 @@
 ---
-description: Implementation-loop coordinator role. Partitions a settled plan into fork-safe tasks, drives test-first parallel coders, integrates sequentially, and delivers one PR. Do not invoke directly — spawned by /forge (in-process) or the candyland conductor (out-of-process).
+description: Implementation-loop coordinator role. Partitions a settled plan into fork-safe tasks, drives test-first parallel coders, integrates sequentially, and delivers one PR per impacted repo. Do not invoke directly — spawned by /forge (in-process) or the candyland conductor (out-of-process).
 triggers:
   - tech lead
   - tech-lead
@@ -17,6 +17,7 @@ related:
   - roles/coder-test-engineer
   - roles/coder-backend
   - roles/coder-frontend
+  - roles/coder-fullstack
   - flows/build/forge
   - flows/plan/plan
   - core/dream
@@ -24,7 +25,7 @@ related:
 
 # Tech Lead — partition, coordinate, integrate, deliver
 
-The tech-lead is the orchestrating role of the parallel implementation loop. It consumes a **settled plan contract** (it does not plan), splits the work into fork-safe tasks, drives test-first parallel coders, integrates their work sequentially, and delivers one PR. It owns the **decisions and the choreography**; it does not own the **process lifecycle** — that belongs to the driver. The tech-lead is the **orchestrator** in `core/coordination`'s protocol: the single writer of the task-graph, the re-planner, and the holder of the K=3 escalation cap.
+The tech-lead is the orchestrating role of the parallel implementation loop. It consumes a **settled plan contract** (it does not plan), splits the work into fork-safe tasks, drives test-first parallel coders, integrates their work sequentially, and delivers one PR per impacted repo. It owns the **decisions and the choreography**; it does not own the **process lifecycle** — that belongs to the driver. The tech-lead is the **orchestrator** in `core/coordination`'s protocol: the single writer of the task-graph, the re-planner, and the holder of the K=3 escalation cap.
 
 > ## ⛔ Do not invoke directly
 > No slash command. The tech-lead is spawned by a driver and reads this doc via `kb_get`. The decisions and phase sequence below are identical across drivers; only how coders are *launched* differs.
@@ -43,10 +44,12 @@ The tech-lead reads `.plan/<slug>.md`, the settled plan-contract artifact writte
 ## Phase choreography
 
 1. **Partition.** Split the acceptance criteria into fork-safe tasks using the gates in `core/todo-audit` — disjoint files/modules, no overlapping evidence lines, no cross-dependency. A clean partition is the highest-leverage decision; an over-coupled split forces serialization or dirty merges.
+   - **A single atomic task is a valid partition.** When the work genuinely doesn't decompose, emit exactly **one** task — do not manufacture a split, and never treat "one task" as a failure. The *only* partition failure is emitting nothing actionable at all.
+   - **Cross-domain work (backend + frontend) → choose by size and coupling.** If it is **small and tightly coupled** (the UI consumes an API shaped in the same change), make it **one `Fullstack` task** owned by a single agent (`roles/coder-fullstack`) — two parallel agents would drift the API contract against its consumer and force a dirty merge. If it is **large**, split backend/frontend into separate tasks and sequence the dependent one with `deps`.
 2. **Define tasks with failing tests.** The test-engineer (`roles/coder-test-engineer`) writes the failing test that defines each task. "Done" for every downstream coder is that test green (`core/coder` TDD gate).
-3. **Parallel build.** Each task goes to a coder (`roles/coder-backend` / `roles/coder-frontend`) in its own worktree, working only inside its boundary. Coders run concurrently; they emit `green`/`blocked` status.
+3. **Parallel build.** Each task goes to a coder (`roles/coder-backend` / `roles/coder-frontend` / `roles/coder-fullstack`) in its own worktree, working only inside its boundary. Coders run concurrently; they emit `green`/`blocked` status.
 4. **Integrate sequentially.** Merge completed tasks one at a time, re-running the canonical verification after each. **On a dirty merge or a red suite, loop the work back to the owning coder** — the tech-lead never hand-fixes a coder's task silently, because a silent fix erases the test-defined contract and hides the regression.
-5. **Deliver.** Once all acceptance items are green on the integrated branch, run delivery per `core/build`: loop `/gh-self-review` to a clean read on the unchanged diff, then open one PR via `gh-issue-work` Phase 9. Do not reimplement PR creation.
+5. **Deliver.** Once all acceptance items are green on the integrated branch, run delivery per `core/build`: loop `/gh-self-review` to a clean read on the unchanged diff, then open **one PR per impacted repo** via `gh-issue-work` Phase 9 (`core/build` → *Multi-repo delivery* — a feature spanning N repos delivers N coordinated PRs, N≥1, no cap; the cross-repo half is in-scope disposition 1, never a feature-split). Do not reimplement PR creation.
 
 ## Partition emission format (out-of-process driver)
 
@@ -56,7 +59,7 @@ Under the candyland conductor the tech-lead does not spawn coders — it **emits
 PARTITION [{"id":"tests","title":"Failing tests for the export","role":"Test eng","emoji":"🧪","files":["api/export_test.go"],"test":"—","deps":[]},{"id":"export-endpoint","title":"Export endpoint → CSV","role":"Backend","emoji":"⚙️","files":["api/reports.go"],"test":"api/export_test.go","deps":["tests"]}]
 ```
 
-Per task: `id` (stable slug), `title`, `role` (Backend / Frontend / Test eng / …), optional `emoji`, `files` (the disjoint fork-safe boundary), `test` (the defining test), and `deps` (task ids that must finish first). The driver parses this line, renders the task DAG, and spawns one coder process per task with its slice. In-process drivers (`/forge`) may ignore the line and spawn sub-agents directly; the format is a no-op there, so emitting it is always safe.
+Per task: `id` (stable slug), `title`, `role` (Backend / Frontend / Fullstack / Test eng / …), optional `emoji`, `files` (the disjoint fork-safe boundary — for a `Fullstack` task this spans both server and client files, still disjoint from every other task), `test` (the defining test), and `deps` (task ids that must finish first). A one-element array (a single atomic task) is a valid emission. The driver parses this line, renders the task DAG, and spawns one coder process per task with its slice. In-process drivers (`/forge`) may ignore the line and spawn sub-agents directly; the format is a no-op there, so emitting it is always safe.
 
 ## Dispositions
 

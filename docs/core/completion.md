@@ -63,7 +63,10 @@ For ANY work a builder or loop encounters, exactly one disposition applies. "Haz
 fourth option — it is retired as a catch-all and resolves only to disposition 2 or 3.
 
 1. **In-scope & handle-able now → DO IT NOW.** The default; it covers the vast majority. No phases, no
-   "future work", no `TODO`, no follow-up issue, no workplan-instead-of-work.
+   "future work", no `TODO`, no follow-up issue, no workplan-instead-of-work. Work that is in-scope but
+   lands in **another repo** (a co-required cross-repo change) is still disposition 1 — delivered as its
+   own PR in that repo (`core/build` → *Multi-repo delivery*: one feature → a PR per impacted repo, N≥1,
+   no cap), never demoted to a feature-split or a blocker because it crosses a repo boundary.
 2. **Genuinely separate feature (outside the agreed scope) → FEATURE-SPLIT.** A distinct, named new
    plan or issue — never a silent park.
    - Developer-facing (`/plan`, `/forge`, `/smith`): surface it for triage in the State block's
@@ -84,6 +87,9 @@ fourth option — it is retired as a catch-all and resolves only to disposition 
 - Using "hazard" as a parking lot for handle-able in-scope work.
 - Shipping a placeholder / stub / "simplified for now" implementation of in-scope behavior — a stub is
   deferral in disguise.
+- Treating a co-required **cross-repo** change as a feature-split or blocker to exit one repo's PR
+  sooner — it is in-scope (disposition 1), delivered as a PR per impacted repo (`core/build` →
+  *Multi-repo delivery*).
 
 ## The exit gate (the forcing function)
 
@@ -94,7 +100,9 @@ a deferral.
 
 The only legitimate hand-backs are three: **milestone / PR-open**, a **hard blocker** (disposition 3),
 or an **explicit user halt**. Anywhere else, the loop owes a next step (see `core/loop` →
-self-continuation).
+self-continuation). For a **multi-repo feature** the milestone is *every* impacted repo's PR being open
+(`core/build` → *Multi-repo delivery*) — opening the first repo's PR is not a stopping point while
+another impacted repo still owes a PR.
 
 This same verified-green gate is the firewall for **learned memory**: only verified-green work distils a
 reusable, cross-project lesson (`core/memory` → *When to distil*); an unverified run distils nothing.

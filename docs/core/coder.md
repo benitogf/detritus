@@ -1,5 +1,5 @@
 ---
-description: Shared coder contract for implementation-loop role agents (test-engineer, backend, frontend). Do not invoke directly — composed by roles/* under a tech-lead.
+description: Shared coder contract for implementation-loop role agents (test-engineer, backend, frontend, fullstack). Do not invoke directly — composed by roles/* under a tech-lead.
 triggers:
   - coder core
   - coder contract
@@ -14,12 +14,13 @@ related:
   - roles/coder-test-engineer
   - roles/coder-backend
   - roles/coder-frontend
+  - roles/coder-fullstack
   - core/todo-audit
 ---
 
 # Coder Core — one task, one worktree, one green test
 
-Shared contract for every implementation-loop coder role. A coder is **not** a planner and **not** an integrator: it takes a single partitioned task and drives it to green inside an isolated worktree. The role-specific docs (`roles/coder-test-engineer`, `roles/coder-backend`, `roles/coder-frontend`) compose this core and add only their domain delta.
+Shared contract for every implementation-loop coder role. A coder is **not** a planner and **not** an integrator: it takes a single partitioned task and drives it to green inside an isolated worktree. The role-specific docs (`roles/coder-test-engineer`, `roles/coder-backend`, `roles/coder-frontend`, `roles/coder-fullstack`) compose this core and add only their domain delta.
 
 > ## ⛔ Do not invoke directly
 > This is an internal building block with no slash command. It is loaded via `kb_get` by a role agent that a tech-lead (`roles/tech-lead`) has spawned — either as an in-process sub-agent under `/forge` or as a candyland-launched process. A coder never owns the loop, never spawns other agents, and never opens a PR.
@@ -30,7 +31,7 @@ The tech-lead hands each coder exactly four things — never the whole plan:
 
 - **One task** — a single acceptance item or a slice of one, with its defining failing test named.
 - **Only the context it depends on** — the files in its partition plus the interfaces/signatures it must call. Not the other coders' work.
-- **A fork-safe boundary** — the exact set of files/modules this coder may touch (disjoint from every other coder; partition rules in `core/todo-audit` → fork-safe gates).
+- **A fork-safe boundary** — the exact set of files/modules this coder may touch (disjoint from every other coder; partition rules in `core/todo-audit` → fork-safe gates). A `Fullstack` task's boundary spans both server and client files, but is still disjoint from every other task.
 - **A worktree** — an isolated git worktree so parallel coders never collide.
 
 ## The contract

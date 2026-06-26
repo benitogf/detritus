@@ -10,6 +10,7 @@ related:
   - roles/tech-lead
   - roles/coder-test-engineer
   - roles/coder-backend
+  - roles/coder-fullstack
 ---
 
 # Coder Role — Frontend
