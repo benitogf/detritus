@@ -42,6 +42,7 @@ and intentionally absent — they are not commands.
 
 | Command | Use it for |
 | --- | --- |
+| `/candyland` | The sidecar opt-in for the autonomous build flows. |
 | `/forge` | Drive a settled plan to a PR with a parallel tech-lead + coders implementation loop, in-process. |
 | `/janitor` | Create a recurring proactive code-maintenance worker that audits, safely fixes, verifies, self-reviews, and routes delivery through /gh. |
 | `/smith` | Recurring loop that takes a feature from /plan all the way to merged PR and then transitions into a janitor-style audit phase on the changed code. |

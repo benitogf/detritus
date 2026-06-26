@@ -300,6 +300,13 @@ func aliasForDoc(name string) string {
 // upsertMCP reads a JSON file, sets .<parentKey>.detritus = {command, args:[]},
 // and writes it back. Creates the file if it doesn't exist.
 func upsertMCP(file, parentKey, command string) {
+	upsertMCPServer(file, parentKey, "detritus", command, nil)
+}
+
+// upsertMCPServer upserts a named stdio MCP server into file under parentKey,
+// preserving any other servers already registered there. args is the server's
+// argv tail (nil → empty).
+func upsertMCPServer(file, parentKey, name, command string, args []any) {
 	data := map[string]any{}
 	if raw, err := os.ReadFile(file); err == nil && len(raw) > 0 {
 		if err := json.Unmarshal(raw, &data); err != nil {
@@ -312,19 +319,22 @@ func upsertMCP(file, parentKey, command string) {
 	if !ok {
 		parent = map[string]any{}
 	}
+	if args == nil {
+		args = []any{}
+	}
 	entry := map[string]any{
 		"command": command,
-		"args":    []any{},
+		"args":    args,
 	}
 	// VS Code's native MCP host keys servers under "servers" and silently
 	// skips any entry without an explicit transport "type". Without this the
-	// gateway initializes but never starts detritus, so kb_*/code_* tools never
+	// gateway initializes but never starts the server, so its tools never
 	// reach Copilot Chat. Other hosts (Cursor/Windsurf use "mcpServers") infer
 	// stdio and don't need it, so only stamp it for the VS Code schema.
 	if parentKey == "servers" {
 		entry["type"] = "stdio"
 	}
-	parent["detritus"] = entry
+	parent[name] = entry
 	data[parentKey] = parent
 
 	out, err := json.MarshalIndent(data, "", "  ")
@@ -340,7 +350,7 @@ func upsertMCP(file, parentKey, command string) {
 		fmt.Fprintf(os.Stderr, "failed to write %s: %v\n", file, err)
 		os.Exit(1)
 	}
-	fmt.Printf("Updated detritus in %s\n", file)
+	fmt.Printf("Updated %s in %s\n", name, file)
 }
 
 // upsertVSCodeSettings reads a VS Code settings.json and sets the

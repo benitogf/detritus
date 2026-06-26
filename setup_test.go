@@ -1,11 +1,79 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+// TestRegisterCandylandJSON: the candyland control-mcp is registered alongside
+// detritus IFF the candyland binary is installed beside it (the installer puts
+// it there); absent, registration is skipped so no host points at a missing
+// binary.
+func TestRegisterCandylandJSON(t *testing.T) {
+	candylandName := "candyland"
+	if runtime.GOOS == "windows" {
+		candylandName = "candyland.exe"
+	}
+	readServers := func(cfg string) map[string]any {
+		raw, err := os.ReadFile(cfg)
+		if err != nil {
+			t.Fatalf("read %s: %v", cfg, err)
+		}
+		var data map[string]any
+		if err := json.Unmarshal(raw, &data); err != nil {
+			t.Fatalf("parse %s: %v", cfg, err)
+		}
+		s, _ := data["mcpServers"].(map[string]any)
+		return s
+	}
+
+	// With a sibling candyland binary → registered with the control-mcp args.
+	dir := t.TempDir()
+	detr := filepath.Join(dir, "detritus")
+	cbin := filepath.Join(dir, candylandName)
+	for _, p := range []string{detr, cbin} {
+		if err := os.WriteFile(p, []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := filepath.Join(dir, ".claude.json")
+	upsertMCP(cfg, "mcpServers", detr)
+	registerCandylandJSON(cfg, "mcpServers", detr)
+
+	s := readServers(cfg)
+	if s["detritus"] == nil {
+		t.Error("detritus must remain registered alongside candyland")
+	}
+	cl, ok := s["candyland"].(map[string]any)
+	if !ok {
+		t.Fatal("candyland should be registered when the sibling binary exists")
+	}
+	if cl["command"] != cbin {
+		t.Errorf("candyland command = %v, want %s", cl["command"], cbin)
+	}
+	if args, _ := cl["args"].([]any); len(args) != 1 || args[0] != "control-mcp" {
+		t.Errorf("candyland args = %v, want [control-mcp]", cl["args"])
+	}
+
+	// Without the sibling binary → no candyland entry (graceful skip).
+	dir2 := t.TempDir()
+	detr2 := filepath.Join(dir2, "detritus")
+	if err := os.WriteFile(detr2, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg2 := filepath.Join(dir2, ".claude.json")
+	upsertMCP(cfg2, "mcpServers", detr2)
+	registerCandylandJSON(cfg2, "mcpServers", detr2)
+	if s2 := readServers(cfg2); s2["detritus"] == nil {
+		t.Error("detritus must still register without candyland")
+	} else if _, present := s2["candyland"]; present {
+		t.Error("candyland must not be registered without its binary")
+	}
+}
 
 // TestGenerateClaudeSkillsPrunesStale verifies that a detritus-generated skill
 // whose backing doc was removed gets pruned on the next setup, while a
