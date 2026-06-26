@@ -23,7 +23,7 @@ related:
 
 ## Two modes — by what it's invoked with
 
-- **`/candyland` alone → `/vibe`, in the sidecar.** Follow `flows/plan/vibe`: the executive/`dream` intake (no go-gate), settle a `.plan/<slug>.md` contract, then — instead of running `/smith` in-process — launch the build in candyland and report the dashboard. Autonomous all the way to a PR; you watch it build.
+- **`/candyland` alone → `/vibe`, in the sidecar.** Follow `flows/plan/vibe`: the executive/`dream` intake (no go-gate), settle a `.plan/<slug>.md` contract, then — instead of running `/smith` in-process — launch the build in candyland and report the dashboard. Autonomous all the way to the PR(s) — one per impacted repo; you watch it build.
 - **`/candyland` alongside `/smith` → `/smith`, in the sidecar.** When the message also contains `/smith`, follow `flows/build/smith` (the `/plan` gate, the acceptance checklist, the build-to-audit transition, the audit phase) — but its **build phase delegates to candyland** instead of building in-process. Planning and the audit phase stay in the session; only the parallel build runs in the sidecar.
 
 In both modes `/vibe` and `/smith` themselves are unchanged — `/candyland` is a wrapper that swaps their in-process build for the sidecar.
@@ -39,9 +39,9 @@ The detritus install puts the **candyland binary** on the machine and registers 
 1. **Settle intent** for the active mode: `/candyland` alone → run `dream`'s intake to a settled `.plan/<slug>.md`; alongside `/smith` → run `/smith`'s `/plan` pass-through to the settled checklist. `/candyland` never invents the plan — it reuses the mode's intake.
 2. **Launch.** Call the candyland MCP `launch_run`:
    - `prompt`: the settled plan (the `.plan/<slug>.md` contents, or the agreed instruction) — candyland's tech-lead partitions it into fork-safe tasks.
-   - `folders`: omit to use this session's working directory (the repo you're in); `folders[0]` is the git repo it branches and opens its PR in.
+   - `folders`: omit to use this session's working directory (the repo you're in). Every folder is a **candidate repo**: the conductor branches and opens a PR in **each folder that receives changes** — one PR per impacted repo (N≥1, no cap), inheriting `core/build` → *Multi-repo delivery*. `folders[0]` is the default/primary repo when a task names no repo.
    `launch_run` brings the sidecar up if needed, then starts the run and returns its id.
-3. **Hand off to the dashboard.** Report the run id and that it's building in the candyland dashboard — that's where the live agents, task graph, and the per-task verification **audit** show, and where the run is stopped. In `/smith` mode, resume the session's audit phase once candyland's PR lands.
+3. **Hand off to the dashboard.** Report the run id and that it's building in the candyland dashboard — that's where the live agents, task graph, and the per-task verification **audit** show, and where the run is stopped. A run may open **more than one PR** (one per impacted repo); a single repo's delivery failure is surfaced without failing the others. In `/smith` mode, resume the session's audit phase once candyland's PR(s) land.
 
 ## Control (stop only)
 

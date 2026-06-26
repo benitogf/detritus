@@ -12,6 +12,7 @@ related:
   - roles/tech-lead
   - roles/coder-backend
   - roles/coder-frontend
+  - roles/coder-fullstack
   - flows/testing/testing
 ---
 
