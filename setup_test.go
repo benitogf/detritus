@@ -45,6 +45,125 @@ func TestSetupDoesNotRegisterCandylandMCP(t *testing.T) {
 	}
 }
 
+// TestRemoveMCPServerStripsStaleCandyland verifies that removeMCPServer deletes a
+// stale candyland entry while leaving detritus and any other server untouched.
+func TestRemoveMCPServerStripsStaleCandyland(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), ".claude.json")
+	seed := map[string]any{
+		"mcpServers": map[string]any{
+			"detritus":  map[string]any{"command": "/bin/detritus", "args": []any{}},
+			"candyland": map[string]any{"command": "/bin/candyland", "args": []any{"control-mcp"}},
+			"other":     map[string]any{"command": "/bin/other", "args": []any{}},
+		},
+		"otherTopLevel": "keep-me",
+	}
+	raw, _ := json.MarshalIndent(seed, "", "  ")
+	if err := os.WriteFile(cfg, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	removeMCPServer(cfg, "mcpServers", "candyland")
+
+	got, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatalf("read %s: %v", cfg, err)
+	}
+	var data map[string]any
+	if err := json.Unmarshal(got, &data); err != nil {
+		t.Fatalf("parse %s: %v", cfg, err)
+	}
+	s, _ := data["mcpServers"].(map[string]any)
+	if _, present := s["candyland"]; present {
+		t.Error("stale candyland entry must be removed")
+	}
+	if s["detritus"] == nil {
+		t.Error("detritus entry must be preserved")
+	}
+	if s["other"] == nil {
+		t.Error("unrelated server must be preserved")
+	}
+	if data["otherTopLevel"] != "keep-me" {
+		t.Error("unrelated top-level keys must be preserved")
+	}
+}
+
+// TestRemoveMCPServerNoCandylandIsNoOp verifies that removeMCPServer leaves a
+// config without a candyland entry byte-for-byte unchanged (no reformat thrash).
+func TestRemoveMCPServerNoCandylandIsNoOp(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), ".claude.json")
+	original := []byte("{\n  \"mcpServers\": {\n    \"detritus\": {\"command\": \"/bin/detritus\"}\n  }\n}\n")
+	if err := os.WriteFile(cfg, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	removeMCPServer(cfg, "mcpServers", "candyland")
+
+	got, err := os.ReadFile(cfg)
+	if err != nil {
+		t.Fatalf("read %s: %v", cfg, err)
+	}
+	if string(got) != string(original) {
+		t.Errorf("file with no candyland entry must be untouched\nwant: %q\ngot:  %q", original, got)
+	}
+	after, err := os.Stat(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Error("no-op must not rewrite the file (modtime changed)")
+	}
+}
+
+// TestRemoveMCPServerMissingFileIsNoOp verifies removeMCPServer does not create a
+// file that doesn't exist.
+func TestRemoveMCPServerMissingFileIsNoOp(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "absent.json")
+	removeMCPServer(cfg, "mcpServers", "candyland")
+	if _, err := os.Stat(cfg); !os.IsNotExist(err) {
+		t.Errorf("removeMCPServer must not create a missing file, stat err: %v", err)
+	}
+}
+
+// TestRemoveTOMLTableStripsStaleCandyland verifies the codex TOML remover strips
+// the [mcp_servers.candyland] block while keeping [mcp_servers.detritus].
+func TestRemoveTOMLTableStripsStaleCandyland(t *testing.T) {
+	input := strings.Join([]string{
+		"[mcp_servers.candyland]",
+		`command = "/bin/candyland"`,
+		`args = ["control-mcp"]`,
+		"",
+		"[mcp_servers.detritus]",
+		`command = "/bin/detritus"`,
+		"args = []",
+		"",
+	}, "\n")
+
+	got := removeTOMLTable(input, "mcp_servers.candyland")
+
+	if strings.Contains(got, "candyland") {
+		t.Errorf("candyland table must be stripped, got:\n%s", got)
+	}
+	if !strings.Contains(got, "[mcp_servers.detritus]") {
+		t.Errorf("detritus table must be preserved, got:\n%s", got)
+	}
+	if !strings.Contains(got, "/bin/detritus") {
+		t.Errorf("detritus body must be preserved, got:\n%s", got)
+	}
+}
+
+// TestRemoveTOMLTableNoTableIsNoOp verifies removeTOMLTable returns the content
+// unchanged when the table isn't present.
+func TestRemoveTOMLTableNoTableIsNoOp(t *testing.T) {
+	input := "[mcp_servers.detritus]\ncommand = \"/bin/detritus\"\nargs = []\n"
+	if got := removeTOMLTable(input, "mcp_servers.candyland"); got != input {
+		t.Errorf("absent table must be a no-op\nwant: %q\ngot:  %q", input, got)
+	}
+}
+
 // TestGenerateClaudeSkillsPrunesStale verifies that a detritus-generated skill
 // whose backing doc was removed gets pruned on the next setup, while a
 // hand-authored skill (no detritus marker) is left untouched and current docs
