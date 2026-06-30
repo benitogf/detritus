@@ -11,17 +11,23 @@ triggers:
 when: User invokes /janitor to schedule recurring non-feature codebase maintenance for a project or workspace.
 related:
   - core/loop
+  - core/planning
   - core/completion
   - flows/github/gh
   - flows/github/gh-self-review
   - core/janitor-platforms
   - flows/principles/truthseeker
   - flows/testing/testing
+  - flows/build/quest
 ---
 
 # /janitor - Recurring Codebase Maintenance
 
 Create a recurring scheduled automation that uses otherwise idle agent quota to improve a codebase without changing product features or intended behavior.
+
+`/janitor` is the **in-session** variant of this iterative loop — it settles a crisp loop intent, then runs discover→triage→fix→verify→deliver in this conversation, one delivery at a time through `/gh`. Its Candyland-native sibling is `flows/build/quest`: `/quest` hands the same loop to the candyland sidecar to run **out-of-process** and open **many PRs over time**, watched in a dashboard.
+
+`/janitor` is **plan-gated**: before the audit loop runs, it refines the loop intent (objective, target scope, iteration strategy, safety boundary, verification command) so every tick is anchored to a settled intent rather than a generic scheduled audit. This gate composes the existing planning doctrine — it does not introduce a new mechanism. See *Settle the loop intent* below.
 
 `/janitor` is one of two recurring-loop commands. Shared mechanics (scratchpad layout, durability rule, cadence guideline, skip-streak guardrail, mid-loop pivot via scratchpad, `/gh` delivery) live in `core/loop` and are referenced rather than restated here. This doc owns `/janitor`'s distinct audit lens (safe-maintenance discovery), main-agent allowances (smallest safe improvement, preserve behavior), safety boundaries, optional primary-metric flow, and initial-run report shape. Platform-specific scheduler behavior lives in `core/janitor-platforms`.
 
@@ -71,11 +77,25 @@ Always speak to the user in human terms (`every 30 minutes`, `overnight`, `weekn
 
 If the chosen platform adapter has a minimum interval higher than the requested cadence, the adapter rounds up to that minimum without asking and reports the effective cadence in the initial run report. Do not block the user with a clarifying question for the common case of a small-default-vs-large-minimum mismatch.
 
+## Settle the loop intent
+
+`/janitor` is plan-gated: before scheduling or running the first audit tick, refine the loop intent so the loop is anchored to a settled objective rather than jumping to a generic audit. Compose the existing planning doctrine — `core/planning` for what a settled intent is and its readiness/consistency checks, `core/loop` for the loop spine (durable state, cadence, skip-streak guardrail, non-overlap), `core/completion` for the three dispositions a tick obeys. This is a refinement of the same intent the scratchpad's *North-star goal* and *User-stated rules* sections already hold (`Scratchpad — janitor-specific sections`), not a new artifact.
+
+Settle these five before the loop runs:
+
+- **Objective** — what this maintenance loop is driving toward, in plain language. The scratchpad's *North-star goal*.
+- **Target scope** — the repo/workspace/path/topic the loop may touch (the `Target` and `Topics` inputs), resolved to a concrete boundary.
+- **Iteration strategy** — how ticks progress: the cadence, whether a primary metric is tracked (`Primary Metric`), and any loop-end criteria (`Loop-End Criteria`) — or perpetual if none.
+- **Safety boundary** — what the loop may and may not do (the `Safety Boundaries` section, inheriting `core/completion`: in-scope fixes done now, separate features split out, hard blockers surfaced — never silently deferred).
+- **Verification command** — the canonical green gate every tick must pass before it ships, the same gate `core/build` enforces.
+
+`/janitor` never invents the objective — it refines what the user asked for (or the default safe-maintenance lens when nothing is narrowed) into a loop intent the audit loop can tick. Ask only when ambiguity would settle the wrong objective, scope, or safety boundary; the input-gathering discipline in `Inputs` still applies. Once the intent is settled, run the audit loop below.
+
 ## Janitor Loop
 
 Each scheduled wake must follow this order:
 
-1. Resolve the target workspace and load local project instructions.
+1. Resolve the target workspace and load local project instructions. Honor the settled loop intent (*Settle the loop intent*) — objective, scope, safety boundary, and verification command anchor the tick.
 2. Read the scratchpad at `.janitor/<slug>.md` (mechanism in `core/loop` → *Durable Cross-Tick State*). Honor the current orientation. Verify the State block's next-tick plan still matches reality before proceeding.
 3. Check whether previous janitor work for the same target is still running or unfinished (target-scoped state check per `core/loop` → *State And Non-Overlap*).
 4. If work is pending, continue or integrate that work.

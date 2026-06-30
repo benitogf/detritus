@@ -98,6 +98,52 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "--candyland-run":
+			// detritus --candyland-run <prompt-file> [folder ...]
+			if len(os.Args) < 3 {
+				fmt.Fprintln(os.Stderr, "usage: detritus --candyland-run <prompt-file> [folder ...]")
+				os.Exit(1)
+			}
+			self, _ := os.Executable()
+			cwd, _ := os.Getwd()
+			if err := runCandyland(self, os.Args[2], os.Args[3:], cwd); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
+		case "--quest-run":
+			// detritus --quest-run <objective-file> [folder ...]
+			// Starts a standalone Candyland-native iterative quest (the /quest
+			// command). A standalone quest is conservative and opens its own
+			// PRs: default autonomy L1, deliver=pr.
+			if len(os.Args) < 3 {
+				fmt.Fprintln(os.Stderr, "usage: detritus --quest-run <objective-file> [folder ...]")
+				os.Exit(1)
+			}
+			self, _ := os.Executable()
+			cwd, _ := os.Getwd()
+			if err := runQuestCmd(self, os.Args[2], os.Args[3:], "L1", "pr", cwd); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
+		case "--campaign-run":
+			// detritus --campaign-run <input-file> [folder ...]
+			// Starts a Candyland program-level campaign (the /campaign command)
+			// from a high-level goal, partial brief, or detailed plan. Campaigns
+			// are NEVER L1 — a report-only campaign would strand with no PR — so
+			// autonomy defaults to L2.
+			if len(os.Args) < 3 {
+				fmt.Fprintln(os.Stderr, "usage: detritus --campaign-run <input-file> [folder ...]")
+				os.Exit(1)
+			}
+			self, _ := os.Executable()
+			cwd, _ := os.Getwd()
+			if err := runCampaignCmd(self, os.Args[2], os.Args[3:], "L2", cwd); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
 		case "--help", "-h":
 			fmt.Println("detritus " + version)
 			fmt.Println("MCP knowledge base server (stdio transport)")
@@ -109,6 +155,9 @@ func main() {
 			fmt.Println("  detritus --readme                                     Regenerate the README command table from docs/flows/")
 			fmt.Println("  detritus --plugin-commands                            Regenerate plugin command shims from docs/flows/")
 			fmt.Println("  detritus --setup [--dry-run]                          Configure all detected IDEs")
+			fmt.Println("  detritus --candyland-run <prompt-file> [folder ...]   Start a candyland sidecar build run over REST")
+			fmt.Println("  detritus --quest-run <objective-file> [folder ...]   Start a candyland-native iterative quest over REST")
+			fmt.Println("  detritus --campaign-run <input-file> [folder ...]    Start a candyland program-level campaign over REST")
 			fmt.Println("  detritus --update [--dry-run]                         Self-update to latest release")
 			fmt.Println("  detritus --todo-guard                                 PreToolUse hook handler (internal; installed by --setup)")
 			fmt.Println("  detritus --upsert-mcp <file> <key> <cmd>              Upsert MCP config entry")
@@ -127,6 +176,19 @@ func main() {
 	}
 	defer engine.Close()
 
+	server := buildMCPServer(engine)
+
+	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// buildMCPServer constructs the detritus MCP server with all code/memory/kb
+// tools and the summary resource registered, ready to be served over the stdio
+// transport. detritus is a passive stdio MCP server: each consumer (a VSCode
+// Claude session, or a candyland-spawned agent) runs its own detritus child
+// over stdio, so there is no long-lived shared server.
+func buildMCPServer(engine *search.Engine) *mcp.Server {
 	// Build reverse alias map: alias -> canonical doc name
 	aliasToDoc := map[string]string{}
 	for name := range engine.DocMetadata() {
@@ -251,9 +313,7 @@ func main() {
 		}, nil
 	})
 
-	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
-		log.Fatal(err)
-	}
+	return server
 }
 
 // resolveDocName normalises a requested name into a canonical doc path.

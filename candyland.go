@@ -10,19 +10,18 @@ import (
 	"time"
 )
 
-// candyland is the sidecar app a prompt triggers (via its control MCP). detritus
-// installs its binary beside its own and registers the MCP — all in this Go
-// setup path (no per-platform install scripts to drift). The binary fetch mirrors
-// the self-update in update.go; candyland releases are RAW per-platform binaries
+// candyland is the sidecar app detritus drives over REST (see candyland_client.go).
+// detritus installs its binary beside its own — all in this Go setup path (no
+// per-platform install scripts to drift). The binary fetch mirrors the
+// self-update in update.go; candyland releases are RAW per-platform binaries
 // (candyland-<goos>-<goarch>[.exe]), so there is no archive to extract.
 
 // candylandBinPath is where the candyland binary lives on this platform, whether
 // or not it exists yet. Preferred location is beside detritus; but when that dir
 // isn't writable by the current user (e.g. a sudo install to /usr/local/bin while
 // --setup runs as the user), it falls back to ~/.local/bin so the fetch and the
-// MCP registration — which use the absolute path — still work without sudo. The
-// result is deterministic for a given environment, so fetch and registration
-// always agree.
+// launcher — which use the absolute path — still work without sudo. The result is
+// deterministic for a given environment, so fetch and launch always agree.
 func candylandBinPath(detritusPath string) string {
 	name := "candyland"
 	if runtime.GOOS == "windows" {
@@ -51,7 +50,7 @@ func dirWritable(dir string) bool {
 
 // candylandBinFor returns the candyland binary beside detritus and whether it
 // exists. When absent (no candyland release yet, or the fetch was skipped) the
-// MCP registration is skipped rather than pointing a host at a missing binary.
+// launcher reports an honest error rather than starting a missing binary.
 func candylandBinFor(detritusPath string) (string, bool) {
 	p := candylandBinPath(detritusPath)
 	if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
@@ -61,8 +60,8 @@ func candylandBinFor(detritusPath string) (string, bool) {
 }
 
 // fetchCandylandBinary downloads the latest candyland release binary for this
-// platform and installs it beside detritus, so the MCP registration below can
-// wire it up. Best-effort and cross-platform (pure Go, no shell): on any
+// platform and installs it beside detritus, so the launcher can start it.
+// Best-effort and cross-platform (pure Go, no shell): on any
 // failure — no release yet, no asset for this os/arch, network error, a locked
 // existing binary on Windows — it logs and returns so setup proceeds; detritus
 // works without the sidecar. Run before the host registrations.
@@ -136,27 +135,4 @@ func downloadRawBinary(url, dest string) error {
 		return err
 	}
 	return nil
-}
-
-// previewCandyland prints the dry-run preview of the candyland MCP registration
-// that the real run would add for a host (dest names the file + parent key). The
-// binary fetch is skipped under dry-run, so when it isn't already installed the
-// line says the registration is conditional on a real run fetching it — matching
-// what actually happens, rather than implying it's always wired.
-func previewCandyland(dest, detritusPath string) {
-	if _, ok := candylandBinFor(detritusPath); ok {
-		fmt.Printf("[dry-run] Would register the candyland control-mcp in %s\n", dest)
-		return
-	}
-	fmt.Printf("[dry-run] Would register the candyland control-mcp in %s once its binary is installed\n", dest)
-}
-
-// registerCandylandJSON upserts the candyland control-mcp beside detritus in a
-// JSON MCP host config (same file + parentKey), when the candyland binary is
-// installed alongside detritus. A prompt can then call launch_run; the control
-// MCP brings the sidecar up on demand.
-func registerCandylandJSON(file, parentKey, detritusPath string) {
-	if cbin, ok := candylandBinFor(detritusPath); ok {
-		upsertMCPServer(file, parentKey, "candyland", cbin, []any{"control-mcp"})
-	}
 }
