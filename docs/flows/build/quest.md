@@ -38,8 +38,37 @@ Before launching, read the detritus KB guidance for iterative loops (`core/loop`
 ## Steps
 
 1. **Settle the loop intent** (objective, scope, safety boundary, verification command) per the section above, and write the objective to an objective file.
-2. **Ensure candyland is up, then start the quest over REST.** Run `detritus --quest-run <objective-file> [folder ...]` (folders default to the cwd). detritus health-checks the sidecar, starts it if down, then `POST`s `/api/quests` with `{objective, folders, autonomyLevel, deliver}`, reads back the quest id, and `POST`s `/api/quests/{id}/begin` to start it. A quest started via `/quest` is **standalone** — it opens its own PRs — so it launches conservatively (`autonomyLevel: L1`, `deliver: pr`).
+2. **Ensure candyland is up, then start the quest over REST.** Run `detritus --quest-run <objective-file> [folder ...]` (folders default to the cwd). detritus health-checks the sidecar, starts it if down, then `POST`s `/api/quests` with `{objective, folders, autonomyLevel, deliver}`, reads back the quest id, and `POST`s `/api/quests/{id}/begin` to start it. **Autonomy must match the invocation verb** (see below); `deliver: pr` is the standing safety rail — the quest opens its own PRs and **never merges**.
 3. **Hand off to the dashboard.** Report the quest id and the dashboard URL — that is where the live tick state, the task graph, and the per-tick verification audit show, and where the quest is stopped. A quest ticks **discover→triage→run→review→PR** and may open **more than one PR over time** (one per impacted repo, per shippable tick); a single repo's delivery failure is surfaced without failing the others.
+
+## Autonomy matches the objective's intent
+
+The autonomy level decides whether a tick **acts** or merely **looks**:
+
+- **Report-only / surface-only** (L1) — the quest discovers and triages but makes **no code changes and opens no PRs**; it only surfaces findings. Appropriate for an audit-shaped objective ("review", "find", "report on").
+- **Executing** — the quest carries work through to changes and PRs within its safety boundary. Required for an execute-shaped objective.
+
+`/quest` is almost always invoked with an **execute-shaped** objective ("solve", "fix", "wire", "update PR #N"). The launcher **derives** autonomy from the objective's intent — an execute verb selects an executing level — or **prompts once at launch** when the intent is ambiguous. It never silently defaults an execute-shaped objective to a report-only level.
+
+If a report-only level **does** end up the default for an execute-shaped objective, the flow says so **loudly, before** "quest started" — never launches report-only against an execute verb without warning. Likewise, a **first-and-only tick that skips 100%** of an execute objective is a **misconfig signal to surface**, not a finish to report green (`core/completion`: a green terminal state must be earned, not a no-op).
+
+## Delivery mode matches the objective's intent
+
+Pairing with the autonomy-from-intent rule above, the launcher also **detects the delivery mode** from the objective and sets `deliver` accordingly (`core/build` → *Delivery modes*: `pr|branch|feedback|review`):
+
+- An **"address feedback on PR #N"** intent ("fix the review on PR #N", "update PR #N") → `deliver: feedback`, with the **target PR(s)** passed through. The quest updates **that existing PR in place** (commit onto its head branch, push) and **never opens a new PR** — mirroring `/gh-feedback-work`. Multi-repo feedback lands each repo's fix on that repo's existing PR.
+- A **"review PR #N"** intent ("check PR #N against the requirements doc", "review #N") → `deliver: review`. The quest may end with **no PR at all** when nothing is actionable; any actionable finding becomes `feedback` work on the PR in question. A no-PR `review` terminal is valid `done`, not a no-op (`core/completion` → *Honest terminal state*, carve-out 3).
+- A plain new-work objective → `deliver: pr` (the standing default — new PR per impacted repo).
+
+The launcher **never** opens a duplicate PR for a feedback/review intent, and **never** silently defaults a feedback/review objective to `pr`. The intent→delivery-mode detection is the same shape as the intent→autonomy detection above: derived from the verb, or prompted once when ambiguous.
+
+## Launch output
+
+The launch prints, before handing off, so the user can tell what they actually got:
+
+- **quest id** and the **dashboard URL**;
+- **autonomy level** and **deliver mode**, plus a one-line **what this will / won't do** (e.g. `L1: surfaces findings only — no code changes, no PRs`);
+- the **correct ports**: API on **:8888**, UI on **:8080**. (The UI loads from :8080 but reads its data from the API on :8888 — printing only the UI URL leaves the dashboard blank.) On a remote/WSL host, forward **both** ports.
 
 ## Control (stop only)
 

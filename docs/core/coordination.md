@@ -78,7 +78,13 @@ orchestration — no new Go, no daemon, no ooo bus, no comms tools.**
 
   The orchestrator answers, mutates the ledger if needed, and **re-spawns** the worker with the answer +
   its updated slice. (The base Agent tool has no mid-task resume, so respawn is the mechanism — the
-  in-process realization of an interrupt→resume.)
+  in-process realization of an interrupt→resume.) **Re-spawn context must be rendered, not merely
+  attached.** The answer / findings / feedback the orchestrator carries forward MUST appear in the brief
+  text the re-spawned worker actually reads. A field populated on the slice but never rendered into the
+  brief is **invisible context**: the worker re-derives what it was already told (and, because it never
+  *sees* a contradiction, never trips the K=3 cap — it just burns budget re-discovering). The render is
+  what closes the loop, so it is **tested at the boundary**: a test asserts the carried context surfaces
+  in the worker-visible brief, not just that the field is set.
 - **Enforcement** is the loop itself: it re-derives the open items and continues until the gate is green
   (`core/completion`'s exit gate). No Stop hook required. The **K=3** escalation cap escalates a stuck
   unit to a blocker rather than thrashing quota.
@@ -89,7 +95,11 @@ orchestration — no new Go, no daemon, no ooo bus, no comms tools.**
 In candyland the orchestrator is the long-lived conductor process; the tech-lead and coders are separate
 `claude -p` processes that cannot see each other, so coordination rides an **ooo bus** on the conductor
 (inboxes, an append-only graph-events log, orchestrator-only `graph/nodes/*`, a `WriteFilter` for
-seq+auth and an `AfterWriteFilter` to react), beside the existing stdout loop. **Realization B is built
+seq+auth and an `AfterWriteFilter` to react), beside the existing stdout loop. The same render-and-test
+discipline holds over the bus: carried context (answer / findings / feedback) MUST be rendered into the
+brief the coder process reads — a populated-but-unrendered field is invisible context the coder
+re-derives — and a regression test asserts it surfaces in the worker-visible brief at the transport
+boundary, not merely that the field is set. **Realization B is built
 in the candyland repo (its own PR), not here** — detritus ships the protocol + Realization A; candyland
 consumes the same contract.
 

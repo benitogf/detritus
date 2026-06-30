@@ -48,6 +48,14 @@ git, command output) — never from memory of the conversation:
 2. **The verification gate is green.** Build + tests + lint pass, *or there is a documented reason a
    check could not run* (silent skipping does not satisfy it). This extends `core/build`'s per-unit
    gate to the loop-exit gate.
+2a. **In-scope features are wired + reachable.** "Suite green + clean self-review" is satisfiable with
+   **dead-in-prod code** — a symbol/route/feature called only by its own test, or by nothing. So the gate
+   *additionally* requires that each in-scope feature has a production caller: proven by running the
+   assembled artifact or tracing from the entrypoint (`main`/router) into the change. **Unwired** code
+   (no production caller) is a **BLOCKER**, not a nit and not "verify later"; "needs live verification" /
+   "known non-blocker" may **not** cover it. Distinguish this from **wired-but-needs-a-browser** — a
+   feature that *is* reachable but whose final confirmation wants a live UI/session, which is legitimately
+   deferrable to `/verify`. The first is undelivered; the second is delivered-and-pending-confirmation.
 3. **The critic pass is clean.** A fresh-context self-review (`/gh-self-review`) returns no actionable
    in-scope finding; it re-runs until clean (maker ≠ checker — see M3/M4).
 4. **No new deferral markers.** The change introduces no unjustified `TODO`/`FIXME`/`XXX`/"future
@@ -86,7 +94,10 @@ fourth option — it is retired as a catch-all and resolves only to disposition 
 - Producing a "workplan" / "next steps" doc *in place of* doing the work.
 - Using "hazard" as a parking lot for handle-able in-scope work.
 - Shipping a placeholder / stub / "simplified for now" implementation of in-scope behavior — a stub is
-  deferral in disguise.
+  deferral in disguise. **Dead-in-prod code — wired only by its own test, or by nothing — is the same
+  failure** (an unwired stub), a BLOCKER, never satisfied by "suite green + clean self-review."
+- Reporting a no-op as a delivery: terminal `done`/"success" on a run/loop/quest/PR that delivered
+  nothing in-scope (see *Honest terminal state*).
 - Treating a co-required **cross-repo** change as a feature-split or blocker to exit one repo's PR
   sooner — it is in-scope (disposition 1), delivered as a PR per impacted repo (`core/build` →
   *Multi-repo delivery*).
@@ -106,6 +117,38 @@ another impacted repo still owes a PR.
 
 This same verified-green gate is the firewall for **learned memory**: only verified-green work distils a
 reusable, cross-project lesson (`core/memory` → *When to distil*); an unverified run distils nothing.
+
+## Honest terminal state
+
+Terminal `done` / "success" MUST reflect **actual in-scope delivery**. A run / loop / quest / PR that
+delivered **nothing** in-scope is a **distinct outcome, never `done`-as-success** — for example:
+
+- dead-in-prod code (passes condition 2, fails condition 2a — no production caller);
+- a report-only / zero-execution tick (work surfaced and triaged, none executed);
+- `prsOpened:0` while in-scope work is still open.
+
+Reporting surfaces — CLI, dashboard, status field — must **name it as such** so neither a human nor a
+downstream flow reads a no-op as a delivery: e.g. `surfaced-only`, or
+`done (report-only: N surfaced, 0 executed, 0 PRs)`.
+
+The discriminator across every carve-out below is the **delivery mode** (`run.deliver`, one of
+`pr|branch|feedback|review` — `core/build` → *Delivery modes*), **not** the PR count. The zero-delivery
+no-op detector flags only runs that delivered **nothing in-scope**; it must **never** flag a
+`branch`, `feedback`, or `review` run as a no-op failure.
+
+**Carve-out 1 — branch delivery is legitimate `done` with `prsOpened:0`.** A run/child delivering to a
+branch (`deliver=="branch"`) is *legitimately* `done` with no PR — its delivery **is** the branch commit,
+and the parent campaign opens the PR (`core/build` → *Multi-repo delivery*).
+
+**Carve-out 2 — feedback delivery is legitimate `done` with no NEW PR.** A `feedback` run
+(`deliver=="feedback"`) updated an **existing** PR in place — its delivery **is** the pushed fix on that
+PR's head branch (`core/build` → *Delivery modes*). The terminal reads e.g. `addressed N findings on
+PR #M` and links the **updated** PR — never "opened a PR", and never a duplicate PR.
+
+**Carve-out 3 — a review with no actionable findings is legitimate `done` with no PR by design.** A
+`review` run (`deliver=="review"`) that found nothing actionable completes with **no PR at all** — a
+valid "reviewed, nothing to do." The terminal reads e.g. `reviewed (no actionable findings)`. (Actionable
+findings instead become `feedback` work against the PR — carve-out 2.)
 
 ## The durable ledger (also the coordination substrate)
 

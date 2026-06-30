@@ -114,15 +114,21 @@ func main() {
 		case "--quest-run":
 			// detritus --quest-run <objective-file> [folder ...]
 			// Starts a standalone Candyland-native iterative quest (the /quest
-			// command). A standalone quest is conservative and opens its own
-			// PRs: default autonomy L1, deliver=pr.
+			// command). Both DELIVERY and autonomy are DERIVED from the objective
+			// by runQuestCmd (empty deliver + empty autonomy = derive). A new-work
+			// objective gets deliver=pr (opens its own PR, never merges) with
+			// autonomy from the verb intent. A "handle feedback on PR #N" objective
+			// gets deliver=feedback at L2 (updates PR #N in place, no new PR); a
+			// "review PR #N" objective gets deliver=review at L1 (reports only). The
+			// classification is conservative (see deriveQuestDelivery /
+			// deriveQuestAutonomy); the launch summary states the mode honestly.
 			if len(os.Args) < 3 {
 				fmt.Fprintln(os.Stderr, "usage: detritus --quest-run <objective-file> [folder ...]")
 				os.Exit(1)
 			}
 			self, _ := os.Executable()
 			cwd, _ := os.Getwd()
-			if err := runQuestCmd(self, os.Args[2], os.Args[3:], "L1", "pr", cwd); err != nil {
+			if err := runQuestCmd(self, os.Args[2], os.Args[3:], "", "", cwd); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
@@ -132,7 +138,10 @@ func main() {
 			// Starts a Candyland program-level campaign (the /campaign command)
 			// from a high-level goal, partial brief, or detailed plan. Campaigns
 			// are NEVER L1 — a report-only campaign would strand with no PR — so
-			// autonomy defaults to L2.
+			// autonomy is fixed at L2 (not derived). The DELIVERY mode, however,
+			// IS derived from the input (deriveQuestDelivery, reused from the quest
+			// path): a feedback/review-on-PR input updates/ reviews that PR,
+			// otherwise it opens a new PR (deliver:"pr", the default).
 			if len(os.Args) < 3 {
 				fmt.Fprintln(os.Stderr, "usage: detritus --campaign-run <input-file> [folder ...]")
 				os.Exit(1)

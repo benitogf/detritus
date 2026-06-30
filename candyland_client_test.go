@@ -118,7 +118,7 @@ func TestStartCandylandQuest(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id, err := startCandylandQuestAt(srv.URL, "ship the thing", []string{"/repo/a", "/repo/b"}, "L1", "pr")
+	id, err := startCandylandQuestAt(srv.URL, "ship the thing", []string{"/repo/a", "/repo/b"}, "L1", "pr", 0)
 	if err != nil {
 		t.Fatalf("startCandylandQuest: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestStartCandylandCampaign(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id, err := startCandylandCampaignAt(srv.URL, "ship the program", []string{"/repo/a", "/repo/b"}, "L2")
+	id, err := startCandylandCampaignAt(srv.URL, "ship the program", []string{"/repo/a", "/repo/b"}, "L2", "pr", 0)
 	if err != nil {
 		t.Fatalf("startCandylandCampaign: %v", err)
 	}
