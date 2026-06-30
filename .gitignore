@@ -1,6 +1,7 @@
 /detritus
 /ooo-kb
 /dist/
+/db/
 /generated/search.bleve/
 /.verdent/
 /.github/prompts/
