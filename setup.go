@@ -111,6 +111,7 @@ func setupWindsurf(home, binaryPath string, _ []docEntry, dryRun bool) {
 		return
 	}
 	upsertMCP(cfgFile, "mcpServers", binaryPath)
+	removeMCPServer(cfgFile, "mcpServers", "candyland")
 }
 
 // ---- VS Code ----------------------------------------------------------------
@@ -141,9 +142,11 @@ func setupVSCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 		}
 		if dryRun {
 			fmt.Printf("[dry-run] Would upsert detritus into %s/mcp.json (servers)\n", dir)
+			fmt.Printf("[dry-run] Would remove stale candyland MCP entry from %s/mcp.json\n", dir)
 			fmt.Printf("[dry-run] Would upsert VS Code settings in %s/settings.json\n", dir)
 		} else {
 			upsertMCP(filepath.Join(dir, "mcp.json"), "servers", binaryPath)
+			removeMCPServer(filepath.Join(dir, "mcp.json"), "servers", "candyland")
 			upsertVSCodeSettings(filepath.Join(dir, "settings.json"))
 			cleanOldUserPrompts(filepath.Join(dir, "prompts"))
 		}
@@ -333,8 +336,10 @@ func setupCursor(home, binaryPath string, dryRun bool) {
 		cfgFile := filepath.Join(dir, "mcp.json")
 		if dryRun {
 			fmt.Printf("[dry-run] Would upsert detritus into %s (mcpServers)\n", cfgFile)
+			fmt.Printf("[dry-run] Would remove stale candyland MCP entry from %s\n", cfgFile)
 		} else {
 			upsertMCP(cfgFile, "mcpServers", binaryPath)
+			removeMCPServer(cfgFile, "mcpServers", "candyland")
 			fmt.Printf("Cursor MCP config: %s\n", cfgFile)
 		}
 	}
@@ -346,11 +351,13 @@ func setupClaudeCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 	cfgFile := filepath.Join(home, ".claude.json")
 	if dryRun {
 		fmt.Printf("[dry-run] Would upsert detritus into %s (mcpServers)\n", cfgFile)
+		fmt.Printf("[dry-run] Would remove stale candyland MCP entry from %s\n", cfgFile)
 		fmt.Printf("[dry-run] Would write %d skill files to %s\n", len(docs), filepath.Join(home, ".claude", "skills"))
 		setupClaudeTodoGuard(home, binaryPath, hasTodoDoc(docs), true)
 		return
 	}
 	upsertMCP(cfgFile, "mcpServers", binaryPath)
+	removeMCPServer(cfgFile, "mcpServers", "candyland")
 	fmt.Printf("Claude Code MCP config: %s\n", cfgFile)
 
 	generateClaudeSkills(home, docs)
@@ -414,6 +421,7 @@ func setupCodex(home, binaryPath string, docs []docEntry, dryRun bool) {
 	configFile := filepath.Join(codexDir, "config.toml")
 	if dryRun {
 		fmt.Printf("[dry-run] Would upsert detritus into %s (mcp_servers)\n", configFile)
+		fmt.Printf("[dry-run] Would remove stale candyland MCP entry from %s\n", configFile)
 		fmt.Printf("[dry-run] Would write %d Codex skill files to %s\n", len(docs), skillsDir)
 		return
 	}
@@ -434,6 +442,13 @@ func upsertCodexMCPConfig(file, command string) {
 		"command = " + tomlString(command),
 		"args = []",
 	})
+
+	// Self-heal: drop any stale candyland MCP table. candyland no longer ships a
+	// control-mcp subcommand, so a registered entry boots its full app and fails
+	// the MCP handshake. Only strip if the file already exists (don't create it).
+	if fileExists(file) {
+		content = removeTOMLTable(content, "mcp_servers.candyland")
+	}
 
 	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create Codex config directory: %v\n", err)
@@ -471,6 +486,33 @@ func upsertTOMLTable(content, table string, body []string) string {
 		return block + "\n"
 	}
 	return content + "\n\n" + block + "\n"
+}
+
+// removeTOMLTable strips a full [table] block (its header plus all body lines up
+// to the next "[" header or EOF) from content, preserving every other table. It is
+// a no-op when the table isn't present.
+func removeTOMLTable(content, table string) string {
+	normalized := strings.ReplaceAll(content, "\r\n", "\n")
+	header := "[" + table + "]"
+	lines := strings.Split(normalized, "\n")
+	filtered := make([]string, 0, len(lines))
+	removed := false
+
+	for i := 0; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == header {
+			removed = true
+			for i+1 < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[i+1]), "[") {
+				i++
+			}
+			continue
+		}
+		filtered = append(filtered, lines[i])
+	}
+
+	if !removed {
+		return content
+	}
+	return strings.TrimRight(strings.Join(filtered, "\n"), "\n") + "\n"
 }
 
 func removeTOMLTableForms(lines []string, table string) ([]string, int) {
@@ -723,6 +765,7 @@ func setupVerdent(home, binaryPath string, docs []docEntry, dryRun bool) {
 
 	if dryRun {
 		fmt.Printf("[dry-run] Would upsert detritus into %s (mcpServers)\n", mcpFile)
+		fmt.Printf("[dry-run] Would remove stale candyland MCP entry from %s\n", mcpFile)
 		fmt.Printf("[dry-run] Would upsert DETRITUS-RULES block in %s\n", rulesFile)
 		fmt.Printf("[dry-run] Would write %d skill files to %s\n", len(docs), skillsDir)
 		return
@@ -735,6 +778,7 @@ func setupVerdent(home, binaryPath string, docs []docEntry, dryRun bool) {
 
 	// MCP config
 	upsertMCPJSON(mcpFile, "mcpServers", binaryPath)
+	removeMCPServer(mcpFile, "mcpServers", "candyland")
 
 	// VERDENT.md rules block
 	upsertVerdentRules(rulesFile, docs)

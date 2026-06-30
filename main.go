@@ -413,6 +413,41 @@ func upsertMCPServer(file, parentKey, name, command string, args []any) {
 	fmt.Printf("Updated %s in %s\n", name, file)
 }
 
+// removeMCPServer deletes a named stdio MCP server from file under parentKey,
+// preserving every other server. It is a no-op (and never creates the file) when
+// the file is missing/empty/unparseable, the parent key is absent, or the named
+// entry isn't present — so it never reformat-thrashes a config with nothing to remove.
+func removeMCPServer(file, parentKey, name string) {
+	raw, err := os.ReadFile(file)
+	if err != nil || len(raw) == 0 {
+		return
+	}
+	data := map[string]any{}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return
+	}
+	parent, ok := data[parentKey].(map[string]any)
+	if !ok {
+		return
+	}
+	if _, present := parent[name]; !present {
+		return
+	}
+	delete(parent, name)
+	data[parentKey] = parent
+
+	out, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to marshal JSON: %v\n", err)
+		os.Exit(1)
+	}
+	if err := os.WriteFile(file, append(out, '\n'), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to write %s: %v\n", file, err)
+		os.Exit(1)
+	}
+	fmt.Printf("Removed stale %s from %s\n", name, file)
+}
+
 // upsertVSCodeSettings reads a VS Code settings.json and sets the
 // chat.promptFilesLocations, chat.instructionsFilesLocations, and
 // chat.agentFilesLocations keys. Creates the file if it doesn't exist.
