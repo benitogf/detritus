@@ -32,6 +32,7 @@ A single unit of build work — one acceptance item, or one partitioned task —
 1. **Smallest in-spec delta.** Implement just the change the current item/task needs. No drive-by refactors, no scope the spec didn't name; out-of-scope needs are disposed of per `core/completion`'s dispositions (a genuinely separate feature is a feature-split, a hard blocker is surfaced), never folded in.
 2. **TDD where a defining test exists.** When the item is defined by a failing test (always true in the parallel loop — `roles/coder-test-engineer` writes it; usual in `/smith`), "done" means that test goes green.
 3. **Verification is a hard gate, per commit.** Run the canonical verification command. It must complete **green** on this unit. A unit that fails verification does **not** commit — log the failure evidence (failing test, assertion, first error) as the next attempt's context and retry against it. Partial or unrun verification does not count.
+3a. **Wired + reachable, not just green.** A green suite is satisfiable with **dead-in-prod code**, so a unit's in-scope feature is deliverable only when it has a production caller — confirmed by running the assembled artifact or tracing from the entrypoint into the change (`core/completion` → *Definition of done* 2a). Unwired code is a blocker, not a deliverable unit; "wired-but-needs-a-browser" is reachable and may defer final confirmation to `/verify`.
 4. **Commit on green.** When verification is green and the item/task is actually met, commit. Accumulate units on one feature branch; do not open intermediate PRs.
 
 ## Delivery — converge a clean self-review, then a PR per impacted repo
@@ -41,6 +42,8 @@ When all the work for the branch is green:
 1. **Loop `/gh-self-review` to a clean read.** Review the full branch diff. If it reports blockers **or forces any amendment** — blocker fix, non-blocker cleanup, anything — make the fix as more build units, then **re-review the updated diff**. Stop only when a no-blocker pass is observed against a diff that has not changed since that pass. Every amendment invalidates the prior read: a review of a diff that just changed has not reviewed what you're about to ship.
 2. **Push the branch.**
 3. **Open one PR per impacted repo via `gh-issue-work` Phase 9.** Do not reimplement `gh pr create`. If no issue is linked, seed one via `gh-issue-create` first. Entering at Phase 9 keeps PR shape, footer, and base-branch detection owned by the `/gh` flow, so tightening there propagates for free.
+
+What a branch / PR reports as **delivered** must be honest: a branch carrying only unwired (dead-in-prod) units, or a delivery step that opened no PR while in-scope work is still open, is **not** a delivery and is not reported as `done`-success — it carries the distinct terminal state `core/completion` → *Honest terminal state* defines. The one legitimate `prsOpened:0` is **branch delivery** (`deliver=="branch"`): the unit is committed onto the shared branch by design and the parent campaign opens the PR (see *Multi-repo delivery*).
 
 Merging, deploying, and any irreversible/external action stay outside the build contract — the human's call.
 
@@ -52,6 +55,17 @@ A single feature may legitimately span **N repos** (N ≥ 1, no cap) — e.g. a 
 - The cross-repo nature is **never** a reason to feature-split (disposition 2), defer, or surface as a blocker (disposition 3). A change co-required in another repo is part of *this* feature, not a separate one.
 - **Partial failure is honest, not contagious.** If one repo's PR can't open (missing remote, auth), report that repo precisely and still open every PR that can — one repo's delivery failure does not fail the others.
 - The feature is **done** only when every impacted repo's PR is open (or its specific failure is surfaced) — not when the first repo's PR opens.
+
+## Delivery modes — how a run hands off its work
+
+A run carries a **delivery mode** (`run.deliver`) that decides where its work lands. There are four first-class modes; the mode — not the PR count — is what tells an honest terminal state from a no-op (`core/completion` → *Honest terminal state*):
+
+- **`pr`** — new work. Branch fresh, commit the units, open a **NEW PR per impacted repo** via `gh-issue-work` Phase 9 (the *Delivery* and *Multi-repo delivery* sections above). The default for feature-shaped work.
+- **`branch`** — a campaign child commits its units onto the shared campaign branch and opens **no PR by design**; the parent campaign opens the PR. The one legitimate `prsOpened:0` for executing work (see *Multi-repo delivery*).
+- **`feedback`** — handling review feedback/findings on an **EXISTING PR**. Deliver onto **that PR's head branch**: check it out, commit the fix, push → the PR updates **in place**. **Never open a duplicate PR.** Multi-repo: each affected repo's findings land on **that repo's existing PR** — no new PRs in any repo. Mirrors `/gh-feedback-work` (push fixes, update in place, never comment, never open a new PR).
+- **`review`** — produce **findings, not code**. The outcome may be **no PR at all** (e.g. "check PR #N against a requirements doc" with nothing actionable) — a valid "reviewed, nothing to do." Findings that *are* actionable are then handled per `feedback` mode against the PR in question.
+
+The terminal states these modes earn — `feedback` updating an existing PR, `review` ending with no PR — are valid `done`, not no-ops; `core/completion` → *Honest terminal state* defines each.
 
 ## What this is not
 

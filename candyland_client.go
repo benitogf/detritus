@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -73,24 +74,257 @@ func readQuestRunArgs(objectiveFile string, folders []string, cwd string) (objec
 	return string(raw), folders, nil
 }
 
+// questExecuteVerbs are the execute-shaped intent markers that flip a quest from
+// report-only (L1) to executing (L2). Kept conservative: only verbs that clearly
+// ask for a code change. Matched case-insensitively as whole words anywhere in
+// the objective. Add to this list deliberately — a false positive launches runs.
+var questExecuteVerbs = []string{
+	"solve", "fix", "wire", "implement", "build", "add", "refactor",
+	"update pr", "update the pr", "rework", "patch", "migrate", "rewrite",
+}
+
+// deriveQuestAutonomy classifies an objective's intent into an autonomy level.
+// Execute-shaped objectives (asking for a code change) get the executing level
+// "L2" so candyland launches runs, while deliver:"pr" keeps the PR gate as the
+// safety rail. Anything else stays report-only "L1". Pure: string in → level
+// out, so it is deterministic and separately testable. Detection is intentionally
+// conservative — see questExecuteVerbs.
+func deriveQuestAutonomy(objective string) string {
+	lower := strings.ToLower(objective)
+	for _, verb := range questExecuteVerbs {
+		if containsWord(lower, verb) {
+			return "L2"
+		}
+	}
+	return "L1"
+}
+
+// questFeedbackMarkers are the FEEDBACK/FIX-on-an-existing-PR intent markers.
+// Their presence (alongside a parsed PR number) selects deliver:"feedback" —
+// update the referenced PR in place, never open a new one. Matched
+// case-insensitively as substrings (phrases, so word-boundary matching is not
+// used). Kept conservative — see deriveQuestDelivery.
+var questFeedbackMarkers = []string{
+	"address feedback", "address the feedback", "address review",
+	"fix the review", "fix review", "review comments", "review feedback",
+	"update pr", "update the pr", "apply feedback", "apply the feedback",
+	"resolve feedback", "resolve the comments", "feedback on pr", "feedback on #",
+}
+
+// questReviewMarkers are the REVIEW/CHECK-only intent markers. Their presence
+// (alongside a parsed PR number, and absent any feedback marker) selects
+// deliver:"review" — read the PR and report, opening nothing. Matched
+// case-insensitively as substrings.
+var questReviewMarkers = []string{
+	"review pr", "review the pr", "check pr", "check the pr",
+	"review #", "check #", "look at pr", "audit pr",
+}
+
+// deriveQuestDelivery classifies an objective into a delivery mode and target
+// PR, mirroring /gh-feedback-work's "update the existing PR in place, never open
+// a new PR" model. It is pure: string in → (mode, prNumber) out, so it is
+// deterministic and separately testable. Detection is intentionally conservative
+// — markers are explicit phrases (questFeedbackMarkers / questReviewMarkers) and
+// a PR number must parse, or it falls back to the new-work default.
+//
+//   - FEEDBACK/FIX intent + a PR number → ("feedback", N): update PR #N in place.
+//   - REVIEW/CHECK-only intent + a PR number → ("review", N): report on PR #N.
+//   - anything else → ("pr", 0): new work, new PR (today's default).
+//
+// Feedback wins over review when both kinds of marker appear, since a fix intent
+// is the stronger signal (it changes code). A mode that needs a PR number but
+// finds none degrades to ("pr", 0) rather than guessing a target.
+func deriveQuestDelivery(objective string) (deliver string, targetPR int) {
+	lower := strings.ToLower(objective)
+	pr := parsePRNumber(lower)
+	if pr == 0 {
+		return "pr", 0
+	}
+	for _, marker := range questFeedbackMarkers {
+		if strings.Contains(lower, marker) {
+			return "feedback", pr
+		}
+	}
+	for _, marker := range questReviewMarkers {
+		if strings.Contains(lower, marker) {
+			return "review", pr
+		}
+	}
+	return "pr", 0
+}
+
+// parsePRNumber extracts a PR number from "#N" or "pr N" / "pr#N" markers in the
+// (already-lowercased) string, returning the first one found or 0 when none
+// parses. Conservative: only these two explicit forms count, so a bare number in
+// prose is not mistaken for a PR reference.
+func parsePRNumber(lower string) int {
+	if n := numberAfter(lower, "#"); n > 0 {
+		return n
+	}
+	if n := numberAfter(lower, "pr "); n > 0 {
+		return n
+	}
+	if n := numberAfter(lower, "pr#"); n > 0 {
+		return n
+	}
+	return 0
+}
+
+// numberAfter scans s for marker and returns the run of ASCII digits immediately
+// following the first occurrence whose digits are non-empty, or 0 when none is
+// found. It skips occurrences not followed by a digit (so "pr review" does not
+// match "pr ").
+func numberAfter(s, marker string) int {
+	from := 0
+	for {
+		idx := strings.Index(s[from:], marker)
+		if idx < 0 {
+			return 0
+		}
+		start := from + idx + len(marker)
+		end := start
+		for end < len(s) && s[end] >= '0' && s[end] <= '9' {
+			end++
+		}
+		if end > start {
+			n := 0
+			for _, c := range s[start:end] {
+				n = n*10 + int(c-'0')
+			}
+			return n
+		}
+		from = from + idx + 1
+	}
+}
+
+// containsWord reports whether word appears in s bounded by non-letter
+// characters (or string edges), so "fix" matches "fix the bug" and "go and fix"
+// but not "prefix" or "fixture". word is expected to be lowercase; s is matched
+// case-insensitively by the caller lowercasing it first.
+func containsWord(s, word string) bool {
+	from := 0
+	for {
+		idx := strings.Index(s[from:], word)
+		if idx < 0 {
+			return false
+		}
+		start := from + idx
+		end := start + len(word)
+		if !isLetter(byteAt(s, start-1)) && !isLetter(byteAt(s, end)) {
+			return true
+		}
+		from = start + 1
+	}
+}
+
+// byteAt returns s[i] or 0 when i is out of range, so edge checks need no bounds
+// guard at the call site.
+func byteAt(s string, i int) byte {
+	if i < 0 || i >= len(s) {
+		return 0
+	}
+	return s[i]
+}
+
+// isLetter reports whether b is an ASCII letter — the word-boundary test.
+func isLetter(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
+// questAutonomyEffect returns a one-line "what this will / won't do" description
+// derived from the autonomy level — so the launch output tells the user what the
+// quest is actually permitted to do.
+func questAutonomyEffect(autonomy string) string {
+	switch autonomy {
+	case "L2":
+		return "launches runs and opens a PR per change for your review — never merges"
+	default:
+		return "surfaces findings only — no code changes, no PRs"
+	}
+}
+
+// questDeliveryEffect returns a one-line honest description of what the deliver
+// mode will produce, so the launch output never overstates the outcome.
+// feedback updates the referenced PR in place (no new PR); review reports on it
+// (may produce no PR); pr opens a new PR for review. None of the modes ever
+// merge — that safety rail is stated in every line.
+func questDeliveryEffect(deliver string, targetPR int) string {
+	switch deliver {
+	case "feedback":
+		return fmt.Sprintf("updates existing PR #%d in place — no new PR, never merges", targetPR)
+	case "review":
+		return fmt.Sprintf("reviews PR #%d — may produce no PR, never merges", targetPR)
+	default:
+		return "opens a PR, never merges"
+	}
+}
+
+// questLaunchSummary renders the enriched launch output for a started quest: the
+// quest id, autonomy level, deliver mode, a what-will/won't-do line, and the API
+// + UI ports with a remote/WSL port-forwarding hint. When the effective autonomy
+// is L1 (report-only) for an execute-shaped objective it leads with a LOUD
+// warning, since the user asked for a change but the quest will only report.
+//
+// autonomy is supplied by the caller independently of objective; this guard fires
+// whenever the two contradict. The --quest-run path derives autonomy from this
+// same objective (deriveQuestAutonomy), so it cannot trip the warning — that is
+// the point: derivation keeps them aligned. The guard is defense-in-depth for any
+// other caller that sets autonomy by different means (e.g. an explicit operator
+// override), honoring the doctrinal "say so loudly before quest started" rule.
+//
+// deliver/targetPR state the delivery mode honestly (questDeliveryEffect):
+// feedback updates PR #N in place, review reports on PR #N, pr opens a new PR.
+func questLaunchSummary(id, autonomy, deliver string, targetPR int, objective string) string {
+	var b strings.Builder
+	if autonomy == "L1" && deriveQuestAutonomy(objective) == "L2" && deliver != "review" {
+		fmt.Fprintf(&b, "WARNING: objective looks execute-shaped but autonomy is L1 (report-only) — no code changes or PRs will be made\n")
+	}
+	fmt.Fprintf(&b, "candyland quest started: %s\n", id)
+	fmt.Fprintf(&b, "Autonomy: %s — %s\n", autonomy, questAutonomyEffect(autonomy))
+	fmt.Fprintf(&b, "Deliver: %s (%s)\n", deliver, questDeliveryEffect(deliver, targetPR))
+	fmt.Fprintf(&b, "API: %s\n", candylandBaseURL)
+	fmt.Fprintf(&b, "UI / Dashboard: %s\n", candylandDashboardURL)
+	fmt.Fprintf(&b, "Remote/WSL: forward BOTH ports — the UI on :8080 stays empty until the API on :8888 is reachable\n")
+	return b.String()
+}
+
 // runQuestCmd is the `detritus --quest-run <objective-file> [folder ...]`
 // handler: read the objective, ensure the sidecar is up, start the quest, and
-// print the quest id + dashboard URL. Mirrors runCandyland. ensureCandylandUp
-// failures are returned so the caller exits non-zero.
+// print the enriched launch summary. Mirrors runCandyland. ensureCandylandUp
+// failures are returned so the caller exits non-zero. An empty autonomy means
+// "derive from the objective" (the --quest-run default); a non-empty autonomy is
+// an explicit override the launch summary still validates against the objective.
 func runQuestCmd(detritusPath, objectiveFile string, folders []string, autonomy, deliver, cwd string) error {
 	objective, folders, err := readQuestRunArgs(objectiveFile, folders, cwd)
 	if err != nil {
 		return err
 	}
+	// Derive BOTH delivery mode and autonomy from the objective, keeping them
+	// consistent: a feedback intent changes code, so it must run executing (L2);
+	// a review intent is report-only (L1). A non-PR objective keeps deliver:"pr"
+	// with autonomy derived from the verb intent — today's default.
+	deliveryMode, targetPR := deriveQuestDelivery(objective)
+	if deliver == "" {
+		deliver = deliveryMode
+	}
+	if autonomy == "" {
+		switch deliver {
+		case "feedback":
+			autonomy = "L2"
+		case "review":
+			autonomy = "L1"
+		default:
+			autonomy = deriveQuestAutonomy(objective)
+		}
+	}
 	if err := ensureCandylandUp(detritusPath); err != nil {
 		return err
 	}
-	id, err := startCandylandQuest(objective, folders, autonomy, deliver)
+	id, err := startCandylandQuest(objective, folders, autonomy, deliver, targetPR)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("candyland quest started: %s\n", id)
-	fmt.Printf("Dashboard: %s\n", candylandDashboardURL)
+	fmt.Print(questLaunchSummary(id, autonomy, deliver, targetPR, objective))
 	return nil
 }
 
@@ -111,23 +345,43 @@ func readCampaignRunArgs(inputFile string, folders []string, cwd string) (input 
 
 // runCampaignCmd is the `detritus --campaign-run <input-file> [folder ...]`
 // handler: read the campaign input, ensure the sidecar is up, start the
-// campaign, and print the campaign id + dashboard URL. Mirrors runQuestCmd.
+// campaign, and print the launch summary. Mirrors runQuestCmd.
 // ensureCandylandUp failures are returned so the caller exits non-zero.
+//
+// Delivery mode is DERIVED from the input (deriveQuestDelivery, reused from the
+// quest path): a feedback/review-on-PR input carries deliver:"feedback"/"review"
+// with the target PR, otherwise deliver:"pr" (new work — the default). Autonomy
+// is NOT derived for campaigns: it stays the caller-supplied "L2" (campaign rule
+// — campaigns are never L1, since a report-only campaign would strand with no PR).
 func runCampaignCmd(detritusPath, inputFile string, folders []string, autonomy, cwd string) error {
 	input, folders, err := readCampaignRunArgs(inputFile, folders, cwd)
 	if err != nil {
 		return err
 	}
+	deliver, targetPR := deriveQuestDelivery(input)
 	if err := ensureCandylandUp(detritusPath); err != nil {
 		return err
 	}
-	id, err := startCandylandCampaign(input, folders, autonomy)
+	id, err := startCandylandCampaign(input, folders, autonomy, deliver, targetPR)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("candyland campaign started: %s\n", id)
-	fmt.Printf("Dashboard: %s\n", candylandDashboardURL)
+	fmt.Print(campaignLaunchSummary(id, autonomy, deliver, targetPR))
 	return nil
+}
+
+// campaignLaunchSummary renders the launch output for a started campaign: the
+// campaign id, autonomy level (fixed L2 for campaigns — not derived), the derived
+// delivery mode with an honest what-it-produces line (questDeliveryEffect, reused),
+// and the dashboard URL. Mirrors questLaunchSummary's mode line so feedback/review/pr
+// read the same across both flows.
+func campaignLaunchSummary(id, autonomy, deliver string, targetPR int) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "candyland campaign started: %s\n", id)
+	fmt.Fprintf(&b, "Autonomy: %s — %s\n", autonomy, questAutonomyEffect(autonomy))
+	fmt.Fprintf(&b, "Deliver: %s (%s)\n", deliver, questDeliveryEffect(deliver, targetPR))
+	fmt.Fprintf(&b, "Dashboard: %s\n", candylandDashboardURL)
+	return b.String()
 }
 
 // ensureCandylandUp returns nil once the candyland sidecar answers its health
@@ -250,22 +504,26 @@ type candylandQuestRequest struct {
 	Folders       []string `json:"folders"`
 	AutonomyLevel string   `json:"autonomyLevel"`
 	Deliver       string   `json:"deliver"`
+	TargetPR      int      `json:"targetPr"`
 }
 
 // startCandylandQuest creates a quest (POST /api/quests) and begins it (POST
 // /api/quests/{id}/begin), returning the quest id. The sidecar must already be
 // up; callers run ensureCandylandUp first. Mirrors startCandylandRun.
-func startCandylandQuest(objective string, folders []string, autonomy, deliver string) (string, error) {
-	return startCandylandQuestAt(candylandBaseURL, objective, folders, autonomy, deliver)
+// deliver/targetPR are the shared wire contract with the candyland receiver:
+// "feedback"|"review" carry targetPR, "pr" carries 0.
+func startCandylandQuest(objective string, folders []string, autonomy, deliver string, targetPR int) (string, error) {
+	return startCandylandQuestAt(candylandBaseURL, objective, folders, autonomy, deliver, targetPR)
 }
 
 // startCandylandQuestAt is startCandylandQuest against an explicit base URL (test seam).
-func startCandylandQuestAt(baseURL, objective string, folders []string, autonomy, deliver string) (string, error) {
+func startCandylandQuestAt(baseURL, objective string, folders []string, autonomy, deliver string, targetPR int) (string, error) {
 	body, err := json.Marshal(candylandQuestRequest{
 		Objective:     objective,
 		Folders:       folders,
 		AutonomyLevel: autonomy,
 		Deliver:       deliver,
+		TargetPR:      targetPR,
 	})
 	if err != nil {
 		return "", err
@@ -304,25 +562,34 @@ func startCandylandQuestAt(baseURL, objective string, folders []string, autonomy
 // candylandCampaignRequest is the body POSTed to /api/campaigns. candyland owns
 // the full CampaignSpec; detritus only sets the fields the /campaign command
 // settles. tokenBudget is left to candyland's default and not set here.
+// deliver/targetPr share the exact wire contract with candylandQuestRequest: the
+// campaign launcher derives them from the input (deriveQuestDelivery) and
+// candyland propagates them to the affected child quests/runs.
 type candylandCampaignRequest struct {
 	Input         string   `json:"input"`
 	Folders       []string `json:"folders"`
 	AutonomyLevel string   `json:"autonomyLevel"`
+	Deliver       string   `json:"deliver"`
+	TargetPR      int      `json:"targetPr"`
 }
 
 // startCandylandCampaign creates a campaign (POST /api/campaigns) and begins it
 // (POST /api/campaigns/{id}/begin), returning the campaign id. The sidecar must
 // already be up; callers run ensureCandylandUp first. Mirrors startCandylandQuest.
-func startCandylandCampaign(input string, folders []string, autonomy string) (string, error) {
-	return startCandylandCampaignAt(candylandBaseURL, input, folders, autonomy)
+// deliver/targetPR carry the input's delivery intent; candyland propagates them
+// to the child quests/runs the campaign decomposes into.
+func startCandylandCampaign(input string, folders []string, autonomy, deliver string, targetPR int) (string, error) {
+	return startCandylandCampaignAt(candylandBaseURL, input, folders, autonomy, deliver, targetPR)
 }
 
 // startCandylandCampaignAt is startCandylandCampaign against an explicit base URL (test seam).
-func startCandylandCampaignAt(baseURL, input string, folders []string, autonomy string) (string, error) {
+func startCandylandCampaignAt(baseURL, input string, folders []string, autonomy, deliver string, targetPR int) (string, error) {
 	body, err := json.Marshal(candylandCampaignRequest{
 		Input:         input,
 		Folders:       folders,
 		AutonomyLevel: autonomy,
+		Deliver:       deliver,
+		TargetPR:      targetPR,
 	})
 	if err != nil {
 		return "", err

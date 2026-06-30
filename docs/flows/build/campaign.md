@@ -46,8 +46,18 @@ Refine the user's request into the campaign input written to the input file pass
 ## Steps
 
 1. **Settle the campaign input** (the goal/brief/plan and the scope folders) per the section above, and write the input to an input file.
-2. **Ensure candyland is up, then start the campaign over REST.** Run `detritus --campaign-run <input-file> [folder ...]` (folders default to the cwd). detritus health-checks the sidecar, starts it if down, then `POST`s `/api/campaigns` with `{input, folders, autonomyLevel}`, reads back the campaign id, and `POST`s `/api/campaigns/{id}/begin` to start it. A campaign launches at `autonomyLevel: L2` — campaigns are **never L1**, because a report-only campaign would strand with no PR.
+2. **Ensure candyland is up, then start the campaign over REST.** Run `detritus --campaign-run <input-file> [folder ...]` (folders default to the cwd). detritus health-checks the sidecar, starts it if down, then `POST`s `/api/campaigns` with `{input, folders, autonomyLevel, deliver, targetPr}`, reads back the campaign id, and `POST`s `/api/campaigns/{id}/begin` to start it. A campaign launches at `autonomyLevel: L2` — campaigns are **never L1**, because a report-only campaign would strand with no PR. The `deliver`/`targetPr` fields carry the input's derived delivery intent (see *Delivery mode matches the input's intent* below).
 3. **Hand off to the dashboard.** Report the campaign id and the dashboard URL — that is where the Intent Brief, the child quest/run graph, the per-task review, and the per-repo deliveries show, and where the campaign is stopped. A campaign opens **one PR per impacted repo**; a single repo's delivery failure is surfaced without failing the others.
+
+## Delivery mode matches the input's intent
+
+A campaign launches at `L2`, but its **delivery mode** still tracks what the input asks for, and that mode propagates to the child quests/runs it decomposes into (`core/build` → *Delivery modes*: `pr|branch|feedback|review`):
+
+- An **"address feedback on PR #N"** input → the affected child run carries `deliver: feedback` with the **target PR(s)**: it updates **that existing PR in place** and **never opens a new PR** (mirroring `/gh-feedback-work`). Multi-repo feedback lands each repo's fix on that repo's existing PR.
+- A **"review PR #N"** input → `deliver: review`: the review may end with **no PR** when nothing is actionable, and any actionable finding becomes `feedback` work on the PR in question. A no-PR `review` terminal is valid `done`, not a no-op (`core/completion` → *Honest terminal state*, carve-out 3).
+- A plain new-program goal → `deliver: pr` (the default — one new PR per impacted repo, per the step above).
+
+The `--campaign-run` launcher **derives** the delivery mode from the campaign input — reusing the same derivation the quest launcher uses (`deriveQuestDelivery`): a feedback/review **verb** plus a parsed **PR reference** (`#N`) selects `feedback`/`review` carrying that target PR, and anything else falls back to `deliver: pr` (new work). It then sends `deliver`/`targetPr` on the `POST /api/campaigns` body, and candyland propagates them to the affected child quests/runs. Note this is **not** how autonomy is set: campaign autonomy is **fixed at `L2`** (never derived, never `L1`), whereas the delivery mode is derived per the input's verb + PR reference. The launcher **never** opens a duplicate PR for a feedback/review input, and never silently defaults a feedback/review input to `pr`.
 
 ## Control (stop only)
 
