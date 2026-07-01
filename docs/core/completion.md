@@ -98,6 +98,11 @@ fourth option — it is retired as a catch-all and resolves only to disposition 
   failure** (an unwired stub), a BLOCKER, never satisfied by "suite green + clean self-review."
 - Reporting a no-op as a delivery: terminal `done`/"success" on a run/loop/quest/PR that delivered
   nothing in-scope (see *Honest terminal state*).
+- Asserting a config-derived terminal the work was never observed to earn — e.g. `reviewed` on a
+  `deliver=="review"` run that never examined its target PR (see *Honest terminal state*, carve-out 3).
+- Parking an orchestrator in terminal `blocked` on the **first** failing review/verdict while the gap
+  is still finishable within the remediation budget — deferral at the supervisor level (see *The exit
+  gate*).
 - Treating a co-required **cross-repo** change as a feature-split or blocker to exit one repo's PR
   sooner — it is in-scope (disposition 1), delivered as a PR per impacted repo (`core/build` →
   *Multi-repo delivery*).
@@ -108,6 +113,16 @@ A loop / PR MAY complete only when conditions (1)–(4) of *Definition of done* 
 the loop **continues** — next tick, next critic pass — feeding the gap back as the next iteration's
 work. It does not exit, does not hand back as "done", and does not convert remaining in-scope work into
 a deferral.
+
+**`blocked` is earned by bounded remediation, not declared on first failure.** When a verification /
+review / verdict step reports an unmet acceptance criterion or commitment, the orchestrator must feed
+that gap back as new work — spawn a unit targeting **exactly the unmet item** (carrying the reviewer's
+evidence) and re-verify — bounded by a remediation budget (the K-attempt circuit breaker in M6). Only a
+gap that survives the budget is a disposition-3 hard blocker. Parking in terminal `blocked` on the
+**first** failing review while the gap is still finishable is the silent-deferral failure at the
+**orchestrator / supervisor level**, forbidden exactly as it is at the single-unit level. This binds a
+program-level supervisor reviewing per-commitment verdicts (e.g. a campaign's intent review) as much as
+a per-task coder loop — an orchestrator never parks with finishable in-scope work undone.
 
 The only legitimate hand-backs are three: **milestone / PR-open**, a **hard blocker** (disposition 3),
 or an **explicit user halt**. Anywhere else, the loop owes a next step (see `core/loop` →
@@ -149,6 +164,14 @@ PR #M` and links the **updated** PR — never "opened a PR", and never a duplica
 `review` run (`deliver=="review"`) that found nothing actionable completes with **no PR at all** — a
 valid "reviewed, nothing to do." The terminal reads e.g. `reviewed (no actionable findings)`. (Actionable
 findings instead become `feedback` work against the PR — carve-out 2.)
+
+This carve-out is **earned by observed work, never asserted from the delivery mode alone.** A terminal
+is legitimate only when the work it names was *observed to happen* — never inferred from `deliver`. A
+`review`/`feedback` run must have **actually examined its subject** (read the target PR's diff/comments)
+before it may report "nothing actionable"; one that terminates without examining its target reviewed
+nothing — a zero-delivery no-op (flag it as such, and **name the target** it did/didn't review), not a
+valid "reviewed." The failure to prevent: a loop that reports `reviewed` on a PR it never opened because
+the terminal keyed on configuration (`deliver=="review"`) instead of on evidence a review occurred.
 
 ## The durable ledger (also the coordination substrate)
 
