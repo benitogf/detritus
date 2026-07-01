@@ -99,6 +99,25 @@ func deriveQuestAutonomy(objective string) string {
 	return "L1"
 }
 
+// resolveQuestAutonomy is the effective autonomy for a launch given the derived
+// delivery mode AND the objective. It is pure (mode + objective in → level out) so
+// it is separately testable, and it keeps autonomy anchored to the OBJECTIVE'S VERB,
+// never hardcoded by delivery mode:
+//
+//   - feedback → L2: a feedback intent always changes code (updates a PR in place).
+//   - review / pr → derived from the verb (deriveQuestAutonomy): a PURE review
+//     ("review PR #N", "check PR #N against the spec") has no execute verb and stays
+//     report-only (L1), but a review objective that ALSO asks to act ("fix any
+//     problems on PR #N, then review the PR") carries an execute verb and runs
+//     executing (L2). Forcing review→L1 unconditionally is the bug that stranded a
+//     "fix problems on PR" quest at report-only just because it said "review the PR".
+func resolveQuestAutonomy(deliver, objective string) string {
+	if deliver == "feedback" {
+		return "L2"
+	}
+	return deriveQuestAutonomy(objective)
+}
+
 // questFeedbackMarkers are the FEEDBACK/FIX-on-an-existing-PR intent markers.
 // Their presence (alongside a parsed PR number) selects deliver:"feedback" —
 // update the referenced PR in place, never open a new one. Matched
@@ -266,17 +285,20 @@ func questDeliveryEffect(deliver string, targetPR int) string {
 // warning, since the user asked for a change but the quest will only report.
 //
 // autonomy is supplied by the caller independently of objective; this guard fires
-// whenever the two contradict. The --quest-run path derives autonomy from this
-// same objective (deriveQuestAutonomy), so it cannot trip the warning — that is
-// the point: derivation keeps them aligned. The guard is defense-in-depth for any
-// other caller that sets autonomy by different means (e.g. an explicit operator
-// override), honoring the doctrinal "say so loudly before quest started" rule.
+// whenever the two contradict — an L1 (report-only) autonomy against an
+// execute-shaped objective (an execute verb present). The --quest-run path derives
+// autonomy from this same objective (resolveQuestAutonomy), so an aligned launch
+// cannot trip it; the guard is defense-in-depth for any caller that sets autonomy by
+// other means (e.g. an explicit operator override), honoring the doctrinal "say so
+// loudly before quest started" rule. It is NOT suppressed for review delivery: a
+// review objective that asks to fix (an execute verb) forced to L1 is exactly the
+// mismatch worth warning about.
 //
 // deliver/targetPR state the delivery mode honestly (questDeliveryEffect):
 // feedback updates PR #N in place, review reports on PR #N, pr opens a new PR.
 func questLaunchSummary(id, autonomy, deliver string, targetPR int, objective string) string {
 	var b strings.Builder
-	if autonomy == "L1" && deriveQuestAutonomy(objective) == "L2" && deliver != "review" {
+	if autonomy == "L1" && deriveQuestAutonomy(objective) == "L2" {
 		fmt.Fprintf(&b, "WARNING: objective looks execute-shaped but autonomy is L1 (report-only) — no code changes or PRs will be made\n")
 	}
 	fmt.Fprintf(&b, "candyland quest started: %s\n", id)
@@ -299,23 +321,17 @@ func runQuestCmd(detritusPath, objectiveFile string, folders []string, autonomy,
 	if err != nil {
 		return err
 	}
-	// Derive BOTH delivery mode and autonomy from the objective, keeping them
-	// consistent: a feedback intent changes code, so it must run executing (L2);
-	// a review intent is report-only (L1). A non-PR objective keeps deliver:"pr"
-	// with autonomy derived from the verb intent — today's default.
+	// Derive BOTH delivery mode and autonomy from the objective. Autonomy stays
+	// anchored to the objective's VERB (resolveQuestAutonomy): feedback always runs
+	// executing (L2), while review/pr honor the verb — a pure review stays report-only
+	// (L1) but a review objective that also asks to fix carries an execute verb and
+	// runs executing. Delivery mode never dictates report-only on its own.
 	deliveryMode, targetPR := deriveQuestDelivery(objective)
 	if deliver == "" {
 		deliver = deliveryMode
 	}
 	if autonomy == "" {
-		switch deliver {
-		case "feedback":
-			autonomy = "L2"
-		case "review":
-			autonomy = "L1"
-		default:
-			autonomy = deriveQuestAutonomy(objective)
-		}
+		autonomy = resolveQuestAutonomy(deliver, objective)
 	}
 	if err := ensureCandylandUp(detritusPath); err != nil {
 		return err

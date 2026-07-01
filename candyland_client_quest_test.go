@@ -43,6 +43,34 @@ func TestDeriveQuestAutonomy(t *testing.T) {
 	}
 }
 
+// TestResolveQuestAutonomy verifies autonomy stays anchored to the objective's verb
+// and is never hardcoded by delivery mode. The regression it guards: a "fix problems
+// on PR #N" objective classified as review (because it says "review the PR") must NOT
+// be forced report-only — the execute verb wins (L2). A pure review stays L1.
+func TestResolveQuestAutonomy(t *testing.T) {
+	cases := []struct {
+		name      string
+		deliver   string
+		objective string
+		want      string
+	}{
+		{"feedback always executes", "feedback", "Address feedback on PR #12", "L2"},
+		{"pure review stays report-only", "review", "Review PR #12 for correctness", "L1"},
+		{"check-against-spec review stays L1", "review", "Check PR #88 against the requirements", "L1"},
+		{"fix-verb review runs executing", "review", "Fix any problems on PR #712, then review the PR", "L2"},
+		{"solve-verb review runs executing", "review", "Review PR #5 and solve the race it introduces", "L2"},
+		{"pr new work honors verb", "pr", "Fix the broken login handler", "L2"},
+		{"pr report objective stays L1", "pr", "Report on the coverage gaps", "L1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resolveQuestAutonomy(tc.deliver, tc.objective); got != tc.want {
+				t.Fatalf("resolveQuestAutonomy(%q, %q) = %q, want %q", tc.deliver, tc.objective, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestQuestLaunchSummary verifies the enriched launch output: it names the
 // autonomy and deliver mode, a what-will/won't-do line, and both the API and UI
 // ports with a port-forwarding hint. For an L1 autonomy against an
@@ -128,10 +156,16 @@ func TestQuestLaunchSummaryDeliveryModes(t *testing.T) {
 			t.Fatalf("review summary missing %q in:\n%s", want, rv)
 		}
 	}
-	// A review delivery is legitimately L1, so it must NOT warn even though the
-	// objective contains the execute-shaped "review" marker family.
+	// A PURE review at L1 (no execute verb) is legitimate, so it must NOT warn.
 	if strings.Contains(strings.ToLower(rv), "warning") {
-		t.Fatalf("review delivery at L1 should not warn:\n%s", rv)
+		t.Fatalf("pure review at L1 should not warn:\n%s", rv)
+	}
+
+	// But a review delivery whose objective ALSO asks to fix (an execute verb) forced
+	// to L1 IS a misclassification — the warning must fire even for review delivery.
+	rvExec := questLaunchSummary("q-3", "L1", "review", 712, "Fix any problems on PR #712, then review the PR")
+	if !strings.Contains(strings.ToLower(rvExec), "warning") {
+		t.Fatalf("an execute-shaped review objective forced to L1 must warn:\n%s", rvExec)
 	}
 }
 
