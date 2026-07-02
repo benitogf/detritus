@@ -12,6 +12,49 @@ import (
 	"time"
 )
 
+// resolveCandylandDelivery is the two-tier feedback classifier: an explicit PR
+// marker in the plan text wins (and may select feedback OR review); absent a
+// marker, an open PR on the current branch selects feedback; otherwise new work.
+func TestResolveCandylandDelivery(t *testing.T) {
+	orig := branchPRLookup
+	defer func() { branchPRLookup = orig }()
+
+	cases := []struct {
+		name       string
+		prompt     string
+		branchPR   int
+		wantDelivr string
+		wantPR     int
+	}{
+		{"text feedback marker wins over branch", "address feedback on PR #7", 99, "feedback", 7},
+		{"text review marker wins over branch", "review PR #8", 99, "review", 8},
+		{"no marker + open branch PR → feedback", "build a new thing", 42, "feedback", 42},
+		{"no marker + no branch PR → new work", "build a new thing", 0, "pr", 0},
+		{"review-style prose without a PR number falls back to branch", "please review this", 42, "feedback", 42},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			branchPRLookup = func(string) int { return tc.branchPR }
+			deliver, pr := resolveCandylandDelivery(tc.prompt, "/repo")
+			if deliver != tc.wantDelivr || pr != tc.wantPR {
+				t.Errorf("resolveCandylandDelivery = %q/%d, want %q/%d", deliver, pr, tc.wantDelivr, tc.wantPR)
+			}
+		})
+	}
+}
+
+// parseGHPRNumber maps clean integers to a PR number and every degrade case
+// (empty = no OPEN PR matched, "null", whitespace, junk) to 0 — so branch-state
+// inference never fails the run or invents a target.
+func TestParseGHPRNumber(t *testing.T) {
+	cases := map[string]int{"42": 42, "  7\n": 7, "": 0, "null": 0, "   ": 0, "abc": 0, "3.5": 0}
+	for in, want := range cases {
+		if got := parseGHPRNumber(in); got != want {
+			t.Errorf("parseGHPRNumber(%q) = %d, want %d", in, got, want)
+		}
+	}
+}
+
 // readCandylandRunArgs reads the prompt from the file and defaults folders to
 // [cwd] when none are passed, while preserving explicit folders.
 func TestReadCandylandRunArgs(t *testing.T) {
@@ -72,7 +115,7 @@ func TestStartCandylandRun(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	id, err := startCandylandRunAt(srv.URL, []string{"/repo/a", "/repo/b"}, "do the thing", "My Run")
+	id, err := startCandylandRunAt(srv.URL, []string{"/repo/a", "/repo/b"}, "do the thing", "My Run", "", 0)
 	if err != nil {
 		t.Fatalf("startCandylandRun: %v", err)
 	}
@@ -88,9 +131,48 @@ func TestStartCandylandRun(t *testing.T) {
 	if createdBody["prompt"] != "do the thing" || createdBody["title"] != "My Run" {
 		t.Errorf("prompt/title not sent correctly: %v", createdBody)
 	}
+	// A plain run carries no delivery override — deliver/targetPr omitted so
+	// candyland uses its default new-PR-per-repo delivery.
+	if _, has := createdBody["deliver"]; has {
+		t.Errorf("plain run must not send a deliver field: %v", createdBody)
+	}
+	if _, has := createdBody["targetPr"]; has {
+		t.Errorf("plain run must not send a targetPr field: %v", createdBody)
+	}
 	folders, _ := createdBody["folders"].([]any)
 	if len(folders) != 2 || folders[0] != "/repo/a" {
 		t.Errorf("folders not sent correctly: %v", createdBody["folders"])
+	}
+}
+
+// A feedback run threads deliver+targetPr through to /api/runs so candyland
+// updates the existing PR in place instead of opening a new one.
+func TestStartCandylandRunFeedback(t *testing.T) {
+	var createdBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/runs":
+			defer r.Body.Close()
+			raw, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(raw, &createdBody)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"run-9"}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/begin"):
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	if _, err := startCandylandRunAt(srv.URL, []string{"/repo"}, "fix it", "", "feedback", 42); err != nil {
+		t.Fatalf("startCandylandRun: %v", err)
+	}
+	if createdBody["deliver"] != "feedback" {
+		t.Errorf("deliver = %v, want feedback", createdBody["deliver"])
+	}
+	if createdBody["targetPr"] != float64(42) {
+		t.Errorf("targetPr = %v, want 42", createdBody["targetPr"])
 	}
 }
 

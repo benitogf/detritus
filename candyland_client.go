@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -48,16 +50,83 @@ func runCandyland(detritusPath, promptFile string, folders []string, cwd string)
 	if err != nil {
 		return err
 	}
+	// Recognize a PR-feedback run so it updates the existing PR in place instead
+	// of opening a new one. The primary repo (folders[0]) is where a
+	// branch-state fallback looks for an open PR.
+	deliver, targetPR := resolveCandylandDelivery(prompt, folders[0])
 	if err := ensureCandylandUp(detritusPath); err != nil {
 		return err
 	}
-	id, err := startCandylandRun(folders, prompt, "")
+	id, err := startCandylandRun(folders, prompt, "", deliver, targetPR)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("candyland run started: %s\n", id)
+	switch deliver {
+	case "feedback":
+		fmt.Printf("Delivery: feedback → updating PR #%d in place (no new PR)\n", targetPR)
+	case "review":
+		fmt.Printf("Delivery: review → reporting on PR #%d (no new PR)\n", targetPR)
+	}
 	fmt.Printf("Dashboard: %s\n", candylandDashboardURL)
 	return nil
+}
+
+// resolveCandylandDelivery classifies a --candyland-run into a delivery mode +
+// target PR, so a feedback run updates the existing PR in place instead of
+// opening a new one. Two tiers, text first:
+//   - the plan text (deriveQuestDelivery, reused from the quest path — an explicit
+//     "address feedback on PR #N" / "review PR #N" marker); if it names a PR, that
+//     wins and can select feedback OR review.
+//   - otherwise fall back to repo's current-branch open PR (branchPRLookup) — the
+//     same "the branch already has a PR" signal /gh infers from — which can only
+//     mean feedback (there is a PR to update).
+//
+// Pure but for the injected branchPRLookup (currentBranchPR in production, a stub
+// in tests), so the tier ordering is deterministically testable.
+func resolveCandylandDelivery(prompt, repo string) (deliver string, targetPR int) {
+	deliver, targetPR = deriveQuestDelivery(prompt)
+	if targetPR == 0 {
+		if pr := branchPRLookup(repo); pr > 0 {
+			return "feedback", pr
+		}
+	}
+	return deliver, targetPR
+}
+
+// branchPRLookup resolves the open PR for a repo's current branch. It is a var so
+// tests can substitute a stub for the real `gh` shell-out.
+var branchPRLookup = currentBranchPR
+
+// currentBranchPR returns the open PR number for repo's current git branch, or 0
+// when there is none (no PR, detached HEAD, gh unavailable, or the default
+// branch). It shells out to `gh pr view` — the same tool candyland uses — and
+// stays deliberately quiet on any error: branch-state inference is a best-effort
+// fallback, so a missing gh or no-PR branch must degrade to new-work delivery,
+// never fail the run. A short timeout bounds a hung gh (e.g. a network/auth
+// stall) so it degrades to new-work rather than blocking the run indefinitely.
+func currentBranchPR(repo string) int {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "gh", "pr", "view", "--json", "number,state", "--jq", "select(.state==\"OPEN\") | .number")
+	cmd.Dir = repo
+	out, err := cmd.Output()
+	if err != nil {
+		return 0
+	}
+	return parseGHPRNumber(string(out))
+}
+
+// parseGHPRNumber reads the `gh pr view … --jq` output into a PR number, or 0 for
+// anything that isn't a clean integer — empty (the branch has no OPEN PR, so the
+// jq select() matched nothing), "null", or stray whitespace. Kept separate from
+// the shell-out so the degrade-to-zero cases are testable without a live gh.
+func parseGHPRNumber(out string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // readQuestRunArgs parses `--quest-run` args: the objective file path and
@@ -461,24 +530,27 @@ func candylandHealthyAt(baseURL string, timeout time.Duration) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-// candylandRunRequest is the body POSTed to /api/runs. No mode field — Mode is
-// being removed from candyland's API.
+// candylandRunRequest is the body POSTed to /api/runs. Deliver/TargetPR let a
+// standalone run address an existing PR in place (feedback/review) instead of
+// always opening a new one — omitted (zero) for the default new-PR delivery.
 type candylandRunRequest struct {
-	Folders []string `json:"folders"`
-	Prompt  string   `json:"prompt"`
-	Title   string   `json:"title"`
+	Folders  []string `json:"folders"`
+	Prompt   string   `json:"prompt"`
+	Title    string   `json:"title"`
+	Deliver  string   `json:"deliver,omitempty"`
+	TargetPR int      `json:"targetPr,omitempty"`
 }
 
 // startCandylandRun creates a run (POST /api/runs) and begins it (POST
 // /api/runs/{id}/begin), returning the run id. The sidecar must already be up;
 // callers run ensureCandylandUp first.
-func startCandylandRun(folders []string, prompt, title string) (string, error) {
-	return startCandylandRunAt(candylandBaseURL, folders, prompt, title)
+func startCandylandRun(folders []string, prompt, title, deliver string, targetPR int) (string, error) {
+	return startCandylandRunAt(candylandBaseURL, folders, prompt, title, deliver, targetPR)
 }
 
 // startCandylandRunAt is startCandylandRun against an explicit base URL (test seam).
-func startCandylandRunAt(baseURL string, folders []string, prompt, title string) (string, error) {
-	body, err := json.Marshal(candylandRunRequest{Folders: folders, Prompt: prompt, Title: title})
+func startCandylandRunAt(baseURL string, folders []string, prompt, title, deliver string, targetPR int) (string, error) {
+	body, err := json.Marshal(candylandRunRequest{Folders: folders, Prompt: prompt, Title: title, Deliver: deliver, TargetPR: targetPR})
 	if err != nil {
 		return "", err
 	}
