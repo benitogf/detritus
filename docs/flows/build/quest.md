@@ -39,7 +39,7 @@ Before launching, read the detritus KB guidance for iterative loops (`core/loop`
 
 1. **Settle the loop intent** (objective, scope, safety boundary, verification command) per the section above, and write the objective to an objective file.
 2. **Ensure candyland is up, then start the quest over REST.** Run `detritus --quest-run <objective-file> [folder ...]` (folders default to the cwd). detritus health-checks the sidecar, starts it if down, then `POST`s `/api/quests` with `{objective, folders, autonomyLevel, deliver}`, reads back the quest id, and `POST`s `/api/quests/{id}/begin` to start it. **Autonomy must match the invocation verb** (see below); `deliver: pr` is the standing safety rail — the quest opens its own PRs and **never merges**.
-3. **Hand off to the dashboard.** Report the quest id and the dashboard URL — that is where the live tick state, the task graph, and the per-tick verification audit show, and where the quest is stopped. A quest ticks **discover→triage→run→review→PR** and may open **more than one PR over time** (one per impacted repo, per shippable tick); a single repo's delivery failure is surfaced without failing the others.
+3. **Hand off to the dashboard.** Report the quest id and the dashboard URL — that is where the live tick state, the task graph, and the per-tick verification audit show, and where the quest is stopped. A quest ticks **discover→triage→run→review→PR** and may open **more than one PR over time** — one per impacted repo, per **distinct** shippable item, never repeated PRs for the same deliverable (see *One deliverable, one PR* below); a single repo's delivery failure is surfaced without failing the others.
 
 ## Autonomy matches the objective's intent
 
@@ -61,6 +61,14 @@ Pairing with the autonomy-from-intent rule above, the launcher also **detects th
 - A plain new-work objective → `deliver: pr` (the standing default — new PR per impacted repo).
 
 The launcher **never** opens a duplicate PR for a feedback/review intent, and **never** silently defaults a feedback/review objective to `pr`. The intent→delivery-mode detection is the same shape as the intent→autonomy detection above: derived from the verb, or prompted once when ambiguous.
+
+### One deliverable, one PR — a quest converges, it does not spray
+
+"May open **many PRs over time**" means **one PR per DISTINCT shippable item** — never repeated, competing PRs for the **same** deliverable. Once a tick has opened a PR for an objective (or a slice of it), every later tick that keeps working **that same deliverable** delivers **onto the existing PR** (`deliver: feedback` on its head branch — commit, push, update in place), exactly as a feedback intent does. A quest opens a *new* PR only for genuinely new, non-overlapping work.
+
+A quest that opens PR #A, then opens PR #B to "reconcile/fold/consolidate" #A, then PR #C to "supersede #A/#B" has **thrashed**: it externalized its own iteration as a pile of conflicting PRs a human must now untangle. This is the quest-level violation of `/gh`'s **one-issue-one-PR** rule (and of `core/completion`'s exit gate — re-attacking a deliverable is remediation *of that PR*, not a new one). Detection cues in a quest's own PR titles — "reconcile", "consolidate", "fold PR #N", "land the canonical", "supersede #N" — are a **red flag that the convergence rule was breached**; a healthy quest amends one PR until it's right.
+
+> **Being built:** the settled candyland plan enforces this structurally — a **shared quest+run gate** classifies each objective as build-on-existing-PR vs generate-new (plan **C4**), and the **quest-lead becomes a converging owner** (plan **Bucket B**) that iterates one deliverable to done rather than spawning fresh runs that each open a PR. Until that lands, the convergence rule above is the doctrine to hold to.
 
 ## Launch output
 
