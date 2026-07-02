@@ -502,7 +502,7 @@ func ensureCandylandUp(detritusPath string) error {
 	// tools, etc.) from ~/.claude.json and hand them to candyland so it can graft
 	// the SAME tool surface into each spawned agent's --mcp-config. We write the
 	// --mcp-config-shaped JSON to a private temp file and pass only its PATH via
-	// DETRITUS_ORIGIN_MCP — never the inline JSON. The servers may carry secret
+	// CANDYLAND_INHERITED_MCP — never the inline JSON. The servers may carry secret
 	// env values (API keys); keeping them in a 0600 file rather than an env value
 	// avoids leaking them through process/env inspection. Best-effort: a
 	// missing/unreadable config or a write failure just means no extra servers to
@@ -534,7 +534,13 @@ func ensureCandylandUp(detritusPath string) error {
 // --mcp-config-shaped object ({"mcpServers": {...}}), NOT the JSON itself — the
 // servers can contain secret env values, so we never place them in an env value.
 // Empty/absent means nothing extra to inherit.
-const detritusOriginMCPEnv = "DETRITUS_ORIGIN_MCP"
+//
+// The name MUST match what candyland's conductor reads (inheritedMCPServers in
+// internal/conductor/coordinator.go). candyland reads CANDYLAND_INHERITED_MCP as
+// the path to an --mcp-config file and merges those servers into every spawned
+// agent's config, so we export under that exact name — otherwise the handshake is
+// silently dropped and no inherited servers reach the agents.
+const detritusOriginMCPEnv = "CANDYLAND_INHERITED_MCP"
 
 // originMCPExcluded are server names never propagated as inherited servers.
 // detritus rides via DETRITUS_BIN (candyland registers it passively) and
@@ -614,13 +620,29 @@ func mcpServersFromConfig(data map[string]any, cwd string) map[string]any {
 	return out
 }
 
+// originMCPConfigPath is the STABLE path of the inherited-MCP config file handed
+// to candyland. It is deliberately fixed (not a random temp name): the file must
+// outlive our process — candyland re-reads it on every agent spawn for its whole
+// lifetime — so we cannot delete it after launch. A stable path means each launch
+// overwrites the previous file rather than leaving a new random one behind, so the
+// secret-bearing config can never accumulate past a single file in TMPDIR.
+func originMCPConfigPath() string {
+	return filepath.Join(os.TempDir(), "detritus-origin-mcp.json")
+}
+
 // writeOriginMCPConfigFile serializes servers as an --mcp-config-shaped JSON
-// object ({"mcpServers": {...}}) and writes it to a private (0600) temp file,
-// returning the file path for propagation via DETRITUS_ORIGIN_MCP. It returns
-// ("", nil) when there are no servers to inherit (so the caller omits the env
-// var). The file — not an env value — carries the servers because they may hold
-// secret env values; 0600 keeps them readable only by the current user.
+// object ({"mcpServers": {...}}) and writes it to a private (0600) file at the
+// stable originMCPConfigPath, returning that path for propagation via
+// CANDYLAND_INHERITED_MCP. It returns ("", nil) when there are no servers to
+// inherit (so the caller omits the env var). The file — not an env value —
+// carries the servers because they may hold secret env values; 0600 keeps them
+// readable only by the current user. Writing to a fixed path (not os.CreateTemp)
+// bounds the on-disk secret to a single file that each launch overwrites: candyland
+// re-reads it per agent spawn, so it cannot be removed after launch, and random
+// per-launch names would otherwise accumulate indefinitely. Any stale
+// randomly-named files written by earlier detritus versions are swept first.
 func writeOriginMCPConfigFile(servers map[string]any) (string, error) {
+	sweepStaleOriginMCPConfigFiles()
 	if len(servers) == 0 {
 		return "", nil
 	}
@@ -628,14 +650,12 @@ func writeOriginMCPConfigFile(servers map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	f, err := os.CreateTemp("", "detritus-origin-mcp-*.json")
+	name := originMCPConfigPath()
+	// Remove any pre-existing file (possibly a dangling symlink or another user's
+	// file) before creating ours with O_EXCL so we never write through it.
+	os.Remove(name)
+	f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return "", err
-	}
-	name := f.Name()
-	if err := os.Chmod(name, 0o600); err != nil {
-		f.Close()
-		os.Remove(name)
 		return "", err
 	}
 	if _, err := f.Write(out); err != nil {
@@ -648,6 +668,20 @@ func writeOriginMCPConfigFile(servers map[string]any) (string, error) {
 		return "", err
 	}
 	return name, nil
+}
+
+// sweepStaleOriginMCPConfigFiles removes secret-bearing config files left in
+// TMPDIR by earlier detritus versions, which used random per-launch temp names
+// (detritus-origin-mcp-*.json) and never cleaned them up. Best-effort: glob/remove
+// errors are ignored — a failed sweep must never block a launch.
+func sweepStaleOriginMCPConfigFiles() {
+	matches, err := filepath.Glob(filepath.Join(os.TempDir(), "detritus-origin-mcp-*.json"))
+	if err != nil {
+		return
+	}
+	for _, m := range matches {
+		os.Remove(m)
+	}
 }
 
 // candylandHealthy reports whether the sidecar answers GET /api/health with 200.
