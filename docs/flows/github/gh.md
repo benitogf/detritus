@@ -67,6 +67,7 @@ Apply the first matching rule:
 
 | Input | Route to |
 |---|---|
+| URL / ref resolves to an **open PR** carrying an unaddressed **CHANGES_REQUESTED** review — a reviewer named concrete findings at/after the current head — **even if the user says "review"** | `gh-feedback-work` — address the reviewer's stated findings. You do NOT run a fresh self-review "past" a posted blocker: a self-review that returns *clean* while an open review says *blocked* is incoherent. Fix what the reviewer named, then push. |
 | URL / ref resolves to an **open PR**, AND user text suggests reviewing it — phrases like "review pr", "review this pr", "code review", "hard review", "review pull request" | `gh-pr` |
 | URL / ref resolves to an **open PR** with comments posted after the PR's last commit, no review-intent text | `gh-feedback-work` |
 | URL / ref resolves to an **open PR**, AND user text wants it watched until merged — phrases like "watch this pr to merge", "keep checking the pr until merged", "merge when approved", "babysit this pr", "/gh-merge-loop" | `gh-merge-loop` |
@@ -86,6 +87,14 @@ Resolution helpers:
 gh api repos/<owner>/<repo>/issues/<n> --jq '{number, state, pull_request, title}'
 # If .pull_request is non-null, this is a PR; use pulls endpoint for commits:
 gh api repos/<owner>/<repo>/pulls/<n>/commits --jq '.[-1].commit.committer.date'
+# Latest review decision per reviewer — a CHANGES_REQUESTED here means "address it" (gh-feedback-work),
+# NOT "self-review it". Never route a PR with an unaddressed CHANGES_REQUESTED to a fresh self-review.
+# group_by(.user.login)|map(last …) keeps each reviewer's most-recent decision so one reviewer's
+# stale APPROVED can't mask another's standing CHANGES_REQUESTED (a plain `| last` would show only
+# the single newest review across all reviewers and hide the block). The select() drops COMMENTED /
+# PENDING reviews first, so a chit-chat comment left AFTER a reviewer's CHANGES_REQUESTED can't mask
+# their standing block — mirroring GitHub's own "latest decisive review per reviewer" semantics.
+gh api repos/<owner>/<repo>/pulls/<n>/reviews --jq '[.[]|select(.state=="APPROVED" or .state=="CHANGES_REQUESTED" or .state=="DISMISSED")]|group_by(.user.login)|map(last|{u:.user.login,state:.state,commit:.commit_id})'
 ```
 
 ## Phase 2: Hand off

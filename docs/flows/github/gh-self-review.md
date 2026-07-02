@@ -31,6 +31,10 @@ The analysis itself — principles, claim verification, second-pass checklist, c
 - Doesn't run tests or builds. The sub-agent reasons over the diff and the surrounding source; it doesn't compile or execute.
 - Doesn't post comments, create issues, or push. Output is a triage list the dev acts on.
 
+## Not a substitute for a posted review — reconcile it first
+
+If the changes belong to an **open PR that already carries an unaddressed `CHANGES_REQUESTED` review**, this is the wrong skill: route to `gh-feedback-work` and fix what the reviewer named. A fresh self-review that returns *clean* while a posted review says *blocked* is incoherent — the self-review shares the author's blind spot and will happily miss the very finding the reviewer already proved. Before spawning the audit, fetch posted reviews (`gh api repos/<owner>/<repo>/pulls/<n>/reviews`); a self-review may NOT clear a finding a reviewer has posted on the same head — that finding stands until it is fixed, not until a self-audit fails to re-find it.
+
 ## Internal-only — never post the triage
 
 The triage produced by this skill (and by `gh-issue-work` Phase 8a, which embeds it) is **for the author's eyes**. It must never be posted to the PR or issue as a comment or review. This is the contract that separates self-review from `/gh-pr`:
