@@ -475,11 +475,13 @@ func TestGeneratedArtifactsAreTracked(t *testing.T) {
 			t.Errorf("generated plugin shim %s is not tracked in git (gitignored or unstaged) — a .gitignore slip would ship a broken plugin", p)
 		}
 	}
-	// The embedded KB blob must be committed too. .gitignore excludes only its
-	// sibling generated/search.bleve/, not data.gob — assert it explicitly so a
-	// future broadening of that rule can't silently drop the embedded blob.
-	if !tracked("generated/data.gob")["generated/data.gob"] {
-		t.Error("generated/data.gob is not tracked in git")
+	// The embedded KB blob is the opposite case: it is a deterministic build
+	// artifact (regenerated from docs/ by `go generate`, which the release
+	// workflow runs before building) and is deliberately NOT committed, so
+	// doc-touching branches don't binary-conflict on it. Assert it stays out of
+	// the index — a future accidental commit would revive that recurring conflict.
+	if tracked("generated/data.gob")["generated/data.gob"] {
+		t.Error("generated/data.gob must NOT be tracked in git — it is a gitignored //go:embed artifact built by `go generate`; committing it reintroduces per-branch binary merge conflicts")
 	}
 }
 
