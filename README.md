@@ -99,4 +99,11 @@ and intentionally absent — they are not commands.
 | `/setup-extra-rules` | Generate personalized Claude Code rule files and hook scripts based on the user's actual environment. |
 | `/setup-superpowers` | Apply baseline Claude Code settings (deny list, status line, effort/thinking, autoMode environment). |
 
+### Consult
+
+| Command | Use it for |
+| --- | --- |
+| `/consult-simple` | Turn the issue under discussion into a single-page decision PDF for a non-technical stakeholder — premise-only, plain real-world terms, no jargon, no component names or technical mechanisms. |
+| `/consult-tech` | Turn the issue under discussion into a single-page decision PDF at a bare-minimum, high-level technical register — name the component and mechanism conceptually, no code or deep internals. |
+
 <!-- COMMANDS:END -->

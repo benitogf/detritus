@@ -63,6 +63,11 @@ func RunSetup(binaryPath string, dryRun bool) error {
 	// registered as an MCP). Best-effort: skips cleanly when there's no release yet.
 	fetchCandylandBinary(binaryPath, dryRun)
 
+	// Companion binaries for the /consult flow (Typst render, D2 diagrams),
+	// installed beside detritus. Best-effort like the candyland fetch.
+	fetchTypstBinary(binaryPath, dryRun)
+	fetchD2Binary(binaryPath, dryRun)
+
 	// Windsurf
 	setupWindsurf(home, binaryPath, docs, dryRun)
 
@@ -92,7 +97,7 @@ func RunSetup(binaryPath string, dryRun bool) error {
 
 	// Post-install verification
 	if !dryRun {
-		printVerification(home)
+		printVerification(home, binaryPath)
 	}
 
 	return nil
@@ -886,8 +891,20 @@ func generateVerdentSkills(skillsDir string, docs []docEntry) {
 
 // ---- Post-install verification ----------------------------------------------
 
-func printVerification(home string) {
+func printVerification(home, binaryPath string) {
 	fmt.Println("\nPost-install verification:")
+
+	// Consult companion binaries (beside detritus)
+	if _, ok := toolBinFor(binaryPath, "typst"); ok {
+		fmt.Println("  [PASS] Typst binary")
+	} else {
+		fmt.Println("  [WARN] Typst binary not found")
+	}
+	if _, ok := toolBinFor(binaryPath, "d2"); ok {
+		fmt.Println("  [PASS] D2 binary")
+	} else {
+		fmt.Println("  [WARN] D2 binary not found")
+	}
 
 	// Windsurf
 	wsFile := filepath.Join(home, ".codeium", "windsurf", "mcp_config.json")

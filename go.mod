@@ -8,6 +8,7 @@ require (
 	github.com/gofrs/flock v0.13.0
 	github.com/modelcontextprotocol/go-sdk v1.4.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
+	github.com/ulikunitz/xz v0.5.15
 	golang.org/x/tools v0.43.0
 )
 
