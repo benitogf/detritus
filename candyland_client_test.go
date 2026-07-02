@@ -337,6 +337,129 @@ func TestReadCampaignRunArgs(t *testing.T) {
 	}
 }
 
+// mcpServersFromConfig merges the global mcpServers with the project-scoped map
+// for cwd (project winning on collisions) and drops detritus/candyland.
+func TestMCPServersFromConfig(t *testing.T) {
+	data := map[string]any{
+		"mcpServers": map[string]any{
+			"detritus":  map[string]any{"command": "detritus"},
+			"candyland": map[string]any{"command": "candyland"},
+			"obsidian":  map[string]any{"command": "obsidian", "args": []any{"--global"}},
+			"shared":    map[string]any{"command": "global-shared"},
+		},
+		"projects": map[string]any{
+			"/work/repo": map[string]any{
+				"mcpServers": map[string]any{
+					"projtool": map[string]any{"command": "projtool"},
+					"shared":   map[string]any{"command": "project-shared"},
+				},
+			},
+			"/other": map[string]any{
+				"mcpServers": map[string]any{"nope": map[string]any{"command": "nope"}},
+			},
+		},
+	}
+
+	got := mcpServersFromConfig(data, "/work/repo")
+
+	if _, has := got["detritus"]; has {
+		t.Error("detritus must be excluded from inherited servers")
+	}
+	if _, has := got["candyland"]; has {
+		t.Error("candyland must be excluded from inherited servers")
+	}
+	if _, has := got["nope"]; has {
+		t.Error("a different project's servers must not leak in")
+	}
+	if _, has := got["obsidian"]; !has {
+		t.Error("global obsidian server should be inherited")
+	}
+	if _, has := got["projtool"]; !has {
+		t.Error("project-scoped server should be inherited")
+	}
+	shared, _ := got["shared"].(map[string]any)
+	if shared["command"] != "project-shared" {
+		t.Errorf("project scope should win on key collision: shared.command = %v, want project-shared", shared["command"])
+	}
+}
+
+// readOriginMCPServers degrades to an empty map (never errors) for a missing
+// path, an empty path, or unparseable JSON — inheriting must never fail a launch.
+func TestReadOriginMCPServers(t *testing.T) {
+	if got := readOriginMCPServers("", "/work/repo"); len(got) != 0 {
+		t.Errorf("empty path should yield no servers, got %v", got)
+	}
+
+	dir := t.TempDir()
+	if got := readOriginMCPServers(filepath.Join(dir, "nope.json"), "/work/repo"); len(got) != 0 {
+		t.Errorf("missing file should yield no servers, got %v", got)
+	}
+
+	bad := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(bad, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := readOriginMCPServers(bad, "/work/repo"); len(got) != 0 {
+		t.Errorf("unparseable config should yield no servers, got %v", got)
+	}
+
+	good := filepath.Join(dir, "claude.json")
+	if err := os.WriteFile(good, []byte(`{"mcpServers":{"obsidian":{"command":"obsidian"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := readOriginMCPServers(good, "/work/repo")
+	if _, has := got["obsidian"]; !has {
+		t.Errorf("obsidian server should be read from config, got %v", got)
+	}
+}
+
+// writeOriginMCPConfigFile writes the servers to a private temp file and returns
+// its PATH (not inline JSON). Its VALUE for the env var must be a readable path
+// to a 0600 file whose content is an --mcp-config-shaped object; no servers
+// yields ("", nil) so the caller omits the env var entirely.
+func TestWriteOriginMCPConfigFile(t *testing.T) {
+	if path, err := writeOriginMCPConfigFile(map[string]any{}); err != nil || path != "" {
+		t.Errorf("no servers should yield (\"\", nil), got (%q, %v)", path, err)
+	}
+	if path, err := writeOriginMCPConfigFile(nil); err != nil || path != "" {
+		t.Errorf("nil servers should yield (\"\", nil), got (%q, %v)", path, err)
+	}
+
+	path, err := writeOriginMCPConfigFile(map[string]any{"obsidian": map[string]any{"command": "obsidian", "env": map[string]any{"TOKEN": "secret"}}})
+	if err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+	defer os.Remove(path)
+
+	// The returned value is a path to a real file, not inline JSON.
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("returned path is not a readable file: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("temp file should be 0600, got %v", info.Mode().Perm())
+	}
+	if json.Valid([]byte(path)) {
+		t.Errorf("env value should be a path, not inline JSON, got %q", path)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		t.Fatalf("file content is not valid JSON: %v", err)
+	}
+	servers, ok := parsed["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatalf("file missing mcpServers key: %v", parsed)
+	}
+	if _, has := servers["obsidian"]; !has {
+		t.Errorf("mcpServers should contain obsidian, got %v", servers)
+	}
+}
+
 // ensureCandylandUp returns nil immediately when the health endpoint already
 // answers 200 — no binary needed.
 func TestEnsureCandylandUpAlreadyHealthy(t *testing.T) {
