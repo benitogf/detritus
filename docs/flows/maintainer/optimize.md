@@ -109,6 +109,15 @@ detritus --setup
 
 Or if updating a released version, commit, push, and tag a new release.
 
+> **`generated/data.gob` is generated, never committed.** It is the `//go:embed`
+> KB blob, deterministic from `docs/`, and is `.gitignore`d. `go generate ./...`
+> rebuilds it — the release workflow runs that before building, so released
+> binaries embed a fresh blob. Commit **only** the doc edits; leave `data.gob`
+> out of every commit (a test enforces it stays untracked). This is what keeps
+> two doc-touching branches from binary-conflicting on it. A **fresh clone must
+> run `go generate ./...` once** before `go build`/`go test`, because the embed
+> target must exist at compile time.
+
 ---
 
 ## Optimization Principles
