@@ -39,7 +39,7 @@ Before launching, read the detritus KB guidance for program-level intent and dec
 
 - **`core/intent-review`** — the Intent Brief and the gates Candyland runs against it; the campaign's intent is the north star every child quest/run inherits.
 - **`core/planning`** / **`core/dream`** — the planning altitude Candyland owns for whatever the input does not already specify.
-- **`core/completion`** — the three dispositions every child quest/run obeys (in-scope work done now, separate features become feature-splits, hard blockers surfaced — never silently deferred).
+- **`core/completion`** — the three dispositions every child quest/run obeys (in-scope work done now, separate features become feature-splits, hard blockers surfaced — never silently deferred). This holds at the **program level** too: when the final intent review finds a commitment `missed`, the campaign does **not** park in `blocked` on that first look — it spawns a **remediation run targeting exactly that commitment** (carrying the reviewer's evidence) and **re-reviews**, bounded by a remediation-round budget. Only a gap that survives the budget blocks (a real hard blocker); a lingering `partial` still delivers, annotating the PR. A campaign never blocks with finishable work left undone.
 
 Refine the user's request into the campaign input written to the input file passed on argv (keeps a large goal/brief/plan off the command line, mirroring how `/candyland` and `/quest` pass their files), plus the scope folders. `/campaign` never invents the goal — it refines what the user asked for into the input Candyland's program-level loop can own.
 
