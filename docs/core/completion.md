@@ -45,6 +45,14 @@ git, command output) — never from memory of the conversation:
 
 1. **Every acceptance criterion is objectively met.** Each `[ ]` is ticked `[x]` with evidence — a
    passing test, command output, or a documented manual check. An unchecked box ⇒ not done.
+1a. **A named requirement covers EVERY instance, not a sample.** When a criterion or plan names a
+   *pattern* or *class* rather than one site — "convert the PR links", "handle multiple X",
+   "rename all callers of Y", "remove every use of Z" — done requires covering **every** site that
+   exhibits it, not the salient few. Enumerate the full set by grep/search **up front**, change all
+   of them, then re-run the same search to prove **zero** remain before ticking the box (`grep-to-zero`).
+   Converting the obvious sites and stopping silently drops part of a stated requirement and reads as
+   done when it is not (e.g. a "make PR links copyable" pass that fixed the detail views but missed the
+   table cell rendering the same link).
 2. **The verification gate is green.** Build + tests + lint pass, *or there is a documented reason a
    check could not run* (silent skipping does not satisfy it). This extends `core/build`'s per-unit
    gate to the loop-exit gate.
@@ -91,6 +99,8 @@ fourth option — it is retired as a catch-all and resolves only to disposition 
 - Leaving `TODO`/`FIXME`/"future work" for a disposition-1 item.
 - Filing a follow-up issue for in-scope work instead of doing it.
 - Declaring done with an unchecked criterion or a red gate.
+- Handling only the obvious instances of a named pattern/class while leaving others unchanged — with no
+  final search proving the set is empty (see *Definition of done* 1a, `grep-to-zero`).
 - Producing a "workplan" / "next steps" doc *in place of* doing the work.
 - Using "hazard" as a parking lot for handle-able in-scope work.
 - Shipping a placeholder / stub / "simplified for now" implementation of in-scope behavior — a stub is
