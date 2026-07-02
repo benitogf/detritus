@@ -337,6 +337,106 @@ func TestReadCampaignRunArgs(t *testing.T) {
 	}
 }
 
+// mcpServersFromConfig merges the global mcpServers with the project-scoped map
+// for cwd (project winning on collisions) and drops detritus/candyland.
+func TestMCPServersFromConfig(t *testing.T) {
+	data := map[string]any{
+		"mcpServers": map[string]any{
+			"detritus":  map[string]any{"command": "detritus"},
+			"candyland": map[string]any{"command": "candyland"},
+			"obsidian":  map[string]any{"command": "obsidian", "args": []any{"--global"}},
+			"shared":    map[string]any{"command": "global-shared"},
+		},
+		"projects": map[string]any{
+			"/work/repo": map[string]any{
+				"mcpServers": map[string]any{
+					"projtool": map[string]any{"command": "projtool"},
+					"shared":   map[string]any{"command": "project-shared"},
+				},
+			},
+			"/other": map[string]any{
+				"mcpServers": map[string]any{"nope": map[string]any{"command": "nope"}},
+			},
+		},
+	}
+
+	got := mcpServersFromConfig(data, "/work/repo")
+
+	if _, has := got["detritus"]; has {
+		t.Error("detritus must be excluded from inherited servers")
+	}
+	if _, has := got["candyland"]; has {
+		t.Error("candyland must be excluded from inherited servers")
+	}
+	if _, has := got["nope"]; has {
+		t.Error("a different project's servers must not leak in")
+	}
+	if _, has := got["obsidian"]; !has {
+		t.Error("global obsidian server should be inherited")
+	}
+	if _, has := got["projtool"]; !has {
+		t.Error("project-scoped server should be inherited")
+	}
+	shared, _ := got["shared"].(map[string]any)
+	if shared["command"] != "project-shared" {
+		t.Errorf("project scope should win on key collision: shared.command = %v, want project-shared", shared["command"])
+	}
+}
+
+// readOriginMCPServers degrades to an empty map (never errors) for a missing
+// path, an empty path, or unparseable JSON — inheriting must never fail a launch.
+func TestReadOriginMCPServers(t *testing.T) {
+	if got := readOriginMCPServers("", "/work/repo"); len(got) != 0 {
+		t.Errorf("empty path should yield no servers, got %v", got)
+	}
+
+	dir := t.TempDir()
+	if got := readOriginMCPServers(filepath.Join(dir, "nope.json"), "/work/repo"); len(got) != 0 {
+		t.Errorf("missing file should yield no servers, got %v", got)
+	}
+
+	bad := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(bad, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := readOriginMCPServers(bad, "/work/repo"); len(got) != 0 {
+		t.Errorf("unparseable config should yield no servers, got %v", got)
+	}
+
+	good := filepath.Join(dir, "claude.json")
+	if err := os.WriteFile(good, []byte(`{"mcpServers":{"obsidian":{"command":"obsidian"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := readOriginMCPServers(good, "/work/repo")
+	if _, has := got["obsidian"]; !has {
+		t.Errorf("obsidian server should be read from config, got %v", got)
+	}
+}
+
+// originMCPConfigJSON emits an --mcp-config-shaped object for non-empty servers
+// and "" when there is nothing to inherit.
+func TestOriginMCPConfigJSON(t *testing.T) {
+	if got := originMCPConfigJSON(map[string]any{}); got != "" {
+		t.Errorf("no servers should yield empty string, got %q", got)
+	}
+	if got := originMCPConfigJSON(nil); got != "" {
+		t.Errorf("nil servers should yield empty string, got %q", got)
+	}
+
+	out := originMCPConfigJSON(map[string]any{"obsidian": map[string]any{"command": "obsidian"}})
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("output is not valid JSON: %v", err)
+	}
+	servers, ok := parsed["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatalf("output missing mcpServers key: %v", parsed)
+	}
+	if _, has := servers["obsidian"]; !has {
+		t.Errorf("mcpServers should contain obsidian, got %v", servers)
+	}
+}
+
 // ensureCandylandUp returns nil immediately when the health endpoint already
 // answers 200 — no binary needed.
 func TestEnsureCandylandUpAlreadyHealthy(t *testing.T) {

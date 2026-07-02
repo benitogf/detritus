@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -497,6 +498,15 @@ func ensureCandylandUp(detritusPath string) error {
 		selfExe = detritusPath
 	}
 	cmd.Env = append(os.Environ(), "DETRITUS_BIN="+selfExe)
+	// Enumerate the origin Claude session's OTHER MCP servers (obsidian, project
+	// tools, etc.) from ~/.claude.json and propagate them as DETRITUS_ORIGIN_MCP
+	// so candyland can graft the SAME tool surface into each spawned agent's
+	// --mcp-config. Best-effort: a missing/unreadable config just means no extra
+	// servers to inherit, never a failed launch. detritus/candyland are dropped —
+	// detritus rides via DETRITUS_BIN above, and candyland is never a child server.
+	if cfg := originMCPConfigJSON(readOriginMCPServers(originClaudeConfigPath(), originCWD())); cfg != "" {
+		cmd.Env = append(cmd.Env, detritusOriginMCPEnv+"="+cfg)
+	}
 	detachProcess(cmd)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("start candyland (%s): %w", bin, err)
@@ -512,6 +522,103 @@ func ensureCandylandUp(detritusPath string) error {
 		time.Sleep(250 * time.Millisecond)
 	}
 	return fmt.Errorf("candyland did not become healthy within 20s after start")
+}
+
+// detritusOriginMCPEnv is the env var carrying the origin session's inherited
+// MCP servers to candyland, as an --mcp-config-shaped JSON object
+// ({"mcpServers": {...}}). Empty/absent means nothing extra to inherit.
+const detritusOriginMCPEnv = "DETRITUS_ORIGIN_MCP"
+
+// originMCPExcluded are server names never propagated as inherited servers.
+// detritus rides via DETRITUS_BIN (candyland registers it passively) and
+// candyland is deliberately never registered as a child MCP (see setup.go), so
+// re-inheriting either would double-register or recurse.
+var originMCPExcluded = map[string]bool{"detritus": true, "candyland": true}
+
+// originClaudeConfigPath is the origin Claude session's config file
+// (~/.claude.json), where its MCP servers are registered. Returns "" when the
+// home directory can't be resolved, which readOriginMCPServers degrades to "no
+// servers to inherit".
+func originClaudeConfigPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".claude.json")
+}
+
+// originCWD is the current working directory used to resolve the project-scoped
+// MCP servers, or "" when it can't be determined (only the global servers apply).
+func originCWD() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return cwd
+}
+
+// readOriginMCPServers reads claudeConfigPath and returns the origin session's
+// MCP servers for cwd (mcpServersFromConfig). It is best-effort: a
+// missing/empty/unparseable config or empty path yields an empty map (nothing to
+// inherit), never an error — inheriting the tool surface must never fail a launch.
+func readOriginMCPServers(claudeConfigPath, cwd string) map[string]any {
+	if claudeConfigPath == "" {
+		return map[string]any{}
+	}
+	raw, err := os.ReadFile(claudeConfigPath)
+	if err != nil || len(raw) == 0 {
+		return map[string]any{}
+	}
+	data := map[string]any{}
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return map[string]any{}
+	}
+	return mcpServersFromConfig(data, cwd)
+}
+
+// mcpServersFromConfig extracts the inheritable MCP servers from a parsed
+// ~/.claude.json: the global "mcpServers" map merged with the project-scoped map
+// for cwd ("projects".<cwd>."mcpServers"), the project scope winning on key
+// collisions (it is the more specific one the origin session actually loaded).
+// Servers in originMCPExcluded are dropped. Pure (parsed config + cwd in → map
+// out) so the merge/exclusion is separately testable.
+func mcpServersFromConfig(data map[string]any, cwd string) map[string]any {
+	out := map[string]any{}
+	merge := func(m map[string]any) {
+		for name, spec := range m {
+			if originMCPExcluded[name] {
+				continue
+			}
+			out[name] = spec
+		}
+	}
+	if global, ok := data["mcpServers"].(map[string]any); ok {
+		merge(global)
+	}
+	if cwd != "" {
+		if projects, ok := data["projects"].(map[string]any); ok {
+			if project, ok := projects[cwd].(map[string]any); ok {
+				if scoped, ok := project["mcpServers"].(map[string]any); ok {
+					merge(scoped)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// originMCPConfigJSON serializes servers as an --mcp-config-shaped JSON object
+// ({"mcpServers": {...}}) for propagation via DETRITUS_ORIGIN_MCP, or "" when
+// there are no servers to inherit (so the caller omits the env var entirely).
+func originMCPConfigJSON(servers map[string]any) string {
+	if len(servers) == 0 {
+		return ""
+	}
+	out, err := json.Marshal(map[string]any{"mcpServers": servers})
+	if err != nil {
+		return ""
+	}
+	return string(out)
 }
 
 // candylandHealthy reports whether the sidecar answers GET /api/health with 200.
