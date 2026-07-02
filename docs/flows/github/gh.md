@@ -89,7 +89,12 @@ gh api repos/<owner>/<repo>/issues/<n> --jq '{number, state, pull_request, title
 gh api repos/<owner>/<repo>/pulls/<n>/commits --jq '.[-1].commit.committer.date'
 # Latest review decision per reviewer — a CHANGES_REQUESTED here means "address it" (gh-feedback-work),
 # NOT "self-review it". Never route a PR with an unaddressed CHANGES_REQUESTED to a fresh self-review.
-gh api repos/<owner>/<repo>/pulls/<n>/reviews --jq '[.[]|{u:.user.login,state:.state,commit:.commit_id}] | last'
+# group_by(.user.login)|map(last …) keeps each reviewer's most-recent decision so one reviewer's
+# stale APPROVED can't mask another's standing CHANGES_REQUESTED (a plain `| last` would show only
+# the single newest review across all reviewers and hide the block). The select() drops COMMENTED /
+# PENDING reviews first, so a chit-chat comment left AFTER a reviewer's CHANGES_REQUESTED can't mask
+# their standing block — mirroring GitHub's own "latest decisive review per reviewer" semantics.
+gh api repos/<owner>/<repo>/pulls/<n>/reviews --jq '[.[]|select(.state=="APPROVED" or .state=="CHANGES_REQUESTED" or .state=="DISMISSED")]|group_by(.user.login)|map(last|{u:.user.login,state:.state,commit:.commit_id})'
 ```
 
 ## Phase 2: Hand off
