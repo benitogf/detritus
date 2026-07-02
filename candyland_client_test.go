@@ -365,3 +365,33 @@ func TestCandylandHealthyAtDown(t *testing.T) {
 		t.Error("a 500 health response must not count as healthy")
 	}
 }
+
+func TestTitleFriendlyPrompt(t *testing.T) {
+	cases := []struct {
+		name, in, wantFirst string
+	}{
+		{"markdown heading", "# Plan: campaign/quest agents\n\nbody here", "campaign/quest agents"},
+		{"heading no label", "## Fix the emoji squares\n\nbody", "Fix the emoji squares"},
+		{"plain first line untouched", "Add typed cancellation\n\nbody", "Add typed cancellation"},
+		{"leading blank lines", "\n\n# Plan: do the thing\nbody", "do the thing"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := titleFriendlyPrompt(c.in)
+			first := ""
+			for _, ln := range strings.Split(got, "\n") {
+				if strings.TrimSpace(ln) != "" {
+					first = strings.TrimSpace(ln)
+					break
+				}
+			}
+			if first != c.wantFirst {
+				t.Errorf("first line = %q, want %q", first, c.wantFirst)
+			}
+			// The body must survive untouched.
+			if !strings.Contains(got, "body") {
+				t.Errorf("body dropped: %q", got)
+			}
+		})
+	}
+}
