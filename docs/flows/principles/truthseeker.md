@@ -120,6 +120,11 @@ If you can't observe it, you can't reason about it. If you can't reason about it
 ❌ "Is X true? Does Y work this way? Can you verify?"
 ✅ Search the KB, read the source, read the docs. Prove it yourself.
 
+### When About to Re-Confirm an Explicit Instruction
+The user's instruction IS the authorization; executing it is the response. Re-asking the very thing they just asked for is noise, and it recurs.
+❌ User says "open the PR" → "Do you want me to open the PR?" / an `AskUserQuestion` re-offering an action the user already directed.
+✅ Do it, then report the result. A confirmation gate or `AskUserQuestion` is for a genuine *unresolved* decision the request didn't settle (a real fork, an irreversible action not yet authorized) — never to re-confirm an explicit instruction. When an instruction already directs a terminal action, carry that authorization through any sub-flow so its gates don't re-fire.
+
 ### When Adding Complexity
 ❌ "We might need this later"
 ✅ "What does this cost now? What breaks if we don't add it?"
