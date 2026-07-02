@@ -20,7 +20,7 @@ related:
 
 # /gh-merge-loop — Watch a PR Until Merged
 
-A watch-until-merge loop over **one** PR. Each tick re-checks the PR; if a reviewer posted feedback after the last commit, it fixes it (push + body rewrite); once an `APPROVED` review covers the current HEAD and the PR's `mergeable_state` is `clean`, it merges and stops.
+A watch-until-merge loop over **one** PR. Each tick re-checks the PR; if a reviewer posted feedback after the last commit, it fixes it (push + body rewrite); once an `APPROVED` review covers the current HEAD and the PR's `mergeable_state` is `clean` (or `has_hooks`), it merges and stops.
 
 This skill **composes** existing parts and adds only one new piece:
 
@@ -65,11 +65,11 @@ Same input shapes as `/gh-feedback-work`. First match wins:
 
 3. **New feedback since the last commit?** If there is feedback posted after the last commit (the `/gh-feedback-work` Phase-1 timestamp cutoff) → **dispatch `/gh-feedback-work`** (fix → `/gh-self-review` → push → rewrite body). This pushes a commit, which **resets the merge gate** (any earlier approval is now stale — see below). Continue polling on the next tick. Let `/gh-feedback-work` own its own stop/hand-back behavior; if it cannot fold in a request (out-of-scope), handle per *Stuck = pause & hand back*.
 
-4. **Approved on the current HEAD and `mergeable_state == "clean"`?** Else if there is an `APPROVED` review whose `commit_id == HEAD SHA` **AND** `mergeable_state == "clean"` → **merge** (see *Merge mechanics*) → **stop** (terminal: merged-success). Gate on the composite `mergeable_state == "clean"`, **not** the bare `mergeable` bool — `mergeable` is conflict-only (it stays `true` with an outstanding `REQUEST_CHANGES` or a failing check), whereas `clean` is GitHub's authoritative "this will merge now" state: no conflict, required checks passed, no unmet required review.
+4. **Approved on the current HEAD and `mergeable_state` in `clean` / `has_hooks`?** Else if there is an `APPROVED` review whose `commit_id == HEAD SHA` **AND** `mergeable_state` is `"clean"` **or** `"has_hooks"` → **merge** (see *Merge mechanics*) → **stop** (terminal: merged-success). Gate on the composite `mergeable_state`, **not** the bare `mergeable` bool — `mergeable` is conflict-only (it stays `true` with an outstanding `REQUEST_CHANGES` or a failing check), whereas `clean` is GitHub's authoritative "this will merge now" state: no conflict, required checks passed, no unmet required review. `has_hooks` is `clean`'s sibling on repos with pre-receive hooks — such repos never report `clean`, so excluding it would leave a fully-approved green PR idling forever.
 
 5. **Behind base?** Else if `mergeable_state == "behind"` (the base advanced and the repo requires branches be up to date before merge) → **update the branch from base** (`gh api -X PUT repos/<owner>/<repo>/pulls/<n>/update-branch`) and continue. Updating is a push, so it **resets the merge gate** — any prior approval is now stale; poll for a fresh approval on the new HEAD next tick. If the update surfaces a conflict (state flips to `dirty`), or `behind` recurs across many ticks without ever reaching approval (base thrash), hand back per *Stuck = pause & hand back*.
 
-6. **Otherwise idle.** Waiting on a review, the only approval is stale on an older SHA, or `mergeable_state` is not yet `clean` for a transient reason (`unstable` / `unknown` — a check still running or mergeability not yet computed) → do nothing this tick; wake again next interval. (Track the skip wall-clock per *Skip-streak reframing*.)
+6. **Otherwise idle.** Waiting on a review, the only approval is stale on an older SHA, or `mergeable_state` is not yet merge-ready (`clean`/`has_hooks`) for a transient reason (`unstable` / `unknown` — a check still running or mergeability not yet computed) → do nothing this tick; wake again next interval. (Track the skip wall-clock per *Skip-streak reframing*.)
 
 ## Merge gate — the SHA-pinned approval invariant (the one new piece)
 
@@ -85,9 +85,9 @@ This is the load-bearing invariant of the whole skill — the "approve AFTER all
 
 The loop fixes posted **review feedback**, not pipelines.
 
-- Required checks gate the merge **through `mergeable_state == "clean"`** (step 4): GitHub reports `clean` only once required checks have passed, so the composite state — not a local check-runs tally — is the gate. This is why the gate keys on `clean`, not `mergeable`: the bool ignores checks entirely, and a local check-runs query can't tell required from optional checks nor see legacy commit statuses.
+- Required checks gate the merge **through `mergeable_state`** (step 4 — `clean`, or `has_hooks` on hooked repos): GitHub reports these only once required checks have passed, so the composite state — not a local check-runs tally — is the gate. This is why the gate keys on the state, not `mergeable`: the bool ignores checks entirely, and a local check-runs query can't tell required from optional checks nor see legacy commit statuses.
 - The loop does **not** auto-fix a red pipeline. A persistently-failing required check surfaces as `mergeable_state == "blocked"` and is a hand-back, not a fix target (see *Stuck = pause & hand back*).
-- The check-runs query (step 1) is a **diagnostic**, not the gate — use it to explain *why* the state isn't `clean` (distinguish a still-running check via `status` from a failed one via `conclusion`) so the idle-vs-hand-back call and the hand-back message are precise.
+- The check-runs query (step 1) is a **diagnostic**, not the gate — use it to explain *why* the state isn't merge-ready (distinguish a still-running check via `status` from a failed one via `conclusion`) so the idle-vs-hand-back call and the hand-back message are precise.
 
 ## Merge mechanics
 
@@ -102,9 +102,10 @@ gh api -X PUT repos/<owner>/<repo>/pulls/<n>/merge -f merge_method=<merge|squash
 ```
 
 - Pass `sha=<head_sha>` so the merge applies to the exact commit the gate verified — if HEAD moved between the gate check and the merge call, GitHub rejects it rather than merging an unverified tree; re-run the tick.
+- On a `has_hooks` repo the pre-receive hook runs at this call and can still reject the merge — that rejection is a hand-back (report the hook's message), not something to retry past.
 - Pick an allowed `merge_method`. If the repo allows exactly one, use it; if it allows several, prefer the repo's configured default. Never pass a disallowed method.
 - **Delete the head branch** after a successful merge **only if** the repo deletes merged branches (`delete_branch_on_merge == true`); otherwise leave it.
-- **Respect branch protection.** Never use admin-override to merge past failing required checks or unmet required reviews — if protection blocks the merge, that is a hand-back, not a force. The merge gate already requires `mergeable_state == "clean"` + an approval on HEAD, so a protection block here means state shifted under the tick; idle or hand back rather than override.
+- **Respect branch protection.** Never use admin-override to merge past failing required checks or unmet required reviews — if protection blocks the merge, that is a hand-back, not a force. The merge gate already requires `mergeable_state` `clean`/`has_hooks` + an approval on HEAD, so a protection block here means state shifted under the tick; idle or hand back rather than override.
 
 ## Stuck = pause & hand back
 
