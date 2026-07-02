@@ -62,13 +62,11 @@ Pairing with the autonomy-from-intent rule above, the launcher also **detects th
 
 The launcher **never** opens a duplicate PR for a feedback/review intent, and **never** silently defaults a feedback/review objective to `pr`. The intent→delivery-mode detection is the same shape as the intent→autonomy detection above: derived from the verb, or prompted once when ambiguous.
 
-### One deliverable, one PR — a quest converges, it does not spray
+### One deliverable, one PR
 
-"May open **many PRs over time**" means **one PR per DISTINCT shippable item** — never repeated, competing PRs for the **same** deliverable. Once a tick has opened a PR for an objective (or a slice of it), every later tick that keeps working **that same deliverable** delivers **onto the existing PR** (`deliver: feedback` on its head branch — commit, push, update in place), exactly as a feedback intent does. A quest opens a *new* PR only for genuinely new, non-overlapping work.
+A quest **converges on one PR per deliverable and never sprays competing PRs** — the shared rule in `core/build` → *One deliverable, one PR — converge, don't spray*. For a quest specifically: "may open **many PRs over time**" is one per **distinct** shippable item across ticks — a later tick working a deliverable an earlier tick already opened a PR for delivers **onto that PR** (`deliver: feedback`), never a new one.
 
-A quest that opens PR #A, then opens PR #B to "reconcile/fold/consolidate" #A, then PR #C to "supersede #A/#B" has **thrashed**: it externalized its own iteration as a pile of conflicting PRs a human must now untangle. This is the quest-level violation of `/gh`'s **one-issue-one-PR** rule (and of `core/completion`'s exit gate — re-attacking a deliverable is remediation *of that PR*, not a new one). Detection cues in a quest's own PR titles — "reconcile", "consolidate", "fold PR #N", "land the canonical", "supersede #N" — are a **red flag that the convergence rule was breached**; a healthy quest amends one PR until it's right.
-
-> **Being built:** the settled candyland plan enforces this structurally — a **shared quest+run gate** classifies each objective as build-on-existing-PR vs generate-new (plan **C4**), and the **quest-lead becomes a converging owner** (plan **Bucket B**) that iterates one deliverable to done rather than spawning fresh runs that each open a PR. Until that lands, the convergence rule above is the doctrine to hold to.
+The settled candyland plan makes this structural rather than disciplinary — a **shared quest+run gate** (plan **C4**) and a **converging quest-lead owner** (plan **Bucket B**); until that lands, the `core/build` rule is the doctrine to hold to.
 
 ## Launch output
 

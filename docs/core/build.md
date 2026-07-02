@@ -45,6 +45,14 @@ When all the work for the branch is green:
 
 What a branch / PR reports as **delivered** must be honest: a branch carrying only unwired (dead-in-prod) units, or a delivery step that opened no PR while in-scope work is still open, is **not** a delivery and is not reported as `done`-success — it carries the distinct terminal state `core/completion` → *Honest terminal state* defines. The one legitimate `prsOpened:0` is **branch delivery** (`deliver=="branch"`): the unit is committed onto the shared branch by design and the parent campaign opens the PR (see *Multi-repo delivery*).
 
+### One deliverable, one PR — converge, don't spray
+
+A builder or loop iterating toward a single deliverable **converges on one PR** — it never opens a pile of competing PRs for the same work. This is the delivery-side companion to `core/completion`'s exit gate (re-attempts are remediation, not new artifacts) and the build-scope analogue of `/gh`'s **one-issue-one-PR** rule. Every builder that composes this contract — a single run, an iterative loop (`/quest`, `/janitor`), or a program (`/campaign`) — inherits it:
+
+- **One PR per DISTINCT shippable item, per impacted repo** — never repeated PRs for the *same* item. "Opens many PRs over time" (an iterative loop) means one per distinct item, not many attempts at one.
+- **Once a PR is open for a deliverable, keep working it in place.** Every later attempt at that same deliverable delivers **onto the existing PR** — `deliver: feedback` on its head branch (commit, push, update in place), never a fresh PR. New PRs are only for genuinely new, non-overlapping work.
+- **Re-attempts are remediation, not new artifacts.** Opening PR #B to "reconcile" #A, then #C to "supersede #A/#B", is **thrash** — it externalizes iteration as conflicting PRs a human must untangle. The tell is a repo accumulating **reconcile / consolidate / fold #N / supersede #N** PR titles for one deliverable instead of a single PR iterated to done.
+
 Merging, deploying, and any irreversible/external action stay outside the build contract — the human's call.
 
 ## Multi-repo delivery — one feature, a PR per impacted repo

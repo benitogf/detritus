@@ -59,14 +59,11 @@ A campaign launches at `L2`, but its **delivery mode** still tracks what the inp
 
 The `--campaign-run` launcher **derives** the delivery mode from the campaign input — reusing the same derivation the quest launcher uses (`deriveQuestDelivery`): a feedback/review **verb** plus a parsed **PR reference** (`#N`) selects `feedback`/`review` carrying that target PR, and anything else falls back to `deliver: pr` (new work). It then sends `deliver`/`targetPr` on the `POST /api/campaigns` body, and candyland propagates them to the affected child quests/runs. Note this is **not** how autonomy is set: campaign autonomy is **fixed at `L2`** (never derived, never `L1`), whereas the delivery mode is derived per the input's verb + PR reference. The launcher **never** opens a duplicate PR for a feedback/review input, and never silently defaults a feedback/review input to `pr`.
 
-### The program converges — it does not spray competing PRs
+### The program converges — one PR per repo
 
-The same **converge, don't spray** rule the quest loop obeys (`flows/build/quest` → *One deliverable, one PR*) holds at the **program level**, and even harder — a campaign coordinates *many* children, so the potential to litter a repo with overlapping PRs is larger. The campaign's shape enforces convergence, and every child must respect it:
+A campaign obeys `core/build` → *One deliverable, one PR — converge, don't spray*, and the program's shape enforces it: child quests/runs **commit onto the shared campaign branch** (`deliver: branch`) and open **no PR of their own**, so the campaign delivers **one PR per impacted repo** at the end — never a scatter of competing child PRs. Re-attempts are the remediation the exit gate above already defines (a run targeting exactly the unmet commitment onto the same branch), never a fresh "reconcile/consolidate/supersede" PR.
 
-- **One PR per impacted repo, from the shared campaign branch.** Child quests/runs decomposed by a campaign **commit onto the campaign branch** (`deliver: branch`) and open **no PR of their own** — the campaign opens the single per-repo PR at delivery. A child that opens its own competing PR for campaign-owned work has broken the model.
-- **Re-attempts are remediation on the same deliverable, never a new PR.** When the intent review finds a commitment unmet, the campaign spawns a remediation run targeting **exactly that commitment** onto the same branch and re-reviews (the `core/completion` exit-gate rule above) — it does **not** open a fresh "reconcile"/"consolidate"/"supersede" PR. A pile of such PRs is the same thrash the quest rule names, one level up: the tell that convergence broke is a repo accumulating competing PRs for one program instead of a single PR iterated to done.
-
-> **Being built:** the settled candyland plan makes this structural at the campaign tier — a campaign decomposes into **child quests** that commit to the campaign branch (no per-quest PR), and a stakeholder + tech-lead pair converge the program to done (plan **Bucket B**) rather than letting children each open PRs. Until that lands, hold to the rule above.
+The settled candyland plan makes this structural (plan **Bucket B**: campaign→child-quests on the campaign branch, a stakeholder + tech-lead pair converging the program); until it lands, the `core/build` rule holds.
 
 ## Control (stop only)
 
