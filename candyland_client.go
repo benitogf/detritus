@@ -42,6 +42,36 @@ func readCandylandRunArgs(promptFile string, folders []string, cwd string) (prom
 	return string(raw), folders, nil
 }
 
+// titleFriendlyPrompt cleans the prompt's FIRST non-empty line so candyland's
+// client-side suggestTitle (first line, /-commands stripped, first 7 words) yields
+// a meaningful run title instead of a markdown artifact. Plan files usually open
+// with a heading like "# Plan: <topic>", which suggestTitle would surface as
+// "# Plan: …" — so strip the leading heading markers and a leading "Plan:" /
+// "Plan —" label, leaving the topic itself as the title line. The body is
+// untouched (the agent still receives the full plan); only the leading line is
+// normalized, and only when it is a heading — a plain first line is left as-is.
+func titleFriendlyPrompt(raw string) string {
+	lines := strings.Split(raw, "\n")
+	for i, ln := range lines {
+		if strings.TrimSpace(ln) == "" {
+			continue
+		}
+		cleaned := strings.TrimLeft(ln, "#")
+		cleaned = strings.TrimSpace(cleaned)
+		for _, prefix := range []string{"Plan:", "Plan —", "Plan -"} {
+			if len(cleaned) >= len(prefix) && strings.EqualFold(cleaned[:len(prefix)], prefix) {
+				cleaned = strings.TrimSpace(cleaned[len(prefix):])
+				break
+			}
+		}
+		if cleaned != "" && cleaned != ln {
+			lines[i] = cleaned
+		}
+		break // only the first non-empty line is the title line
+	}
+	return strings.Join(lines, "\n")
+}
+
 // runCandyland is the `detritus --candyland-run <prompt-file> [folder ...]`
 // handler: read the plan, ensure the sidecar is up, start the run, and print the
 // run id + dashboard URL. ensureCandylandUp failures are returned so the caller
@@ -51,6 +81,8 @@ func runCandyland(detritusPath, promptFile string, folders []string, cwd string)
 	if err != nil {
 		return err
 	}
+	// Normalize the leading line so suggestTitle produces a meaningful title.
+	prompt = titleFriendlyPrompt(prompt)
 	// Recognize a PR-feedback run so it updates the existing PR in place instead
 	// of opening a new one. The primary repo (folders[0]) is where a
 	// branch-state fallback looks for an open PR.
