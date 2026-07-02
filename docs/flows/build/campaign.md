@@ -59,6 +59,12 @@ A campaign launches at `L2`, but its **delivery mode** still tracks what the inp
 
 The `--campaign-run` launcher **derives** the delivery mode from the campaign input — reusing the same derivation the quest launcher uses (`deriveQuestDelivery`): a feedback/review **verb** plus a parsed **PR reference** (`#N`) selects `feedback`/`review` carrying that target PR, and anything else falls back to `deliver: pr` (new work). It then sends `deliver`/`targetPr` on the `POST /api/campaigns` body, and candyland propagates them to the affected child quests/runs. Note this is **not** how autonomy is set: campaign autonomy is **fixed at `L2`** (never derived, never `L1`), whereas the delivery mode is derived per the input's verb + PR reference. The launcher **never** opens a duplicate PR for a feedback/review input, and never silently defaults a feedback/review input to `pr`.
 
+### The program converges — one PR per repo
+
+A campaign obeys `core/build` → *One deliverable, one PR — converge, don't spray*, and the program's shape enforces it: child quests/runs **commit onto the shared campaign branch** (`deliver: branch`) and open **no PR of their own**, so the campaign delivers **one PR per impacted repo** at the end — never a scatter of competing child PRs. Re-attempts are the remediation the exit gate above already defines (a run targeting exactly the unmet commitment onto the same branch), never a fresh "reconcile/consolidate/supersede" PR.
+
+The settled candyland plan makes this structural (plan **Bucket B**: campaign→child-quests on the campaign branch, a stakeholder + tech-lead pair converging the program); until it lands, the `core/build` rule holds.
+
 ## Control (stop only)
 
 Like `/candyland` and `/quest`, a campaign is lean: **observe + audit + stop**, no per-agent control, no resume. Halt a wrong or runaway campaign from the dashboard's Stop — candyland owns the spawned process tree, so it genuinely kills the conductor + child quests/runs. Watch live state in the dashboard rather than polling.
