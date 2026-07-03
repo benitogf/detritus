@@ -18,6 +18,7 @@ related:
   - flows/github/gh-issue-create
   - flows/github/gh-issue-work
   - flows/github/gh-self-review
+  - flows/github/babysit
   - core/loop
   - core/completion
   - flows/principles/truthseeker
@@ -43,7 +44,9 @@ The user is a **non-technical stakeholder**. They describe a requirement — **a
 
 Hand the settled plan from `dream` to `/smith` as its captured **Feature spec** + **Acceptance criteria**, plus any **User-stated rules**, architect decisions, and feature-splits/blockers (`core/completion` dispositions) from the readiness and consistency checks. Because `dream` already did the planning, `/smith` skips its interactive `/plan` pass and proceeds straight to the build phase. Everything downstream — build phase, verification gates, `/gh-self-review` convergence, issue creation and PR opening at *Delivery* — is **inherited from `/smith` verbatim** (`flows/build/smith`), not reimplemented; when `/smith` or `/gh` tighten, `/vibe` inherits the tightening for free.
 
-**`/vibe`'s deliverable is an open PR** — one per impacted repo (`core/build` → *Multi-repo delivery*, inherited via `/smith`). Merging, deploying, and any irreversible or external action stay outside `/vibe`'s scope and remain the human's call; that boundary — not a mid-build pause — is the safety floor. One vibe = one feature: if the requirement is really several *independent* features, split into multiple `/smith` runs and say so when you restate.
+**`/vibe`'s deliverable is a PR carried to merge-on-approval** — one per impacted repo (`core/build` → *Multi-repo delivery*, inherited via `/smith`). Once `/smith` opens the PR(s), `/vibe` **auto-chains into `/babysit`** (`flows/github/babysit`) — the pipeline's universal watch-to-merge phase (`core/flows` → *PR-watch — the universal terminal phase*) — per opened PR. This is the one flow that auto-starts the watch rather than offering it: the stakeholder is non-technical, so leaving a "run `/babysit` next" note they can't action would be a silent drop (`core/completion`'s no-deferral exit gate — the same rule that forbids parking a hazard). The watch loop folds in any reviewer feedback and merges **only** when a SHA-pinned human `APPROVED` review covers HEAD.
+
+**The human review approval is still the gate.** `/vibe` never self-approves and never merges an unreviewed tree — auto-chaining `/babysit` automates the *mechanical* merge a human's approval authorizes, not the *decision* to merge. Deploying and any other irreversible/external action stay outside `/vibe`'s scope and remain the human's call; that boundary — not a mid-build pause — is the safety floor. One vibe = one feature: if the requirement is really several *independent* features, split into multiple `/smith` runs and say so when you restate.
 
 ## Decisions made on your behalf
 
@@ -60,7 +63,7 @@ No approval gate ≠ no quality gate. `/vibe` inherits `/smith`'s **mandatory `/
 - **Planning (`dream`)** resolves in-scope hazards into the plan and splits genuinely separate features into separate plans — it never parks a hazard for the user (`core/dream` → *Hazards — deal with them, never defer*).
 - **Build (`/smith`)** deals with anything that surfaces mid-build inside the PR, as the architect — never auto-files an issue, never defers, never asks the non-technical user to decide. The same rule binds the parallel loop (`roles/tech-lead` → *Dispositions*).
 
-The only things that legitimately leave `/vibe`'s scope are the irreversible/external actions named below (merge, deploy) — the human's call, not deferred work.
+The only things that legitimately leave `/vibe`'s scope are the human's review-approval decision and any external action (deploy) — the human's call, not deferred work. The *mechanical* merge is not deferred: `/babysit` performs it in-flow the moment the human's approval lands (see *Execution*).
 
 ## Guardrails
 
@@ -68,6 +71,6 @@ The only things that legitimately leave `/vibe`'s scope are the irreversible/ext
 - **Never require a separate "go".** A ready plan (from `dream`) is the authorization to build and open the PR.
 - **Plan before building, always.** `/vibe` never hands work to `/smith` without a settled plan — planning is where ambiguity and scope get resolved, so they don't become mid-build stops.
 - **Manage scope as the architect.** Keeping the build inside the planned scope is your job, not a reason to bail mid-build. If the requirement genuinely turns out larger than planned, that is a planning miss to fold back into the plan, not a silent expansion.
-- **Don't reimplement** `dream`, `/smith`, or `/gh` mechanics — compose them, so improvements propagate.
+- **Don't reimplement** `dream`, `/smith`, `/gh`, or `/babysit` mechanics — compose them, so improvements propagate. The watch-to-merge gate (SHA-pinned human approval) lives in `/babysit`; `/vibe` chains it, never restates or relaxes it.
 - **`/vibe` is for real features.** For a trivial change (a typo, a constant bump), `/gh-issue-work` or a direct edit is cheaper — don't spin up the full autonomous loop.
 - **Record, don't narrate.** Technical decisions belong in the PR body's `## Decisions made on your behalf`, not scattered through chat the user won't read.

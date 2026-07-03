@@ -20,6 +20,7 @@ related:
   - core/dream
   - flows/build/smith
   - flows/build/janitor
+  - flows/github/babysit
 ---
 
 # /forge — In-Process Implementation Loop
@@ -77,4 +78,4 @@ These are **recorded here, not sent to the user** — the ledger is the audit tr
 - Never plan inside `/forge` — consume the contract; if it's missing or ambiguous, stop and route to `/plan` or `/vibe`.
 - Completion (the exit gate — every acceptance box green, verification green, clean self-review, no new deferral markers) and disposition of out-of-scope work follow `core/completion`, inherited via `roles/tech-lead` and `core/build` — not restated here. In-scope work is done now; only a genuinely separate feature (disposition 2) or a capability blocker (disposition 3, with its postmortem) surfaces for the developer to triage — never a decision, which the tech-lead resolves per *The forge decision rule*.
 - Don't reimplement `roles/tech-lead`, `core/build`, or PR creation — compose them.
-- Deliver one PR per impacted repo for the plan; merging and anything irreversible stay the human's call.
+- Deliver one PR per impacted repo for the plan; merging and anything irreversible stay the human's call. When the PR(s) open, **offer** `/babysit <pr>` (`flows/github/babysit`) as the optional watch-to-merge continuation (`core/flows` → *PR-watch — the universal terminal phase*) — each PR watched to merge on a SHA-pinned human approval. Offer it; don't auto-start it (an unbidden watch loop is scope the plan didn't grant).

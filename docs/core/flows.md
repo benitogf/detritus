@@ -20,6 +20,8 @@ related:
   - flows/build/forge
   - flows/build/smith
   - flows/plan/vibe
+  - flows/github/babysit
+  - flows/github/gh
 ---
 
 # Flows Core — one pipeline, many instantiations
@@ -37,6 +39,7 @@ plan → execute → review-with-rework → deliver
 - **execute** — build units per `core/build` (smallest delta → verification hard gate → commit).
 - **review-with-rework** — a fresh-context critic that can send work back, looping until clean, bounded: `/gh-self-review` convergence in-session; the reviewer's fix→re-review loop in the sidecar. Mandatory at every level.
 - **deliver** — composes `/gh`; modes are a **closed enum — `pr | branch | feedback | review` (do NOT invent others)** per `core/build` → *Delivery modes*. Never merges — the human merge is the real gate.
+- **watch (optional terminal phase)** — after `deliver` opens a PR, a flow may hand it to `/babysit` (`flows/github/babysit`) to carry it to merge: each tick folds in review feedback (via `/gh-feedback-work`) and merges the moment a **SHA-pinned human `APPROVED` review** covers the current HEAD. This does **not** violate "never merges — the human merge is the gate": the human approval *is* the gate, and `/babysit` only executes the mechanical merge it authorizes. Watch is opt-in per flow (see *PR-watch — the universal terminal phase* below), never a stage a flow may add on its own initiative to force a merge past review.
 
 ## Taxonomy
 
@@ -67,9 +70,21 @@ In-session bounded homologues of quest are `/smith` (single agent) and `/forge` 
 - The bounded/open-ended split is **explicit at invocation** (which command was launched), never detected at runtime from objective wording.
 - The shared doctrine all of this instantiates is `core/build` → *One deliverable, one PR — converge, don't spray*.
 
+## PR-watch — the universal terminal phase
+
+`/babysit` (`flows/github/babysit`) is the pipeline's single **watch-to-merge** step — the one place any flow's work reaches `merged`. It composes, it does not merge on its own authority: each tick it dispatches `/gh-feedback-work` for reviewer feedback and merges only when an `APPROVED` review's `commit_id` equals the current HEAD SHA (a push invalidates every prior approval). It is a **terminating loop** — merge is the exit — not a maintenance loop.
+
+Because merge is irreversible and gated on a human's review, watch is **opt-in and uniform** across every PR-opening flow; the flow chooses how it offers the phase, but the merge gate is identical:
+
+- **Interactive developer flows** — `/smith`, `/forge`, `/gh-issue-work` open the PR, report the URL, and **offer** `/babysit` as the one-command continuation that watches it to merge. They do not auto-run it: a developer often merges by hand, and starting a watch loop unbidden is the flow expanding its own scope.
+- **Executive / autonomous intake** — `/vibe` **auto-chains** into `/babysit` per opened PR. Its stakeholder is non-technical: leaving a "run `/babysit` next" note they can't action is a silent drop (`core/completion`'s no-deferral rule), and the human's review approval is still the merge gate. The autonomy ends at merge-on-approval, never at a self-approved merge.
+- **Sidecar launchers** — `/candyland`, `/quest`, `/campaign` are observe-and-stop-only (`core/sidecar`) and **never merge inside the sidecar**; after the per-repo PRs open, the launcher names each PR and points the user at `/babysit` (in-session) to watch it to merge.
+
+No flow ever self-approves. `/babysit`'s SHA-pinned approval invariant is the load-bearing guard — the watch phase can only merge what a human approved on the exact HEAD it merges.
+
 ## Safety rails
 
-No flow merges a PR — the human merge is the gate. The dashboard Stop kills the sidecar's whole process tree; budget/concurrency caps and the bounded-loop family (every agentic loop has exactly one K-attempt bound, `core/completion`) contain runaways.
+No flow merges a PR on its own authority — the human's review approval is the gate. The only path to `merged` is the optional `/babysit` watch phase above, and it merges solely on a SHA-pinned human `APPROVED` review (never self-approved, never admin-overridden). The dashboard Stop kills the sidecar's whole process tree; budget/concurrency caps and the bounded-loop family (every agentic loop has exactly one K-attempt bound, `core/completion`) contain runaways.
 
 ## In-session vs sidecar — the trade
 
