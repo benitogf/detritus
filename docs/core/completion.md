@@ -76,7 +76,7 @@ Each acceptance criterion is written as a verifiable contract: the **desired end
 ## The three dispositions
 
 For ANY work a builder or loop encounters, exactly one disposition applies. This is a **closed enum —
-`1 in-scope-now | 2 feature-split | 3 hard-blocker` (do NOT invent others)**. "Hazard" is **not** a
+`1 in-scope-now | 2 feature-split | 3 capability-blocker` (do NOT invent others)**. "Hazard" is **not** a
 fourth option — it is retired as a catch-all and resolves only to disposition 2 or 3.
 
 1. **In-scope & handle-able now → DO IT NOW.** The default; it covers the vast majority. No phases, no
@@ -90,7 +90,7 @@ fourth option — it is retired as a catch-all and resolves only to disposition 
      *Blockers & feature-splits* section.
    - Autonomous (`/vibe`): the architect decides, records, and splits a truly separate feature into its
      own plan.
-3. **Hard blocker = capability failure only → SURFACE as a blocker.** A failure **no decision can
+3. **Capability blocker = capability failure only → SURFACE as a blocker.** A failure **no decision can
    resolve**: missing credentials, absent permissions, unreachable infrastructure, a toolchain broken
    *outside* the repo. This is a **last breath, not a shortcut** — `blocked` may NOT be used to avoid
    work, skip investigation, or dodge root-cause analysis. It carries a **postmortem** (see *Closed
@@ -162,7 +162,7 @@ a deferral.
 review / verdict step reports an unmet acceptance criterion or commitment, the orchestrator must feed
 that gap back as new work — spawn a unit targeting **exactly the unmet item** (carrying the reviewer's
 evidence) and re-verify — bounded by a remediation budget (the K-attempt circuit breaker in M6). Only a
-gap that survives the budget is a disposition-3 hard blocker. Parking in terminal `blocked` on the
+gap that survives the budget is a disposition-3 capability blocker. Parking in terminal `blocked` on the
 **first** failing review while the gap is still finishable is the silent-deferral failure at the
 **orchestrator / supervisor level**, forbidden exactly as it is at the single-unit level. This binds a
 program-level supervisor reviewing per-commitment verdicts (e.g. a campaign's intent review) as much as

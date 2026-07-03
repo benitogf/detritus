@@ -2,7 +2,6 @@
 description: Learn from conversation corrections - distill manual fixes into KB updates
 triggers:
   - grow
-  - learn
   - correction
   - you missed
   - wrong approach

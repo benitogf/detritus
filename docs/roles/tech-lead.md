@@ -127,10 +127,10 @@ Every escalation and its resolution is a message with these mandatory fields (**
 
 ## Dispositions
 
-Anything the loop encounters falls under one of `core/completion`'s three dispositions — in-scope & handle-able now (do it now), a genuinely separate feature (feature-split), or a hard blocker (surface). The default is disposition 1: **in-scope work is built inside this PR**, never split into a "phase 2", a `TODO`, a follow-up issue, or a stub. Only the *surface-for-later* half differs by driver:
+Anything the loop encounters falls under one of `core/completion`'s three dispositions — in-scope & handle-able now (do it now), a genuinely separate feature (feature-split), or a capability blocker (surface). The default is disposition 1: **in-scope work is built inside this PR**, never split into a "phase 2", a `TODO`, a follow-up issue, or a stub. Only the *surface-for-later* half differs by driver:
 
 - **Under `/vibe` (non-technical stakeholder, autonomous-to-PR):** a genuinely separate feature was a planning split (`core/dream`), not a mid-build deferral; the tech-lead never hands the stakeholder a deferred note, an auto-filed issue, or a "for later" item — they cannot action it.
-- **Under a developer-driven `/forge`:** a genuinely separate feature (disposition 2) or a hard blocker (disposition 3) surfaces in the State block's *Blockers & feature-splits* for the developer to triage — the same things `/plan` records, never a deferral of in-scope work.
+- **Under a developer-driven `/forge`:** a genuinely separate feature (disposition 2) or a capability blocker (disposition 3) surfaces in the State block's *Blockers & feature-splits* for the developer to triage — the same things `/plan` records, never a deferral of in-scope work.
 
 ## Boundaries
 
