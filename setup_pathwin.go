@@ -32,33 +32,44 @@ func computeWindowsUserPath(existing, dir string) (string, bool) {
 }
 
 // readWindowsUserPath returns the persistent user PATH from the registry via
-// `reg query`, or "" when it is unset. Uses reg/setx rather than the registry
-// API so this file compiles on every platform.
-func readWindowsUserPath() string {
+// `reg query`, or "" when it is unset, together with its registry value type
+// (REG_SZ or REG_EXPAND_SZ). Uses reg rather than the registry API so this file
+// compiles on every platform. The type is preserved on write so an existing
+// expandable PATH is not silently downgraded.
+func readWindowsUserPath() (value, regType string) {
 	out, err := exec.Command("reg", "query", `HKCU\Environment`, "/v", "PATH").Output()
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	for _, line := range strings.Split(string(out), "\n") {
 		fields := strings.Fields(strings.TrimSpace(line))
 		if len(fields) >= 3 && strings.EqualFold(fields[0], "PATH") {
 			// reg output: "PATH  REG_SZ  <value>"; value is everything after the type.
 			idx := strings.Index(line, fields[1])
-			return strings.TrimSpace(line[idx+len(fields[1]):])
+			return strings.TrimSpace(line[idx+len(fields[1]):]), fields[1]
 		}
 	}
-	return ""
+	return "", ""
 }
 
-// addDirToWindowsUserPath persists dir onto the user PATH via setx when it is
-// not already present.
+// addDirToWindowsUserPath persists dir onto the user PATH when it is not already
+// present. It uses `reg add` rather than `setx`: setx silently truncates the
+// user PATH at 1024 chars and always writes REG_SZ, which would downgrade an
+// existing REG_EXPAND_SZ value and break %VAR% expansion. `reg add` has no such
+// length limit, and we preserve the existing value type (defaulting to
+// REG_EXPAND_SZ so newly created PATHs stay expandable).
 func addDirToWindowsUserPath(dir string) error {
-	newPath, changed := computeWindowsUserPath(readWindowsUserPath(), dir)
+	existing, regType := readWindowsUserPath()
+	newPath, changed := computeWindowsUserPath(existing, dir)
 	if !changed {
 		return nil
 	}
-	if err := exec.Command("setx", "PATH", newPath).Run(); err != nil {
-		return fmt.Errorf("setx PATH: %w", err)
+	if !strings.EqualFold(regType, "REG_SZ") {
+		regType = "REG_EXPAND_SZ"
+	}
+	cmd := exec.Command("reg", "add", `HKCU\Environment`, "/v", "PATH", "/t", regType, "/d", newPath, "/f")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("reg add PATH: %w", err)
 	}
 	return nil
 }
