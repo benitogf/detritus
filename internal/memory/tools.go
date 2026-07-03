@@ -19,6 +19,56 @@ func RegisterTools(server *mcp.Server) {
 	registerPut(server)
 	registerSearch(server)
 	registerGet(server)
+	registerStaleness(server)
+}
+
+type stalenessArgs struct {
+	Dir string `json:"dir,omitempty" jsonschema:"Directory of the Go tree to check references against (any dir under it works; resolved to its project root). Default: the current project."`
+}
+
+func registerStaleness(server *mcp.Server) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "skill_staleness",
+		Description: "Advisory: scan active verified lessons for code references (backticked symbols like `Foo()`/`pkg.Foo`/`T.Method`, and source-file paths like `internal/code/store.go`) that have gone DEAD against the live tree at dir. Reports only — never edits, supersedes, or deletes a lesson. Symbols on a tree that doesn't compile are reported as \"unknown\" (never dead). Use to find lessons whose code has drifted and may need re-verifying.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args stalenessArgs) (*mcp.CallToolResult, StalenessResult, error) {
+		res := CheckStaleness(args.Dir)
+		return textResult(renderStaleness(res)), res, nil
+	})
+}
+
+// renderStaleness renders a staleness result as a readable text block for the
+// back-compat content channel (the structured result carries the machine shape).
+func renderStaleness(res StalenessResult) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "checked %d active lesson(s)\n", res.Checked)
+	if res.Note != "" {
+		fmt.Fprintf(&b, "note: %s\n", res.Note)
+	}
+	if len(res.Stale) == 0 {
+		b.WriteString("\nno stale code references found\n")
+	} else {
+		fmt.Fprintf(&b, "\nstale lessons (%d):\n", len(res.Stale))
+		for _, l := range res.Stale {
+			fmt.Fprintf(&b, "  %s — %s\n", l.ID, l.Title)
+			for _, r := range l.DeadRefs {
+				fmt.Fprintf(&b, "    dead %s: %s\n", r.Kind, r.Ref)
+			}
+		}
+	}
+	if len(res.Unknown) > 0 {
+		fmt.Fprintf(&b, "\nunverifiable references (%d lesson(s) — tree did not fully load):\n", len(res.Unknown))
+		for _, l := range res.Unknown {
+			fmt.Fprintf(&b, "  %s — %s\n", l.ID, l.Title)
+			for _, r := range l.UnknownRefs {
+				fmt.Fprintf(&b, "    unknown %s: %s\n", r.Kind, r.Ref)
+			}
+		}
+	}
+	if res.Truncated {
+		fmt.Fprintf(&b, "\n… truncated at %d lessons (corpus is large)\n", maxLessonsScanned)
+	}
+	return strings.TrimSpace(b.String())
 }
 
 type putArgs struct {
