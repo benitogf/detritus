@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -86,7 +87,10 @@ func runCandyland(detritusPath, promptFile string, folders []string, cwd string)
 	// Recognize a PR-feedback run so it updates the existing PR in place instead
 	// of opening a new one. The primary repo (folders[0]) is where a
 	// branch-state fallback looks for an open PR.
-	deliver, targetPR := resolveCandylandDelivery(prompt, folders[0])
+	deliver, targetPR, err := resolveCandylandDelivery(prompt, folders[0])
+	if err != nil {
+		return err
+	}
 	if err := ensureCandylandUp(detritusPath); err != nil {
 		return err
 	}
@@ -95,36 +99,33 @@ func runCandyland(detritusPath, promptFile string, folders []string, cwd string)
 		return err
 	}
 	fmt.Printf("candyland run started: %s\n", id)
-	switch deliver {
-	case "feedback":
-		fmt.Printf("Delivery: feedback → updating PR #%d in place (no new PR)\n", targetPR)
-	case "review":
-		fmt.Printf("Delivery: review → reporting on PR #%d (no new PR)\n", targetPR)
-	}
-	fmt.Printf("Dashboard: %s\n", candylandDashboardURL)
+	fmt.Printf("Deliver: %s (%s)\n", deliver, questDeliveryEffect(deliver, targetPR))
+	fmt.Printf("API: %s\n", candylandBaseURL)
+	fmt.Printf("UI / Dashboard: %s\n", candylandDashboardURL)
 	return nil
 }
 
 // resolveCandylandDelivery classifies a --candyland-run into a delivery mode +
 // target PR, so a feedback run updates the existing PR in place instead of
-// opening a new one. Two tiers, text first:
-//   - the plan text (deriveQuestDelivery, reused from the quest path — an explicit
-//     "address feedback on PR #N" / "review PR #N" marker); if it names a PR, that
-//     wins and can select feedback OR review.
+// opening a new one. Two tiers, reference first:
+//   - the plan text's PR/issue reference, classified against live gh state
+//     (resolveLaunchDelivery — the gh-mirror classification all launchers share);
+//     an explicit reference wins and can select feedback OR review, or abort on
+//     a merged/closed target.
 //   - otherwise fall back to repo's current-branch open PR (branchPRLookup) — the
 //     same "the branch already has a PR" signal /gh infers from — which can only
 //     mean feedback (there is a PR to update).
-//
-// Pure but for the injected branchPRLookup (currentBranchPR in production, a stub
-// in tests), so the tier ordering is deterministically testable.
-func resolveCandylandDelivery(prompt, repo string) (deliver string, targetPR int) {
-	deliver, targetPR = deriveQuestDelivery(prompt)
-	if targetPR == 0 {
+func resolveCandylandDelivery(prompt, repo string) (deliver string, targetPR int, err error) {
+	deliver, targetPR, err = resolveLaunchDelivery(prompt, repo)
+	if err != nil {
+		return "", 0, err
+	}
+	if deliver == "pr" && targetPR == 0 {
 		if pr := branchPRLookup(repo); pr > 0 {
-			return "feedback", pr
+			return "feedback", pr, nil
 		}
 	}
-	return deliver, targetPR
+	return deliver, targetPR, nil
 }
 
 // branchPRLookup resolves the open PR for a repo's current branch. It is a var so
@@ -162,6 +163,351 @@ func parseGHPRNumber(out string) int {
 	return n
 }
 
+// launchClassification is the outcome of classifyLaunchInput — the delivery mode
+// (deliver ∈ {pr,feedback,review}) and target PR derived from a launcher's input.
+// Ambiguous marks an open target PR with no decisive signal (the CLI asks once via
+// ambiguousDeliveryPrompt before launch); Degraded marks a `gh` failure that fell
+// back to marker-only derivation, so the caller can surface the reduced confidence.
+type launchClassification struct {
+	Deliver   string
+	TargetPR  int
+	Ambiguous bool
+	Degraded  bool
+}
+
+// launchReference is a parsed PR/issue reference from a launcher's input.
+type launchReference struct {
+	owner string
+	repo  string
+	num   int
+	bare  bool // "#N" with no owner/repo — resolve owner/repo from the cwd repo
+}
+
+var (
+	refURLRe  = regexp.MustCompile(`github\.com/([\w.\-]+)/([\w.\-]+)/(?:pull|issues)/(\d+)`)
+	refNWORe  = regexp.MustCompile(`([\w.\-]+)/([\w.\-]+)#(\d+)`)
+	refBareRe = regexp.MustCompile(`#(\d+)`)
+)
+
+// parseLaunchReference extracts the first PR/issue reference from input: a full
+// github.com URL, an owner/repo#N shorthand, or a bare #N (resolved against the
+// cwd repo). Returns found=false when the input names no reference (new work).
+func parseLaunchReference(input string) (launchReference, bool) {
+	if m := refURLRe.FindStringSubmatch(input); m != nil {
+		return launchReference{owner: m[1], repo: m[2], num: atoiOr0(m[3])}, true
+	}
+	if m := refNWORe.FindStringSubmatch(input); m != nil {
+		return launchReference{owner: m[1], repo: m[2], num: atoiOr0(m[3])}, true
+	}
+	if m := refBareRe.FindStringSubmatch(input); m != nil {
+		return launchReference{num: atoiOr0(m[1]), bare: true}, true
+	}
+	return launchReference{}, false
+}
+
+// classifyLaunchInput mirrors the flows/github/gh Phase 0/1 classification OUTCOME
+// against freshly-fetched (stubbed in tests) gh state, mapped to a delivery mode.
+// It is the one classifier all sidecar launchers share. Rows (see the /gh doc):
+//   - open PR + unaddressed CHANGES_REQUESTED → feedback (even with review text)
+//   - open PR + review-intent text → review
+//   - open PR + post-last-commit comments, no review text → feedback
+//   - open PR + none of the above → Ambiguous (CLI asks once before launch)
+//   - open issue → pr (the issue ref stays in the objective)
+//   - merged/closed PR or closed issue → error (verbatim state), aborting launch
+//   - no reference → pr (new work; gh is never touched)
+//
+// A `gh api` failure degrades to marker-only derivation (deriveMarkerDelivery) and
+// signals Degraded, so a missing/erroring gh never fails the launch.
+func classifyLaunchInput(input, cwd string) (launchClassification, error) {
+	ref, found := parseLaunchReference(input)
+	if !found {
+		return launchClassification{Deliver: "pr"}, nil
+	}
+	if ref.bare {
+		nwo := ghRepoNWO(cwd)
+		if nwo == "" {
+			return degradedClassification(input), nil
+		}
+		parts := strings.SplitN(strings.TrimSpace(nwo), "/", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return degradedClassification(input), nil
+		}
+		ref.owner, ref.repo = parts[0], parts[1]
+	}
+
+	issue, err := ghAPIJSON(cwd, fmt.Sprintf("repos/%s/%s/issues/%d", ref.owner, ref.repo, ref.num))
+	if err != nil {
+		return degradedClassification(input), nil
+	}
+
+	// .pull_request present & non-null ⇒ a PR; otherwise an issue.
+	if pr, ok := issue["pull_request"]; !ok || pr == nil {
+		state, _ := issue["state"].(string)
+		if state != "open" {
+			return launchClassification{}, fmt.Errorf("issue #%d in %s/%s is %s — not open work; aborting launch", ref.num, ref.owner, ref.repo, state)
+		}
+		return launchClassification{Deliver: "pr"}, nil // new work; issue ref stays in the objective
+	}
+
+	// A PR: authoritative state comes from the pulls endpoint (merged vs closed).
+	pull, err := ghAPIJSON(cwd, fmt.Sprintf("repos/%s/%s/pulls/%d", ref.owner, ref.repo, ref.num))
+	if err != nil {
+		return degradedClassification(input), nil
+	}
+	state, _ := pull["state"].(string)
+	if state != "open" {
+		verb := "closed"
+		if mergedAt, ok := pull["merged_at"]; ok && mergedAt != nil {
+			verb = "merged"
+		}
+		return launchClassification{}, fmt.Errorf("PR #%d in %s/%s is %s — no longer open; aborting launch", ref.num, ref.owner, ref.repo, verb)
+	}
+
+	deliver := classifyOpenPR(cwd, ref, input)
+	if deliver == "" {
+		return launchClassification{TargetPR: ref.num, Ambiguous: true}, nil
+	}
+	return launchClassification{Deliver: deliver, TargetPR: ref.num}, nil
+}
+
+// classifyOpenPR decides feedback vs review vs "" (ambiguous) for an OPEN PR,
+// combining live review/commit/comment state with the input's intent text:
+//  1. an unaddressed CHANGES_REQUESTED (latest decisive review per reviewer) →
+//     feedback, even if the text asks for a review;
+//  2. review-intent text → review;
+//  3. feedback-intent text → feedback;
+//  4. comments after the last commit (no review text) → feedback;
+//  5. otherwise "" — the caller marks it Ambiguous and asks once.
+func classifyOpenPR(cwd string, ref launchReference, input string) string {
+	if unaddressedChangesRequested(cwd, ref) {
+		return "feedback"
+	}
+	lower := strings.ToLower(input)
+	if hasReviewIntent(lower) {
+		return "review"
+	}
+	if hasFeedbackIntent(lower) {
+		return "feedback"
+	}
+	if hasPostCommitComments(cwd, ref) {
+		return "feedback"
+	}
+	return ""
+}
+
+// unaddressedChangesRequested reports whether any reviewer's latest DECISIVE review
+// (APPROVED/CHANGES_REQUESTED/DISMISSED, in submission order — COMMENTED/PENDING
+// dropped) is CHANGES_REQUESTED. gh failure ⇒ false (no blocker seen).
+func unaddressedChangesRequested(cwd string, ref launchReference) bool {
+	arr, err := ghAPIArray(cwd, fmt.Sprintf("repos/%s/%s/pulls/%d/reviews", ref.owner, ref.repo, ref.num))
+	if err != nil {
+		return false
+	}
+	latest := map[string]string{}
+	for _, r := range arr {
+		m, _ := r.(map[string]any)
+		state, _ := m["state"].(string)
+		if state != "APPROVED" && state != "CHANGES_REQUESTED" && state != "DISMISSED" {
+			continue // COMMENTED / PENDING are not decisive
+		}
+		user, _ := m["user"].(map[string]any)
+		login, _ := user["login"].(string)
+		latest[login] = state
+	}
+	for _, state := range latest {
+		if state == "CHANGES_REQUESTED" {
+			return true
+		}
+	}
+	return false
+}
+
+// hasPostCommitComments reports whether the PR has any issue comment created after
+// its last commit. gh failure ⇒ false.
+func hasPostCommitComments(cwd string, ref launchReference) bool {
+	commits, err := ghAPIArray(cwd, fmt.Sprintf("repos/%s/%s/pulls/%d/commits", ref.owner, ref.repo, ref.num))
+	if err != nil {
+		return false
+	}
+	var last time.Time
+	for _, c := range commits {
+		m, _ := c.(map[string]any)
+		commit, _ := m["commit"].(map[string]any)
+		committer, _ := commit["committer"].(map[string]any)
+		if ts := parseTime(committer["date"]); ts.After(last) {
+			last = ts
+		}
+	}
+	comments, err := ghAPIArray(cwd, fmt.Sprintf("repos/%s/%s/issues/%d/comments", ref.owner, ref.repo, ref.num))
+	if err != nil {
+		return false
+	}
+	for _, c := range comments {
+		m, _ := c.(map[string]any)
+		if parseTime(m["created_at"]).After(last) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasReviewIntent reports review/check-only intent in the (lowercased) input.
+func hasReviewIntent(lower string) bool {
+	return containsWord(lower, "review") || containsWord(lower, "audit")
+}
+
+// hasFeedbackIntent reports feedback/fix-on-a-PR intent in the (lowercased) input.
+func hasFeedbackIntent(lower string) bool {
+	if strings.Contains(lower, "feedback") {
+		return true
+	}
+	for _, marker := range questFeedbackMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// degradedClassification is the `gh`-unavailable fallback: marker-only derivation
+// (deriveMarkerDelivery) with Degraded set so the caller can flag reduced confidence.
+func degradedClassification(input string) launchClassification {
+	deliver, pr := deriveMarkerDelivery(input)
+	return launchClassification{Deliver: deliver, TargetPR: pr, Degraded: true}
+}
+
+// ambiguousDeliveryPrompt asks the operator to resolve an ambiguous open PR
+// (review / feedback / cancel). It is a var so tests substitute the interaction.
+var ambiguousDeliveryPrompt = func(pr int) string {
+	fmt.Printf("PR #%d is open with no decisive review/comment signal.\n", pr)
+	fmt.Print("Deliver as [review/feedback/cancel]? ")
+	var choice string
+	_, _ = fmt.Scanln(&choice)
+	return strings.ToLower(strings.TrimSpace(choice))
+}
+
+// resolveLaunchDelivery is the gh-mirror classification all sidecar launchers
+// share: it classifies input against live gh state and resolves an ambiguous open
+// PR by asking once (ambiguousDeliveryPrompt). A merged/closed target errors; a
+// cancelled ambiguous prompt errors (aborting the launch).
+func resolveLaunchDelivery(input, cwd string) (deliver string, targetPR int, err error) {
+	c, err := classifyLaunchInput(input, cwd)
+	if err != nil {
+		return "", 0, err
+	}
+	if c.Ambiguous {
+		switch ambiguousDeliveryPrompt(c.TargetPR) {
+		case "review":
+			return "review", c.TargetPR, nil
+		case "feedback":
+			return "feedback", c.TargetPR, nil
+		default:
+			return "", 0, fmt.Errorf("launch cancelled: ambiguous delivery for PR #%d", c.TargetPR)
+		}
+	}
+	return c.Deliver, c.TargetPR, nil
+}
+
+// deriveShortTitle yields a compact display label from an objective/plan/input:
+// leading markdown heading markers and an Objective:/Goal:/Plan: prefix stripped,
+// first non-empty line only, capped at seven words (…-elided beyond that).
+func deriveShortTitle(objective string) string {
+	line := ""
+	for _, ln := range strings.Split(objective, "\n") {
+		if strings.TrimSpace(ln) != "" {
+			line = strings.TrimSpace(ln)
+			break
+		}
+	}
+	if line == "" {
+		return ""
+	}
+	line = strings.TrimSpace(strings.TrimLeft(line, "#"))
+	for _, prefix := range []string{"Objective:", "Goal:", "Plan:"} {
+		if len(line) >= len(prefix) && strings.EqualFold(line[:len(prefix)], prefix) {
+			line = strings.TrimSpace(line[len(prefix):])
+			break
+		}
+	}
+	words := strings.Fields(line)
+	if len(words) > 7 {
+		return strings.Join(words[:7], " ") + "…"
+	}
+	return line
+}
+
+// ghAPIJSON runs `gh api <path>` in cwd and decodes a JSON object.
+func ghAPIJSON(cwd, path string) (map[string]any, error) {
+	out, err := ghAPIRaw(cwd, path)
+	if err != nil {
+		return nil, err
+	}
+	m := map[string]any{}
+	if err := json.Unmarshal(out, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// ghAPIArray runs `gh api <path>` in cwd and decodes a JSON array.
+func ghAPIArray(cwd, path string) ([]any, error) {
+	out, err := ghAPIRaw(cwd, path)
+	if err != nil {
+		return nil, err
+	}
+	var arr []any
+	if err := json.Unmarshal(out, &arr); err != nil {
+		return nil, err
+	}
+	return arr, nil
+}
+
+// ghAPIRaw shells out to `gh api <path>` in cwd with a bounded timeout — the same
+// gh shell-out + PATH-stub pattern currentBranchPR uses (no live network in tests).
+func ghAPIRaw(cwd, path string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "gh", "api", path)
+	cmd.Dir = cwd
+	return cmd.Output()
+}
+
+// ghRepoNWO resolves the cwd repo's owner/name via `gh repo view`, or "" on any
+// failure (so a bare #N with no resolvable repo degrades to marker derivation).
+func ghRepoNWO(cwd string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner")
+	cmd.Dir = cwd
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// parseTime parses an RFC3339 timestamp from a JSON string value, or zero.
+func parseTime(v any) time.Time {
+	s, _ := v.(string)
+	if s == "" {
+		return time.Time{}
+	}
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
+// atoiOr0 parses n as a base-10 int, returning 0 on failure.
+func atoiOr0(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
 // readQuestRunArgs parses `--quest-run` args: the objective file path and
 // optional folders. It reads the objective from objectiveFile (keeps a large
 // objective off argv) and defaults folders to [cwd] when none given.
@@ -174,50 +520,6 @@ func readQuestRunArgs(objectiveFile string, folders []string, cwd string) (objec
 		folders = []string{cwd}
 	}
 	return string(raw), folders, nil
-}
-
-// questExecuteVerbs are the execute-shaped intent markers that flip a quest from
-// report-only (L1) to executing (L2). Kept conservative: only verbs that clearly
-// ask for a code change. Matched case-insensitively as whole words anywhere in
-// the objective. Add to this list deliberately — a false positive launches runs.
-var questExecuteVerbs = []string{
-	"solve", "fix", "wire", "implement", "build", "add", "refactor",
-	"update pr", "update the pr", "rework", "patch", "migrate", "rewrite",
-}
-
-// deriveQuestAutonomy classifies an objective's intent into an autonomy level.
-// Execute-shaped objectives (asking for a code change) get the executing level
-// "L2" so candyland launches runs, while deliver:"pr" keeps the PR gate as the
-// safety rail. Anything else stays report-only "L1". Pure: string in → level
-// out, so it is deterministic and separately testable. Detection is intentionally
-// conservative — see questExecuteVerbs.
-func deriveQuestAutonomy(objective string) string {
-	lower := strings.ToLower(objective)
-	for _, verb := range questExecuteVerbs {
-		if containsWord(lower, verb) {
-			return "L2"
-		}
-	}
-	return "L1"
-}
-
-// resolveQuestAutonomy is the effective autonomy for a launch given the derived
-// delivery mode AND the objective. It is pure (mode + objective in → level out) so
-// it is separately testable, and it keeps autonomy anchored to the OBJECTIVE'S VERB,
-// never hardcoded by delivery mode:
-//
-//   - feedback → L2: a feedback intent always changes code (updates a PR in place).
-//   - review / pr → derived from the verb (deriveQuestAutonomy): a PURE review
-//     ("review PR #N", "check PR #N against the spec") has no execute verb and stays
-//     report-only (L1), but a review objective that ALSO asks to act ("fix any
-//     problems on PR #N, then review the PR") carries an execute verb and runs
-//     executing (L2). Forcing review→L1 unconditionally is the bug that stranded a
-//     "fix problems on PR" quest at report-only just because it said "review the PR".
-func resolveQuestAutonomy(deliver, objective string) string {
-	if deliver == "feedback" {
-		return "L2"
-	}
-	return deriveQuestAutonomy(objective)
 }
 
 // questFeedbackMarkers are the FEEDBACK/FIX-on-an-existing-PR intent markers.
@@ -241,21 +543,22 @@ var questReviewMarkers = []string{
 	"review #", "check #", "look at pr", "audit pr",
 }
 
-// deriveQuestDelivery classifies an objective into a delivery mode and target
-// PR, mirroring /gh-feedback-work's "update the existing PR in place, never open
-// a new PR" model. It is pure: string in → (mode, prNumber) out, so it is
-// deterministic and separately testable. Detection is intentionally conservative
-// — markers are explicit phrases (questFeedbackMarkers / questReviewMarkers) and
-// a PR number must parse, or it falls back to the new-work default.
+// deriveMarkerDelivery is the marker-only (text-heuristic) delivery classifier,
+// kept ONLY as the degraded fallback for when `gh api` is unavailable — the
+// primary classifier is classifyLaunchInput, which mirrors flows/github/gh
+// Phase 0/1 against live gh state. It is pure: string in → (mode, prNumber) out.
+// Detection is intentionally conservative — markers are explicit phrases
+// (questFeedbackMarkers / questReviewMarkers) and a PR number must parse, or it
+// falls back to the new-work default.
 //
 //   - FEEDBACK/FIX intent + a PR number → ("feedback", N): update PR #N in place.
 //   - REVIEW/CHECK-only intent + a PR number → ("review", N): report on PR #N.
-//   - anything else → ("pr", 0): new work, new PR (today's default).
+//   - anything else → ("pr", 0): new work, new PR (the default).
 //
 // Feedback wins over review when both kinds of marker appear, since a fix intent
 // is the stronger signal (it changes code). A mode that needs a PR number but
 // finds none degrades to ("pr", 0) rather than guessing a target.
-func deriveQuestDelivery(objective string) (deliver string, targetPR int) {
+func deriveMarkerDelivery(objective string) (deliver string, targetPR int) {
 	lower := strings.ToLower(objective)
 	pr := parsePRNumber(lower)
 	if pr == 0 {
@@ -352,18 +655,6 @@ func isLetter(b byte) bool {
 	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
-// questAutonomyEffect returns a one-line "what this will / won't do" description
-// derived from the autonomy level — so the launch output tells the user what the
-// quest is actually permitted to do.
-func questAutonomyEffect(autonomy string) string {
-	switch autonomy {
-	case "L2":
-		return "launches runs and opens a PR per change for your review — never merges"
-	default:
-		return "surfaces findings only — no code changes, no PRs"
-	}
-}
-
 // questDeliveryEffect returns a one-line honest description of what the deliver
 // mode will produce, so the launch output never overstates the outcome.
 // feedback updates the referenced PR in place (no new PR); review reports on it
@@ -380,31 +671,14 @@ func questDeliveryEffect(deliver string, targetPR int) string {
 	}
 }
 
-// questLaunchSummary renders the enriched launch output for a started quest: the
-// quest id, autonomy level, deliver mode, a what-will/won't-do line, and the API
-// + UI ports with a remote/WSL port-forwarding hint. When the effective autonomy
-// is L1 (report-only) for an execute-shaped objective it leads with a LOUD
-// warning, since the user asked for a change but the quest will only report.
-//
-// autonomy is supplied by the caller independently of objective; this guard fires
-// whenever the two contradict — an L1 (report-only) autonomy against an
-// execute-shaped objective (an execute verb present). The --quest-run path derives
-// autonomy from this same objective (resolveQuestAutonomy), so an aligned launch
-// cannot trip it; the guard is defense-in-depth for any caller that sets autonomy by
-// other means (e.g. an explicit operator override), honoring the doctrinal "say so
-// loudly before quest started" rule. It is NOT suppressed for review delivery: a
-// review objective that asks to fix (an execute verb) forced to L1 is exactly the
-// mismatch worth warning about.
-//
-// deliver/targetPR state the delivery mode honestly (questDeliveryEffect):
-// feedback updates PR #N in place, review reports on PR #N, pr opens a new PR.
-func questLaunchSummary(id, autonomy, deliver string, targetPR int, objective string) string {
+// questLaunchSummary renders the launch output for a started quest or
+// adventure: the id, deliver mode with a what-will/won't-do line
+// (questDeliveryEffect: feedback updates PR #N in place, review reports on
+// PR #N, pr opens a new PR), and the API + UI ports with a remote/WSL
+// port-forwarding hint. kind names the flow ("quest" or "adventure").
+func questLaunchSummary(kind, id, deliver string, targetPR int) string {
 	var b strings.Builder
-	if autonomy == "L1" && deriveQuestAutonomy(objective) == "L2" {
-		fmt.Fprintf(&b, "WARNING: objective looks execute-shaped but autonomy is L1 (report-only) — no code changes or PRs will be made\n")
-	}
-	fmt.Fprintf(&b, "candyland quest started: %s\n", id)
-	fmt.Fprintf(&b, "Autonomy: %s — %s\n", autonomy, questAutonomyEffect(autonomy))
+	fmt.Fprintf(&b, "candyland %s started: %s\n", kind, id)
 	fmt.Fprintf(&b, "Deliver: %s (%s)\n", deliver, questDeliveryEffect(deliver, targetPR))
 	fmt.Fprintf(&b, "API: %s\n", candylandBaseURL)
 	fmt.Fprintf(&b, "UI / Dashboard: %s\n", candylandDashboardURL)
@@ -412,37 +686,30 @@ func questLaunchSummary(id, autonomy, deliver string, targetPR int, objective st
 	return b.String()
 }
 
-// runQuestCmd is the `detritus --quest-run <objective-file> [folder ...]`
-// handler: read the objective, ensure the sidecar is up, start the quest, and
-// print the enriched launch summary. Mirrors runCandyland. ensureCandylandUp
-// failures are returned so the caller exits non-zero. An empty autonomy means
-// "derive from the objective" (the --quest-run default); a non-empty autonomy is
-// an explicit override the launch summary still validates against the objective.
-func runQuestCmd(detritusPath, objectiveFile string, folders []string, autonomy, deliver, cwd string) error {
+// runQuestCmd is the `detritus --quest-run` / `--adventure-run
+// <objective-file> [folder ...]` handler: read the objective, classify its
+// delivery against live gh state, ensure the sidecar is up, start the quest,
+// and print the launch summary. Mirrors runCandyland. convergence is the
+// quest's delivery policy — "converge" (--quest-run: bounded, one PR per repo
+// at terminal) or "perFinding" (--adventure-run: open-ended, a PR per accepted
+// finding); kind names the flow for the summary line.
+func runQuestCmd(detritusPath, objectiveFile string, folders []string, kind, convergence, cwd string) error {
 	objective, folders, err := readQuestRunArgs(objectiveFile, folders, cwd)
 	if err != nil {
 		return err
 	}
-	// Derive BOTH delivery mode and autonomy from the objective. Autonomy stays
-	// anchored to the objective's VERB (resolveQuestAutonomy): feedback always runs
-	// executing (L2), while review/pr honor the verb — a pure review stays report-only
-	// (L1) but a review objective that also asks to fix carries an execute verb and
-	// runs executing. Delivery mode never dictates report-only on its own.
-	deliveryMode, targetPR := deriveQuestDelivery(objective)
-	if deliver == "" {
-		deliver = deliveryMode
-	}
-	if autonomy == "" {
-		autonomy = resolveQuestAutonomy(deliver, objective)
+	deliver, targetPR, err := resolveLaunchDelivery(objective, folders[0])
+	if err != nil {
+		return err
 	}
 	if err := ensureCandylandUp(detritusPath); err != nil {
 		return err
 	}
-	id, err := startCandylandQuest(objective, folders, autonomy, deliver, targetPR)
+	id, err := startCandylandQuest(objective, deriveShortTitle(objective), folders, deliver, targetPR, convergence)
 	if err != nil {
 		return err
 	}
-	fmt.Print(questLaunchSummary(id, autonomy, deliver, targetPR, objective))
+	fmt.Print(questLaunchSummary(kind, id, deliver, targetPR))
 	return nil
 }
 
@@ -462,43 +729,42 @@ func readCampaignRunArgs(inputFile string, folders []string, cwd string) (input 
 }
 
 // runCampaignCmd is the `detritus --campaign-run <input-file> [folder ...]`
-// handler: read the campaign input, ensure the sidecar is up, start the
-// campaign, and print the launch summary. Mirrors runQuestCmd.
-// ensureCandylandUp failures are returned so the caller exits non-zero.
-//
-// Delivery mode is DERIVED from the input (deriveQuestDelivery, reused from the
-// quest path): a feedback/review-on-PR input carries deliver:"feedback"/"review"
-// with the target PR, otherwise deliver:"pr" (new work — the default). Autonomy
-// is NOT derived for campaigns: it stays the caller-supplied "L2" (campaign rule
-// — campaigns are never L1, since a report-only campaign would strand with no PR).
-func runCampaignCmd(detritusPath, inputFile string, folders []string, autonomy, cwd string) error {
+// handler: read the campaign input, classify its delivery against live gh state
+// (resolveLaunchDelivery — the gh-mirror classification all launchers share),
+// ensure the sidecar is up, start the campaign, and print the launch summary.
+// Mirrors runQuestCmd. ensureCandylandUp failures are returned so the caller
+// exits non-zero.
+func runCampaignCmd(detritusPath, inputFile string, folders []string, cwd string) error {
 	input, folders, err := readCampaignRunArgs(inputFile, folders, cwd)
 	if err != nil {
 		return err
 	}
-	deliver, targetPR := deriveQuestDelivery(input)
-	if err := ensureCandylandUp(detritusPath); err != nil {
-		return err
-	}
-	id, err := startCandylandCampaign(input, folders, autonomy, deliver, targetPR)
+	deliver, targetPR, err := resolveLaunchDelivery(input, folders[0])
 	if err != nil {
 		return err
 	}
-	fmt.Print(campaignLaunchSummary(id, autonomy, deliver, targetPR))
+	if err := ensureCandylandUp(detritusPath); err != nil {
+		return err
+	}
+	id, err := startCandylandCampaign(input, deriveShortTitle(input), folders, deliver, targetPR)
+	if err != nil {
+		return err
+	}
+	fmt.Print(campaignLaunchSummary(id, deliver, targetPR))
 	return nil
 }
 
 // campaignLaunchSummary renders the launch output for a started campaign: the
-// campaign id, autonomy level (fixed L2 for campaigns — not derived), the derived
-// delivery mode with an honest what-it-produces line (questDeliveryEffect, reused),
-// and the dashboard URL. Mirrors questLaunchSummary's mode line so feedback/review/pr
-// read the same across both flows.
-func campaignLaunchSummary(id, autonomy, deliver string, targetPR int) string {
+// campaign id, the derived delivery mode with an honest what-it-produces line
+// (questDeliveryEffect, reused), and the API + UI ports. Mirrors
+// questLaunchSummary's mode line so feedback/review/pr read the same across
+// both flows.
+func campaignLaunchSummary(id, deliver string, targetPR int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "candyland campaign started: %s\n", id)
-	fmt.Fprintf(&b, "Autonomy: %s — %s\n", autonomy, questAutonomyEffect(autonomy))
 	fmt.Fprintf(&b, "Deliver: %s (%s)\n", deliver, questDeliveryEffect(deliver, targetPR))
-	fmt.Fprintf(&b, "Dashboard: %s\n", candylandDashboardURL)
+	fmt.Fprintf(&b, "API: %s\n", candylandBaseURL)
+	fmt.Fprintf(&b, "UI / Dashboard: %s\n", candylandDashboardURL)
 	return b.String()
 }
 
@@ -788,13 +1054,18 @@ func startCandylandRunAt(baseURL string, folders []string, prompt, title, delive
 }
 
 // candylandQuestRequest is the body POSTed to /api/quests. candyland owns the
-// full QuestSpec; detritus only sets the fields the /quest command settles.
+// full QuestSpec; detritus only sets the fields the /quest and /adventure
+// commands settle. Title is the derived short display label (the full objective
+// still rides in Objective); Convergence is the delivery policy — "converge"
+// (bounded quest, one PR per repo at terminal) or "perFinding" (adventure, a PR
+// per accepted finding).
 type candylandQuestRequest struct {
-	Objective     string   `json:"objective"`
-	Folders       []string `json:"folders"`
-	AutonomyLevel string   `json:"autonomyLevel"`
-	Deliver       string   `json:"deliver"`
-	TargetPR      int      `json:"targetPr"`
+	Objective   string   `json:"objective"`
+	Title       string   `json:"title"`
+	Folders     []string `json:"folders"`
+	Deliver     string   `json:"deliver"`
+	TargetPR    int      `json:"targetPr"`
+	Convergence string   `json:"convergence"`
 }
 
 // startCandylandQuest creates a quest (POST /api/quests) and begins it (POST
@@ -802,18 +1073,19 @@ type candylandQuestRequest struct {
 // up; callers run ensureCandylandUp first. Mirrors startCandylandRun.
 // deliver/targetPR are the shared wire contract with the candyland receiver:
 // "feedback"|"review" carry targetPR, "pr" carries 0.
-func startCandylandQuest(objective string, folders []string, autonomy, deliver string, targetPR int) (string, error) {
-	return startCandylandQuestAt(candylandBaseURL, objective, folders, autonomy, deliver, targetPR)
+func startCandylandQuest(objective, title string, folders []string, deliver string, targetPR int, convergence string) (string, error) {
+	return startCandylandQuestAt(candylandBaseURL, objective, title, folders, deliver, targetPR, convergence)
 }
 
 // startCandylandQuestAt is startCandylandQuest against an explicit base URL (test seam).
-func startCandylandQuestAt(baseURL, objective string, folders []string, autonomy, deliver string, targetPR int) (string, error) {
+func startCandylandQuestAt(baseURL, objective, title string, folders []string, deliver string, targetPR int, convergence string) (string, error) {
 	body, err := json.Marshal(candylandQuestRequest{
-		Objective:     objective,
-		Folders:       folders,
-		AutonomyLevel: autonomy,
-		Deliver:       deliver,
-		TargetPR:      targetPR,
+		Objective:   objective,
+		Title:       title,
+		Folders:     folders,
+		Deliver:     deliver,
+		TargetPR:    targetPR,
+		Convergence: convergence,
 	})
 	if err != nil {
 		return "", err
@@ -851,35 +1123,36 @@ func startCandylandQuestAt(baseURL, objective string, folders []string, autonomy
 
 // candylandCampaignRequest is the body POSTed to /api/campaigns. candyland owns
 // the full CampaignSpec; detritus only sets the fields the /campaign command
-// settles. tokenBudget is left to candyland's default and not set here.
+// settles. tokenBudget is left to candyland's default and not set here. Title is
+// the derived short display label (the full input still rides in Input).
 // deliver/targetPr share the exact wire contract with candylandQuestRequest: the
-// campaign launcher derives them from the input (deriveQuestDelivery) and
-// candyland propagates them to the affected child quests/runs.
+// campaign launcher classifies them from the input (resolveLaunchDelivery) and
+// candyland propagates them to the affected child quests.
 type candylandCampaignRequest struct {
-	Input         string   `json:"input"`
-	Folders       []string `json:"folders"`
-	AutonomyLevel string   `json:"autonomyLevel"`
-	Deliver       string   `json:"deliver"`
-	TargetPR      int      `json:"targetPr"`
+	Input    string   `json:"input"`
+	Title    string   `json:"title"`
+	Folders  []string `json:"folders"`
+	Deliver  string   `json:"deliver"`
+	TargetPR int      `json:"targetPr"`
 }
 
 // startCandylandCampaign creates a campaign (POST /api/campaigns) and begins it
 // (POST /api/campaigns/{id}/begin), returning the campaign id. The sidecar must
 // already be up; callers run ensureCandylandUp first. Mirrors startCandylandQuest.
 // deliver/targetPR carry the input's delivery intent; candyland propagates them
-// to the child quests/runs the campaign decomposes into.
-func startCandylandCampaign(input string, folders []string, autonomy, deliver string, targetPR int) (string, error) {
-	return startCandylandCampaignAt(candylandBaseURL, input, folders, autonomy, deliver, targetPR)
+// to the child quests the campaign decomposes into.
+func startCandylandCampaign(input, title string, folders []string, deliver string, targetPR int) (string, error) {
+	return startCandylandCampaignAt(candylandBaseURL, input, title, folders, deliver, targetPR)
 }
 
 // startCandylandCampaignAt is startCandylandCampaign against an explicit base URL (test seam).
-func startCandylandCampaignAt(baseURL, input string, folders []string, autonomy, deliver string, targetPR int) (string, error) {
+func startCandylandCampaignAt(baseURL, input, title string, folders []string, deliver string, targetPR int) (string, error) {
 	body, err := json.Marshal(candylandCampaignRequest{
-		Input:         input,
-		Folders:       folders,
-		AutonomyLevel: autonomy,
-		Deliver:       deliver,
-		TargetPR:      targetPR,
+		Input:    input,
+		Title:    title,
+		Folders:  folders,
+		Deliver:  deliver,
+		TargetPR: targetPR,
 	})
 	if err != nil {
 		return "", err

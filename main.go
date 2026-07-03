@@ -114,21 +114,35 @@ func main() {
 		case "--quest-run":
 			// detritus --quest-run <objective-file> [folder ...]
 			// Starts a standalone Candyland-native iterative quest (the /quest
-			// command). Both DELIVERY and autonomy are DERIVED from the objective
-			// by runQuestCmd (empty deliver + empty autonomy = derive). A new-work
-			// objective gets deliver=pr (opens its own PR, never merges) with
-			// autonomy from the verb intent. A "handle feedback on PR #N" objective
-			// gets deliver=feedback at L2 (updates PR #N in place, no new PR); a
-			// "review PR #N" objective gets deliver=review at L1 (reports only). The
-			// classification is conservative (see deriveQuestDelivery /
-			// deriveQuestAutonomy); the launch summary states the mode honestly.
+			// command): a BOUNDED loop that converges to one PR per repo. The
+			// DELIVERY mode is classified from the objective against live gh state
+			// (resolveLaunchDelivery, the gh-mirror classifier all launchers
+			// share); the launch summary states the mode honestly. There is no
+			// autonomy axis — once planning settles, work runs to done.
 			if len(os.Args) < 3 {
 				fmt.Fprintln(os.Stderr, "usage: detritus --quest-run <objective-file> [folder ...]")
 				os.Exit(1)
 			}
 			self, _ := os.Executable()
 			cwd, _ := os.Getwd()
-			if err := runQuestCmd(self, os.Args[2], os.Args[3:], "", "", cwd); err != nil {
+			if err := runQuestCmd(self, os.Args[2], os.Args[3:], "quest", "converge", cwd); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
+		case "--adventure-run":
+			// detritus --adventure-run <objective-file> [folder ...]
+			// Starts an open-ended freeseeking adventure (the /adventure command):
+			// the same quest machinery with a per-finding delivery policy — a PR
+			// per accepted finding, perpetual until stopped. Same gh-mirror
+			// classification as --quest-run.
+			if len(os.Args) < 3 {
+				fmt.Fprintln(os.Stderr, "usage: detritus --adventure-run <objective-file> [folder ...]")
+				os.Exit(1)
+			}
+			self, _ := os.Executable()
+			cwd, _ := os.Getwd()
+			if err := runQuestCmd(self, os.Args[2], os.Args[3:], "adventure", "perFinding", cwd); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
@@ -136,19 +150,19 @@ func main() {
 		case "--campaign-run":
 			// detritus --campaign-run <input-file> [folder ...]
 			// Starts a Candyland program-level campaign (the /campaign command)
-			// from a high-level goal, partial brief, or detailed plan. Campaigns
-			// are NEVER L1 — a report-only campaign would strand with no PR — so
-			// autonomy is fixed at L2 (not derived). The DELIVERY mode, however,
-			// IS derived from the input (deriveQuestDelivery, reused from the quest
-			// path): a feedback/review-on-PR input updates/ reviews that PR,
-			// otherwise it opens a new PR (deliver:"pr", the default).
+			// from a high-level goal, partial brief, or detailed plan. The DELIVERY
+			// mode is classified from the input against live gh state
+			// (resolveLaunchDelivery, the gh-mirror classifier all launchers
+			// share): a feedback/review-on-PR input updates/reviews that PR,
+			// otherwise it opens a new PR (deliver:"pr", the default). There is no
+			// autonomy axis.
 			if len(os.Args) < 3 {
 				fmt.Fprintln(os.Stderr, "usage: detritus --campaign-run <input-file> [folder ...]")
 				os.Exit(1)
 			}
 			self, _ := os.Executable()
 			cwd, _ := os.Getwd()
-			if err := runCampaignCmd(self, os.Args[2], os.Args[3:], "L2", cwd); err != nil {
+			if err := runCampaignCmd(self, os.Args[2], os.Args[3:], cwd); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
@@ -165,7 +179,8 @@ func main() {
 			fmt.Println("  detritus --plugin-commands                            Regenerate plugin command shims from docs/flows/")
 			fmt.Println("  detritus --setup [--dry-run]                          Configure all detected IDEs")
 			fmt.Println("  detritus --candyland-run <prompt-file> [folder ...]   Start a candyland sidecar build run over REST")
-			fmt.Println("  detritus --quest-run <objective-file> [folder ...]   Start a candyland-native iterative quest over REST")
+			fmt.Println("  detritus --quest-run <objective-file> [folder ...]   Start a candyland-native bounded quest over REST")
+			fmt.Println("  detritus --adventure-run <objective-file> [folder ...] Start a candyland open-ended adventure over REST")
 			fmt.Println("  detritus --campaign-run <input-file> [folder ...]    Start a candyland program-level campaign over REST")
 			fmt.Println("  detritus --update [--dry-run]                         Self-update to latest release")
 			fmt.Println("  detritus --todo-guard                                 PreToolUse hook handler (internal; installed by --setup)")
