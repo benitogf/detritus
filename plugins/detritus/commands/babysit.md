@@ -5,4 +5,4 @@ argument-hint: "[pr] [interval]"
 
 The user invoked this command with: $ARGUMENTS
 
-Call the detritus MCP tool `kb_get` with `name="flows/github/gh-merge-loop"` and follow the returned guidance.
+Call the detritus MCP tool `kb_get` with `name="flows/github/babysit"` and follow the returned guidance.
