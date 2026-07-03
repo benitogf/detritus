@@ -245,6 +245,7 @@ func buildMCPServer(engine *search.Engine) *mcp.Server {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "kb_list",
 		Description: "List all available knowledge base documents with descriptions",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args ListArgs) (*mcp.CallToolResult, any, error) {
 		var b strings.Builder
 		for name, meta := range engine.DocMetadata() {
@@ -260,6 +261,7 @@ func buildMCPServer(engine *search.Engine) *mcp.Server {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "kb_get",
 		Description: engine.ToolDescription(),
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args GetArgs) (*mcp.CallToolResult, any, error) {
 		name := resolveDocName(args.Name, aliasToDoc)
 		if args.Section != "" {
@@ -281,14 +283,16 @@ func buildMCPServer(engine *search.Engine) *mcp.Server {
 	}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "kb_search",
-		Description: "Search across all knowledge base documents for a specific topic, pattern, or API name. Returns matching lines with context.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args SearchArgs) (*mcp.CallToolResult, any, error) {
+		Description: "Search across all knowledge base documents for a specific topic, pattern, or API name. Returns matching lines with context, a structured hits/next result, and resource_link items for the top docs.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args SearchArgs) (*mcp.CallToolResult, searchResult, error) {
+		out := searchResult{Hits: []searchHit{}, Next: []nextHop{}}
 		results, err := engine.Search(args.Query, 10)
 		if err != nil {
-			return errResult("search failed: " + err.Error()), nil, nil
+			return errResult("search failed: " + err.Error()), out, nil
 		}
 		if len(results) == 0 {
-			return textResult("No results found for: " + args.Query), nil, nil
+			return textResult("No results found for: " + args.Query), out, nil
 		}
 		var b strings.Builder
 		for _, r := range results {
@@ -301,8 +305,40 @@ func buildMCPServer(engine *search.Engine) *mcp.Server {
 				fmt.Fprintf(&b, "%s\n", r.Snippet)
 			}
 			b.WriteString("\n")
+			out.Hits = append(out.Hits, searchHit{Path: r.DocName, Section: r.Section, Score: r.Score, Snippet: r.Snippet})
 		}
-		return textResult(b.String()), nil, nil
+
+		// next: natural follow-up hops after a kb_search. The top hit is the
+		// obvious drill-down target (scope its sections, then fetch); when the
+		// query reads like a single code identifier the user is likely hunting a
+		// symbol, so code_graph on that symbol is the next hop.
+		top := results[0].DocName
+		out.Next = append(out.Next,
+			nextHop{Tool: "kb_sections", Args: map[string]string{"name": top}, Why: "list the top hit's sections before fetching"},
+			nextHop{Tool: "kb_get", Args: map[string]string{"name": top}, Why: "fetch the top-matching document"},
+		)
+		if isIdentifierLike(args.Query) {
+			out.Next = append(out.Next, nextHop{Tool: "code_graph", Args: map[string]string{"symbol": args.Query}, Why: "the query looks like a code symbol — navigate its call/impl graph"})
+		}
+
+		// resource_links let the model pull a full doc on demand (kb://<doc>)
+		// instead of dumping every match. One link per distinct top doc.
+		content := []mcp.Content{&mcp.TextContent{Text: b.String()}}
+		seen := map[string]bool{}
+		meta := engine.DocMetadata()
+		for _, r := range results {
+			if seen[r.DocName] || len(seen) >= 3 {
+				continue
+			}
+			seen[r.DocName] = true
+			content = append(content, &mcp.ResourceLink{
+				URI:         "kb://" + r.DocName,
+				Name:        r.DocName,
+				Description: meta[r.DocName].Description,
+				MIMEType:    "text/markdown",
+			})
+		}
+		return &mcp.CallToolResult{Content: content}, out, nil
 	})
 
 	type SectionsArgs struct {
@@ -311,6 +347,7 @@ func buildMCPServer(engine *search.Engine) *mcp.Server {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "kb_sections",
 		Description: "List the h2 sections available in a document. Use before kb_get with section= to retrieve only the relevant part of large documents instead of the full content.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args SectionsArgs) (*mcp.CallToolResult, any, error) {
 		name := resolveDocName(args.Name, aliasToDoc)
 		sections, err := engine.GetSections(name)
@@ -350,7 +387,79 @@ func buildMCPServer(engine *search.Engine) *mcp.Server {
 		}, nil
 	})
 
+	// Register each KB doc as an addressable resource kb://<docname>, resolvable
+	// via resources/read. The doc set is fixed at startup (embedded), so static
+	// per-doc resources are cleaner than a URI template: they also enumerate in
+	// resources/list, and kb_search's resource_link items point straight at them
+	// so the model can pull full text on demand instead of dumping every doc.
+	for name, meta := range engine.DocMetadata() {
+		docName := name // capture
+		uri := "kb://" + docName
+		server.AddResource(&mcp.Resource{
+			URI:         uri,
+			Name:        docName,
+			Description: meta.Description,
+			MIMEType:    "text/markdown",
+		}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			content, err := engine.GetDoc(docName)
+			if err != nil {
+				return nil, err
+			}
+			return &mcp.ReadResourceResult{
+				Contents: []*mcp.ResourceContents{{
+					URI:      uri,
+					MIMEType: "text/markdown",
+					Text:     content,
+				}},
+			}, nil
+		})
+	}
+
 	return server
+}
+
+// searchHit is one structured retrieval hit returned by kb_search (and,
+// mirrored, by skill_search) so the SDK emits an outputSchema + structuredContent.
+type searchHit struct {
+	Path    string  `json:"path"`
+	Section string  `json:"section"`
+	Score   float64 `json:"score"`
+	Snippet string  `json:"snippet"`
+}
+
+// nextHop is a suggested follow-up tool call — the natural next hop after a search.
+type nextHop struct {
+	Tool string            `json:"tool"`
+	Args map[string]string `json:"args"`
+	Why  string            `json:"why"`
+}
+
+// searchResult is the typed structured result of kb_search.
+type searchResult struct {
+	Hits []searchHit `json:"hits"`
+	Next []nextHop   `json:"next"`
+}
+
+// ptr returns a pointer to v — used for the optional *bool tool-annotation hints.
+func ptr[T any](v T) *T { return &v }
+
+// isIdentifierLike reports whether s reads like a single code identifier (no
+// whitespace, valid Go-identifier characters), the signal that a kb_search query
+// is really a symbol hunt and code_graph is the right next hop.
+func isIdentifierLike(s string) bool {
+	if s == "" || strings.ContainsAny(s, " \t\n") {
+		return false
+	}
+	for i, r := range s {
+		switch {
+		case r == '_':
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // resolveDocName normalises a requested name into a canonical doc path.

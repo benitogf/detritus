@@ -28,6 +28,7 @@ func registerMap(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "code_map",
 		Description: "Ranked, token-budgeted structural map of a Go project: the most-referenced files first, each with its top-level signatures. PageRank over the symbol reference graph picks what matters; `focus` biases toward named identifiers/paths. No setup — start here to orient in an unfamiliar area before reading files.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args mapToolArgs) (*mcp.CallToolResult, any, error) {
 		out, err := BuildCodeMap(MapOptions{Scope: args.Scope, Focus: args.Focus, Budget: args.Budget})
 		if err != nil {
@@ -49,6 +50,7 @@ func registerGraph(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "code_graph",
 		Description: "Precise, type-resolved navigation for a Go symbol: who-calls and reachable-from for a function, or implementers for an interface. Heavier than code_map (loads full type info) — use when you need exact call/implementation relationships, not a broad overview. Falls back to the structural map when the package does not compile.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args graphToolArgs) (*mcp.CallToolResult, any, error) {
 		out, err := BuildCodeGraph(GraphQuery{Symbol: args.Symbol, Scope: args.Scope})
 		if err != nil {
@@ -66,6 +68,7 @@ func registerSeamlessOutline(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "code_outline",
 		Description: "Signature-only view of a file or directory: package, imports, types, and function signatures (go/ast for Go; regex for other languages). Much cheaper than reading full files when you only need a file's shape.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args outlineToolArgs) (*mcp.CallToolResult, any, error) {
 		if args.Path == "" {
 			return codeErrResult("path required"), nil, nil
@@ -82,6 +85,9 @@ func registerSeamlessOutline(server *mcp.Server) {
 }
 
 // --- shared helpers ---
+
+// ptr returns a pointer to v — used for the optional *bool tool-annotation hints.
+func ptr[T any](v T) *T { return &v }
 
 func codeTextResult(text string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{

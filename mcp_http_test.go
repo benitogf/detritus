@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,6 +54,181 @@ func TestBuildMCPServer(t *testing.T) {
 	}
 	if !hasTool(tools.Tools, "kb_get") {
 		t.Fatalf("expected kb_get tool, got %v", toolNames(tools.Tools))
+	}
+}
+
+// connectTestClient wires an in-memory client to a freshly built server and
+// returns the connected client session (both sides closed via t.Cleanup).
+func connectTestClient(t *testing.T) (context.Context, *mcp.ClientSession) {
+	t.Helper()
+	server := buildMCPServer(newTestEngine(t))
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	t.Cleanup(cancel)
+
+	clientT, serverT := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, serverT, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	t.Cleanup(func() { serverSession.Close() })
+
+	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, nil)
+	cs, err := client.Connect(ctx, clientT, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { cs.Close() })
+	return ctx, cs
+}
+
+// TestToolAnnotations asserts every read-only tool advertises ReadOnlyHint +
+// OpenWorldHint=false, and the sole write tool (skill_put) advertises
+// ReadOnlyHint=false + IdempotentHint.
+func TestToolAnnotations(t *testing.T) {
+	ctx, cs := connectTestClient(t)
+	tools, err := cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("list tools: %v", err)
+	}
+	byName := map[string]*mcp.Tool{}
+	for _, tl := range tools.Tools {
+		byName[tl.Name] = tl
+	}
+
+	readOnly := []string{
+		"kb_get", "kb_search", "kb_list", "kb_sections",
+		"code_graph", "code_outline", "code_map",
+		"skill_search", "skill_get",
+	}
+	for _, name := range readOnly {
+		tl := byName[name]
+		if tl == nil {
+			t.Errorf("%s: not registered", name)
+			continue
+		}
+		if tl.Annotations == nil {
+			t.Errorf("%s: no annotations", name)
+			continue
+		}
+		if !tl.Annotations.ReadOnlyHint {
+			t.Errorf("%s: ReadOnlyHint not set", name)
+		}
+		if tl.Annotations.OpenWorldHint == nil || *tl.Annotations.OpenWorldHint {
+			t.Errorf("%s: OpenWorldHint want *false, got %v", name, tl.Annotations.OpenWorldHint)
+		}
+	}
+
+	put := byName["skill_put"]
+	if put == nil || put.Annotations == nil {
+		t.Fatal("skill_put: missing tool or annotations")
+	}
+	if put.Annotations.ReadOnlyHint {
+		t.Error("skill_put: ReadOnlyHint should be false")
+	}
+	if !put.Annotations.IdempotentHint {
+		t.Error("skill_put: IdempotentHint should be true")
+	}
+}
+
+// TestKBSearchStructuredOutput asserts kb_search advertises an inferred output
+// schema, returns a populated typed structuredContent {hits,next}, and emits
+// resource_link content items for its top hits — alongside the back-compat text.
+func TestKBSearchStructuredOutput(t *testing.T) {
+	ctx, cs := connectTestClient(t)
+
+	tools, err := cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("list tools: %v", err)
+	}
+	for _, tl := range tools.Tools {
+		if tl.Name == "kb_search" && tl.OutputSchema == nil {
+			t.Fatal("kb_search: OutputSchema not inferred from typed result")
+		}
+	}
+
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "kb_search",
+		Arguments: map[string]any{"query": "WaitGroup"},
+	})
+	if err != nil {
+		t.Fatalf("kb_search: %v", err)
+	}
+	if res.IsError {
+		t.Fatal("kb_search returned error")
+	}
+	// Back-compat: first content item is still text.
+	if _, ok := res.Content[0].(*mcp.TextContent); !ok {
+		t.Fatalf("kb_search: first content not text, got %T", res.Content[0])
+	}
+	// resource_link items present for top hits.
+	var links int
+	for _, c := range res.Content {
+		if rl, ok := c.(*mcp.ResourceLink); ok {
+			links++
+			if !strings.HasPrefix(rl.URI, "kb://") {
+				t.Errorf("resource_link URI %q missing kb:// scheme", rl.URI)
+			}
+			if rl.MIMEType != "text/markdown" {
+				t.Errorf("resource_link %q MIME = %q, want text/markdown", rl.URI, rl.MIMEType)
+			}
+		}
+	}
+	if links == 0 {
+		t.Fatal("kb_search emitted no resource_link items")
+	}
+	// Structured content: typed {hits:[{path,section,score,snippet}], next:[...]}.
+	sc, ok := res.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("structuredContent not an object: %T", res.StructuredContent)
+	}
+	hits, ok := sc["hits"].([]any)
+	if !ok || len(hits) == 0 {
+		t.Fatalf("structuredContent.hits empty/wrong type: %v", sc["hits"])
+	}
+	h0 := hits[0].(map[string]any)
+	for _, k := range []string{"path", "section", "score", "snippet"} {
+		if _, present := h0[k]; !present {
+			t.Errorf("hit missing field %q", k)
+		}
+	}
+	next, ok := sc["next"].([]any)
+	if !ok || len(next) == 0 {
+		t.Fatalf("structuredContent.next empty/wrong type: %v", sc["next"])
+	}
+	n0 := next[0].(map[string]any)
+	if n0["tool"] != "kb_sections" {
+		t.Errorf("first next hop tool = %v, want kb_sections", n0["tool"])
+	}
+}
+
+// TestKBDocResourceResolves asserts a KB doc is addressable as kb://<docname>
+// and resolvable via resources/read, returning the doc markdown.
+func TestKBDocResourceResolves(t *testing.T) {
+	ctx, cs := connectTestClient(t)
+
+	list, err := cs.ListResources(ctx, nil)
+	if err != nil {
+		t.Fatalf("list resources: %v", err)
+	}
+	var found bool
+	for _, r := range list.Resources {
+		if r.URI == "kb://ooo/package" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("kb://ooo/package not in resources/list")
+	}
+
+	res, err := cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: "kb://ooo/package"})
+	if err != nil {
+		t.Fatalf("read resource: %v", err)
+	}
+	if len(res.Contents) == 0 || len(res.Contents[0].Text) < 100 {
+		t.Fatalf("kb://ooo/package resolved to empty/short content")
+	}
+	if res.Contents[0].MIMEType != "text/markdown" {
+		t.Errorf("resource MIME = %q, want text/markdown", res.Contents[0].MIMEType)
 	}
 }
 
