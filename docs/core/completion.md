@@ -75,7 +75,8 @@ Each acceptance criterion is written as a verifiable contract: the **desired end
 
 ## The three dispositions
 
-For ANY work a builder or loop encounters, exactly one disposition applies. "Hazard" is **not** a
+For ANY work a builder or loop encounters, exactly one disposition applies. This is a **closed enum —
+`1 in-scope-now | 2 feature-split | 3 capability-blocker` (do NOT invent others)**. "Hazard" is **not** a
 fourth option — it is retired as a catch-all and resolves only to disposition 2 or 3.
 
 1. **In-scope & handle-able now → DO IT NOW.** The default; it covers the vast majority. No phases, no
@@ -89,13 +90,46 @@ fourth option — it is retired as a catch-all and resolves only to disposition 
      *Blockers & feature-splits* section.
    - Autonomous (`/vibe`): the architect decides, records, and splits a truly separate feature into its
      own plan.
-3. **Hard blocker beyond the loop's authority → SURFACE as a blocker.** Irreversible/external action,
-   a genuine spec contradiction, a missing credential. The narrow exception, not the default escape
-   hatch.
+3. **Capability blocker = capability failure only → SURFACE as a blocker.** A failure **no decision can
+   resolve**: missing credentials, absent permissions, unreachable infrastructure, a toolchain broken
+   *outside* the repo. This is a **last breath, not a shortcut** — `blocked` may NOT be used to avoid
+   work, skip investigation, or dodge root-cause analysis. It carries a **postmortem** (see *Closed
+   blocker definition & postmortem schema*). The narrow exception, not the default escape hatch.
+
+**A decision is NEVER disposition 3.** A *decision* — ambiguity, a trade-off, scope interpretation, an
+unclear root cause, unexpected difficulty, "this is taking long" — is a choice the agent can resolve by
+*choosing*. It never stops the flow and never reaches the user post-plan; it **falls down the escalation
+ladder** (`core/coordination` → *Re-planning loop*), is decided at the lowest tier with authority, and
+is **recorded** (`/smith`: the ledger's *Decisions made autonomously* section; `/forge`: the tech-lead
+decides and re-spawns; candyland: exactly one tier up). Only a capability blocker is disposition 3.
+
+## Closed blocker definition & postmortem schema
+
+A **blocker (capability failure)** is a failure **no decision can resolve** — missing credentials,
+absent permissions, unreachable infrastructure, a toolchain broken *outside* the repo. It is the ONLY
+thing that legitimately reaches terminal `blocked`. It is a **last breath, not a shortcut**: `blocked`
+may NOT be used to avoid work, skip investigation, or dodge root-cause analysis. Ambiguity, trade-offs,
+difficulty, unclear root cause, and budget anxiety are **decisions**, never blockers — they fall down
+the escalation ladder (`core/coordination`).
+
+`blocked` is **invalid without ALL six postmortem fields** (missing field = incomplete → rejected/bounced):
+
+| Field | Content |
+|---|---|
+| `attempts` | each attempt made and its result. |
+| `failing_capability` | the exact capability that failed (one line). |
+| `evidence` | verbatim commands + error output proving the failure. |
+| `root_cause_so_far` | root-cause analysis as far as it got. |
+| `human_unblock_action` | precisely what a human must provide to unblock. |
+| `partial_work_state` | branch, commits, ledger refs for work already done. |
 
 ## Explicitly forbidden
 
 - Splitting agreed scope into "phase 2" / "later" to exit sooner.
+- Using `blocked` for a **decision** (ambiguity, trade-off, difficulty, unclear root cause) instead of
+  falling down the escalation ladder — a decision is never a blocker.
+- Using `blocked` as a **shortcut** to skip root-cause analysis or investigation — it is a
+  capability-failure-only last breath, and only with a complete postmortem.
 - Leaving `TODO`/`FIXME`/"future work" for a disposition-1 item.
 - Filing a follow-up issue for in-scope work instead of doing it.
 - Declaring done with an unchecked criterion or a red gate.
@@ -128,15 +162,17 @@ a deferral.
 review / verdict step reports an unmet acceptance criterion or commitment, the orchestrator must feed
 that gap back as new work — spawn a unit targeting **exactly the unmet item** (carrying the reviewer's
 evidence) and re-verify — bounded by a remediation budget (the K-attempt circuit breaker in M6). Only a
-gap that survives the budget is a disposition-3 hard blocker. Parking in terminal `blocked` on the
+gap that survives the budget is a disposition-3 capability blocker. Parking in terminal `blocked` on the
 **first** failing review while the gap is still finishable is the silent-deferral failure at the
 **orchestrator / supervisor level**, forbidden exactly as it is at the single-unit level. This binds a
 program-level supervisor reviewing per-commitment verdicts (e.g. a campaign's intent review) as much as
 a per-task coder loop — an orchestrator never parks with finishable in-scope work undone.
 
-The only legitimate hand-backs are three: **milestone / PR-open**, a **hard blocker** (disposition 3),
-or an **explicit user halt**. Anywhere else, the loop owes a next step (see `core/loop` →
-self-continuation). For a **multi-repo feature** the milestone is *every* impacted repo's PR being open
+The only legitimate hand-backs are three: **milestone / PR-open**, a **capability blocker** (disposition
+3, postmortem-backed), or an **explicit user halt**. A **decision is not a legitimate hand-back** — it
+falls down the escalation ladder (`core/coordination`), is decided at the lowest tier with authority,
+and is recorded, never surfaced to the user post-plan. Anywhere else, the loop owes a next step (see
+`core/loop` → self-continuation). For a **multi-repo feature** the milestone is *every* impacted repo's PR being open
 (`core/build` → *Multi-repo delivery*) — opening the first repo's PR is not a stopping point while
 another impacted repo still owes a PR.
 
@@ -145,8 +181,12 @@ reusable, cross-project lesson (`core/memory` → *When to distil*); an unverifi
 
 ## Honest terminal state
 
-Terminal `done` / "success" MUST reflect **actual in-scope delivery**. A run / loop / quest / PR that
-delivered **nothing** in-scope is a **distinct outcome, never `done`-as-success** — for example:
+Terminal states are a **closed enum — `done | surfaced-only | blocked | delivery-failed | stopped`
+(do NOT invent others)**. Terminal `done` / "success" MUST reflect **actual in-scope delivery**. A run
+/ loop / quest / PR that delivered **nothing** in-scope is a **distinct outcome, never `done`-as-success**
+— for example (the 2026-07-03 review found candyland dropped the `"skipped"` disposition writer, so an
+all-skip quest that executed zero items terminated plain `done` with an empty summary — the exact
+looks-done-but-isn't class this rule kills):
 
 - dead-in-prod code (passes condition 2, fails condition 2a — no production caller);
 - a report-only / zero-execution tick (work surfaced and triaged, none executed);
@@ -156,8 +196,9 @@ Reporting surfaces — CLI, dashboard, status field — must **name it as such**
 downstream flow reads a no-op as a delivery: e.g. `surfaced-only`, or
 `done (report-only: N surfaced, 0 executed, 0 PRs)`.
 
-The discriminator across every carve-out below is the **delivery mode** (`run.deliver`, one of
-`pr|branch|feedback|review` — `core/build` → *Delivery modes*), **not** the PR count. The zero-delivery
+The discriminator across every carve-out below is the **delivery mode** (`run.deliver`, a **closed enum
+— `pr | branch | feedback | review` (do NOT invent others)** — `core/build` → *Delivery modes*),
+**not** the PR count. The zero-delivery
 no-op detector flags only runs that delivered **nothing in-scope**; it must **never** flag a
 `branch`, `feedback`, or `review` run as a no-op failure.
 
@@ -172,7 +213,7 @@ delivery the mode promised did not land). Rules:
 - **Feed the error back**, don't strand it. The git/gh error text is usually **machine-fixable** by an
   agent that reads it (e.g. a push blocked by secret scanning → remove the offending file/history; a
   non-fast-forward → rebase). In a loop/campaign this is a remediation round on the delivery error
-  itself, bounded like any other; only a failure that survives the budget is a real hard blocker.
+  itself, bounded like any other; only a failure that survives the budget is a real capability blocker.
 - **A multi-unit deliverable (e.g. one PR per repo) is not `done` until *every* impacted unit delivered.**
   One unit's delivery failure is isolated from the others but keeps the whole out of clean `done`.
 
@@ -243,8 +284,10 @@ Verify** (exit gates), and **Persist** (the durable ledger).
   - **Multi-process (candyland):** the **tech-lead / conductor** re-spawns a coder that stopped before
     its task's acceptance criteria + tests are green, and marks `blocked` only on a real blocker
     (`core/coordination`).
-  - Both pair with a **circuit breaker**: after **K=3** failed attempts on one unit, escalate to a
-    blocker (push the branch + record it) rather than thrash the subscription quota.
+  - Both pair with a **circuit breaker**: after **K=3** failed attempts on one unit, escalate **one tier
+    up** the ladder (`core/coordination` → *Re-planning loop*) — a *decision* is decided and recorded
+    there, never surfaced; only a **capability failure** surviving the cap becomes a postmortem-backed
+    `blocked` (push the branch + record it) — rather than thrash the subscription quota.
   - A Claude Code Stop hook (`setup-extra-rules`) is **optional local hardening** a developer may opt
     into — **not** a build deliverable and **not** the portable contract. Per-machine hooks are exactly
     the bespoke setup the portability goal avoids.

@@ -97,6 +97,7 @@ and intentionally absent — they are not commands.
 | `/detritus-release` | Cut a release of detritus and/or candyland (bump → annotated tag → CI build), then update the local installation. |
 | `/detritus-update` | Update detritus to the latest released version by running `detritus --update`. |
 | `/grow` | Learn from conversation corrections - distill manual fixes into KB updates |
+| `/learn` | Learn from candyland telemetry - mine failure signatures across runs/quests/campaigns into audited KB updates |
 | `/optimize` | Re-index and optimize KB docs for agent retrieval efficiency |
 | `/setup-extra-rules` | Generate personalized Claude Code rule files and hook scripts based on the user's actual environment. |
 | `/setup-superpowers` | Apply baseline Claude Code settings (deny list, status line, effort/thinking, autoMode environment). |

@@ -38,7 +38,10 @@ Shared mechanics (scratchpad layout, durability rule, cadence guideline, skip-st
 >
 > `/smith` is autonomous-to-done. The single most common — and most damaging — failure is **ending a turn with a status report and no live trigger for the next tick**. The loop then sits dead until the user pokes it, which defeats the entire command. A status report is *not* progress; only a committed delta plus a guaranteed next tick is.
 >
-> The only legitimate places to hand control back to the user are: **(a)** *Delivery* — the PR(s) are open and the loop is done, **(b)** a hard blocker the loop cannot resolve within its authority (surface it immediately — do not sit idle), or **(c)** an explicit user halt. **Anywhere else, the tick MUST end by guaranteeing the next tick fires** — see *Initial /plan Pass-Through* step 5 and *Self-continuation* below. If you catch yourself writing "I'll continue next" without having armed a trigger, you have already stalled.
+> The only legitimate places to hand control back to the user are: **(a)** *Delivery* — the PR(s) are open and the loop is done, **(b)** a **capability blocker** — a failure no decision can resolve (missing credentials, absent permissions, unreachable infrastructure, a toolchain broken *outside* the repo), surfaced immediately with a full postmortem (`core/completion` → disposition 3; do not sit idle), or **(c)** an explicit user halt. **A decision is never a hand-back.** Ambiguity, a trade-off, scope interpretation, an unclear root cause, unexpected difficulty, "this is taking long" — these are *decisions*: post-plan, `/smith` makes the best decision given context and **records it** (see *Decisions made autonomously* below); it never surfaces one, never asks the user, and never stalls on one. `blocked` is a last breath for a capability failure only — never a shortcut to avoid work, skip investigation, or dodge root-cause analysis. **Anywhere a decision arises, the tick MUST end by guaranteeing the next tick fires** — see *Initial /plan Pass-Through* step 5 and *Self-continuation* below. If you catch yourself writing "I'll continue next" without having armed a trigger, you have already stalled.
+>
+> ✅ Root cause is ambiguous between two subsystems → pick the better-evidenced one, record the call in *Decisions made autonomously*, keep building.
+> ❌ Root cause is ambiguous → stop and ask the user which subsystem to look at.
 
 ## Inputs
 
@@ -78,7 +81,7 @@ Every tick must end by guaranteeing the next one fires. There are two valid arra
 - **Platform scheduler present** (Desktop/Cloud Routines, an external cron/launchd/systemd job driving `claude -p`, a Codex automation, GitHub Actions): the scheduler fires subsequent ticks. The agent does its tick, updates the scratchpad, and lets the schedule wake it again. This is the default that *Initial /plan Pass-Through* step 5 sets up.
 - **Interactive session with no external scheduler (the agent IS the runner):** the agent must self-arm the next tick before yielding — e.g. call `ScheduleWakeup` with a short delay and a prompt that re-enters the build loop — so work advances without the user typing anything. The on-disk scratchpad plus the pushed branch carry state across the gap (durability mode 1). Maximize work per tick (one self-wake should cover a meaningful, verified, committed delta, not a single line). **Never** end the turn with a report-and-wait; that is the exact stall this section exists to prevent.
 
-In both arrangements the rule is identical: a tick that did not reach *Delivery*, hit a hard blocker, or get explicitly halted MUST leave a live trigger for the next tick. Report progress *in passing* when useful, never *instead of* continuing. Stop arming the trigger only at the three legitimate hand-back points named in *The loop must never stall*.
+In both arrangements the rule is identical: a tick that did not reach *Delivery*, hit a capability blocker, or get explicitly halted MUST leave a live trigger for the next tick. Report progress *in passing* when useful, never *instead of* continuing. Stop arming the trigger only at the three legitimate hand-back points named in *The loop must never stall*.
 
 If `/plan` reaches a settled state but the user pushes back on scope or risk afterward, that's a mid-loop pivot via chat (`core/loop` → *Shared Main Agent Rules*) — the truthseeker pause applies before rewriting the scratchpad's spec, and the next scheduled tick honors the revised state.
 
@@ -110,6 +113,20 @@ The State block (defined in `core/loop`) gets these `/smith`-specific fields add
 - **Feature branch** — `feat/<slug>` long-lived branch where build-phase commits accumulate.
 - **PR(s) opened** — the PR URL(s) once *Delivery* opens them (one per impacted repo); otherwise empty.
 
+### Decisions made autonomously
+
+An append-only section recording every *decision* the loop resolved on its own (per *The loop must never stall* → the smith rule: post-plan a decision is decided-and-recorded, never surfaced). Each entry:
+
+- **what** — the choice made, in one line.
+- **why** — the reasoning that selected it given the current context.
+- **evidence** — the file:line / test output / spec clause that grounds the call.
+- **alternatives rejected** — the other options considered and why each lost.
+
+These are **recorded here, not sent to the user.** The user reads them if and when they inspect the ledger; the loop does not pause for acknowledgement. Only a capability blocker (with its postmortem) ever surfaces mid-loop.
+
+✅ Spec is silent on cache eviction policy → chose LRU (matches the sibling module at `cache/lru.go:12`), recorded here, kept building.
+❌ Spec is silent on cache eviction policy → emitted a report and waited for the user to choose.
+
 ### Checkpoint-then-/clear
 
 Every scratchpad update in build loop step 10 is a checkpoint per `core/loop` → *Checkpoint-then-/clear*: after it lands, the scratchpad + git are the complete resume state, and at the heavy boundaries `core/loop` names the tick report ends with the literal `checkpoint complete — safe to /clear` line. A user `/clear` at that point is lossless — the next tick resumes from the ledger. Never rely on `/compact`; summarized chat is not a state carrier.
@@ -118,7 +135,7 @@ Every scratchpad update in build loop step 10 is a checkpoint per `core/loop` �
 
 `/smith`'s definition of done is `core/completion`'s, not a local variant. The build phase's **exit gate is the four done-conditions** there — every acceptance box `[x]` with evidence, the verification gate green, a clean `/gh-self-review` pass, and no new deferral markers — computed from the durable ledger (the scratchpad's *Acceptance criteria*), never from memory. The loop continues until all four hold; it does not exit, hand back as "done", or convert a remaining in-scope item into a deferral (`core/completion` → *Exit gate*).
 
-Disposition of anything the build encounters follows `core/completion`'s three dispositions: in-scope & handle-able now is **done now** (the default — no phases, no "future work", no stub); a **genuinely separate feature** is a disposition-2 feature-split surfaced in the State block's *Blockers & feature-splits* for the user to triage (never a silent park); a **hard blocker** beyond the loop's authority is surfaced (disposition 3). "Hazard" is not a parking lot for handle-able in-scope work. A feature whose in-scope work lands in **more than one repo** is still disposition 1 — `/smith` delivers **one PR per impacted repo** (see *Delivery*), never demoting the cross-repo half to a feature-split or a blocker.
+Disposition of anything the build encounters follows `core/completion`'s three dispositions: in-scope & handle-able now is **done now** (the default — no phases, no "future work", no stub); a **genuinely separate feature** is a disposition-2 feature-split surfaced in the State block's *Blockers & feature-splits* for the user to triage (never a silent park); a **capability blocker** — a failure no decision can resolve — is surfaced with its postmortem (disposition 3, capability-failures only per `core/completion`; a decision is never disposition 3). "Hazard" is not a parking lot for handle-able in-scope work, and a decision the loop can make is not a blocker. A feature whose in-scope work lands in **more than one repo** is still disposition 1 — `/smith` delivers **one PR per impacted repo** (see *Delivery*), never demoting the cross-repo half to a feature-split or a blocker.
 
 ## Smith Loop
 
@@ -135,7 +152,7 @@ Each scheduled wake during the build phase follows this order:
 7. Implement the smallest in-spec delta on `feat/<slug>`.
 8. Run the canonical verification command. Verification must complete green on this tick — partial-tick verification does not count, and a tick that fails verification does **not** commit.
 9. If verification is green and at least one acceptance item moves from `[ ]` to `[x]`, commit + push to `feat/<slug>`. Do **not** open a PR yet — commits accumulate on the branch until all acceptance items are checked.
-10. Update the scratchpad — this is a **checkpoint** (`core/loop` → *Checkpoint-then-/clear*): tick log entry, State block (acceptance items checked, changed files, verification command + last result/failure evidence, next-tick plan, blockers & feature-splits if any), Acceptance criteria section (move ticked items to `[x]`) — left sufficient for a fresh agent to resume from scratchpad + git alone. The build phase's checkpoint events are: each completed acceptance item, each failed-verification cluster (serialize the failure evidence — this never softens step 8's hard gate or commits on red), the self-review pass (*Delivery* step 1), and the delivery itself. A user `/clear` is safe only after this update lands.
+10. Update the scratchpad — this is a **checkpoint** (`core/loop` → *Checkpoint-then-/clear*): tick log entry, State block (acceptance items checked, changed files, verification command + last result/failure evidence, next-tick plan, blockers & feature-splits if any), Acceptance criteria section (move ticked items to `[x]`), Decisions made autonomously section (append any decision resolved this tick) — left sufficient for a fresh agent to resume from scratchpad + git alone. The build phase's checkpoint events are: each completed acceptance item, each failed-verification cluster (serialize the failure evidence — this never softens step 8's hard gate or commits on red), the self-review pass (*Delivery* step 1), and the delivery itself. A user `/clear` is safe only after this update lands.
 11. If all acceptance items are now checked, proceed to *Delivery* below. Otherwise, the next wake continues the build phase.
 
 Do not pollute the user's main thread with raw audit logs.

@@ -39,15 +39,24 @@ ledger, the verification gate, and the K=3 escalation cap — as its coordinatio
   → *Partition emission format*. At campaign altitude the tech manager mirrors the same convention with
   a `QUESTS [...]` line — see `roles/tech-lead` → *QUESTS line format*.)
 - **Message types** (FIPA-reduced, two-tier correlation): `{from, to, type, conversationId,
-  correlationId?, ts, seq, body}`, `type ∈ {question, response, feedback, directive, task_mutation}`. A
-  `question` carries a `correlationId`; the `response` echoes it; `feedback`/`directive` are one-way.
-  `seq` is assigned by the transport, not the sender.
+  correlationId?, ts, seq, body}`, `type` is a **closed enum — `question | response | feedback |
+  directive | task_mutation` (do NOT invent others)**. A `question` carries a `correlationId`; the
+  `response` echoes it; `feedback`/`directive` are one-way. `seq` is assigned by the transport, not the
+  sender. A **decision escalation is a `question` addressed to the next tier up** (`to` = the escalation
+  recipient per the ladder); the deciding tier replies with a `response` echoing the `correlationId` —
+  the escalation is decided and recorded, never a pause for the user.
 - **Re-planning loop.** A worker raises `question` / `feedback` / `task_mutation` → the orchestrator
   **regenerates the remaining plan** (it never diffs), commits the node add/split/reprioritize, and
   sends `directive`s. The **escalation cap is the single binding convergence guard**: retry → local
-  patch → full replan, then **escalate to a blocker after K=3** attempts on a unit. This *is*
-  `core/completion`'s circuit breaker — there is no separate timer or loop-detector; an unanswered
-  `question` left `blocked` after K cycles is swept to a blocker.
+  patch → full replan, then **escalate one tier up after K=3** attempts on a unit. This *is*
+  `core/completion`'s circuit breaker — there is no separate timer or loop-detector.
+- **Escalation has a recipient — a decision escalates, it does not stop.** A `question` is a **decision**
+  (`core/completion` → *The three dispositions*), and a decision NEVER reaches the user post-plan. Its
+  recipient is **the orchestrator's own next tier up the escalation ladder**; it is **decided there and
+  recorded**, never surfaced. Only a **capability blocker** — a failure surviving the K=3 cap AND
+  unresolvable by any tier — becomes terminal `blocked`, and only with a schema-valid **postmortem**
+  (`core/completion` → *Closed blocker definition & postmortem schema*). An unanswered `question` is
+  never "swept to a blocker": it is decided one tier up. Only a capability failure is a blocker.
 - **Verification gate.** "Done" = acceptance criteria met + build/tests green, read from the **durable
   ledger** (`core/completion`), never from chat memory. The same gate governs which work distils into
   `core/memory`.
@@ -77,8 +86,10 @@ orchestration — no new Go, no daemon, no ooo bus, no comms tools.**
   BLOCKED {"question":"interface X is undefined in my boundary — provide it or widen scope?","correlationId":"task-export-3"}
   ```
 
-  The orchestrator answers, mutates the ledger if needed, and **re-spawns** the worker with the answer +
-  its updated slice. (The base Agent tool has no mid-task resume, so respawn is the mechanism — the
+  In `/forge` the orchestrator is the **tech-lead (this session)**: it **decides** the escalated
+  decision (its own fallback is the smith rule — decide the best option given context and record it in
+  the PROGRESS ledger's *Decisions made autonomously* section), mutates the ledger if needed, and
+  **re-spawns** the worker with the answer + its updated slice. (The base Agent tool has no mid-task resume, so respawn is the mechanism — the
   in-process realization of an interrupt→resume.) **Re-spawn context must be rendered, not merely
   attached.** The answer / findings / feedback the orchestrator carries forward MUST appear in the brief
   text the re-spawned worker actually reads. A field populated on the slice but never rendered into the
@@ -87,8 +98,9 @@ orchestration — no new Go, no daemon, no ooo bus, no comms tools.**
   what closes the loop, so it is **tested at the boundary**: a test asserts the carried context surfaces
   in the worker-visible brief, not just that the field is set.
 - **Enforcement** is the loop itself: it re-derives the open items and continues until the gate is green
-  (`core/completion`'s exit gate). No Stop hook required. The **K=3** escalation cap escalates a stuck
-  unit to a blocker rather than thrashing quota.
+  (`core/completion`'s exit gate). No Stop hook required. The **K=3** cap escalates a stuck unit's
+  *decision* to the tech-lead, who decides and records it; only a capability failure surviving the cap
+  becomes a postmortem-backed blocker — never thrash quota.
 - **Artifact hand-off is the filesystem / git**, not messages.
 
 ## Realization B — candyland, multi-process (the bus on the conductor)
@@ -100,7 +112,14 @@ seq+auth and an `AfterWriteFilter` to react), beside the existing stdout loop. T
 discipline holds over the bus: carried context (answer / findings / feedback) MUST be rendered into the
 brief the coder process reads — a populated-but-unrendered field is invisible context the coder
 re-derives — and a regression test asserts it surfaces in the worker-visible brief at the transport
-boundary, not merely that the field is set. **Realization B is built
+boundary, not merely that the field is set.
+
+In candyland a decision escalates **exactly one tier up** the ladder — coder → tech-lead → quest-lead →
+campaign **tech-manager** → **intent-manager** — and is decided at the lowest tier with authority. The
+top tier for each substrate (standalone-run = tech-lead; standalone-quest = quest-lead; campaign =
+intent-manager) applies the smith rule (decide + record). Escalation **never pauses for a human**; the
+dashboard shows decisions **read-only** for audit. Only a capability blocker terminates a record as
+`blocked`, and only with a schema-valid postmortem (`core/completion`). **Realization B is built
 in the candyland repo (its own PR), not here** — detritus ships the protocol + Realization A; candyland
 consumes the same contract.
 
