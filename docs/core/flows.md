@@ -33,10 +33,10 @@ The flows are different ways to do the **same work**. Every flow instantiates on
 plan → execute → review-with-rework → deliver
 ```
 
-- **plan** — intent settles BEFORE execution starts. Once planning settles, work runs to done **without stopping** — no pause gates, no approval gates, no mid-run user questions.
+- **plan** — intent settles BEFORE execution starts. Once planning settles, work runs to done **without stopping** — no pause gates, no approval gates, no mid-run user questions. What makes "never stop" true is the **decision-fallback ladder**: post-plan a *decision* (ambiguity, trade-off, scope interpretation, unexpected difficulty, unclear root cause) NEVER reaches the user — it falls to the lowest tier with authority, is decided there and **recorded**. `/smith` (single agent): decide the best option given context and record it in the ledger's *Decisions made autonomously* section. `/forge`: the coder emits `BLOCKED {json}`, the tech-lead (session) decides and re-spawns; the tech-lead's own fallback is the smith rule. candyland: escalate **exactly one tier up** — coder → tech-lead → quest-lead → tech-manager → intent-manager — decided at the lowest tier with authority (`core/coordination` → *Re-planning loop*). A **capability blocker** (a failure no decision can resolve — missing credentials, absent permissions, unreachable infrastructure, toolchain broken outside the repo) is the **only** thing that stops, and only with a postmortem (`core/completion`).
 - **execute** — build units per `core/build` (smallest delta → verification hard gate → commit).
 - **review-with-rework** — a fresh-context critic that can send work back, looping until clean, bounded: `/gh-self-review` convergence in-session; the reviewer's fix→re-review loop in the sidecar. Mandatory at every level.
-- **deliver** — composes `/gh`; modes per `core/build` → *Delivery modes* (`pr|branch|feedback|review`). Never merges — the human merge is the real gate.
+- **deliver** — composes `/gh`; modes are a **closed enum — `pr | branch | feedback | review` (do NOT invent others)** per `core/build` → *Delivery modes*. Never merges — the human merge is the real gate.
 
 ## Taxonomy
 
