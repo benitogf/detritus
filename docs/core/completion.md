@@ -161,6 +161,21 @@ The discriminator across every carve-out below is the **delivery mode** (`run.de
 no-op detector flags only runs that delivered **nothing in-scope**; it must **never** flag a
 `branch`, `feedback`, or `review` run as a no-op failure.
 
+**Delivery attempted-but-FAILED is a failed terminal, distinct from a no-op — and never `done`.** The
+no-op detector above is about work that was never *produced*. A separate, equally-forbidden state is work
+that was produced but could **not be delivered at the mechanical layer**: `git push` rejected (branch
+protection, secret-scanning push protection, non-fast-forward), a PR-open API error, an auth/permission
+failure. This is **not** a no-op (in-scope work exists, committed) and **not** a clean `done` (the
+delivery the mode promised did not land). Rules:
+- **Name it** `delivery-failed (<verbatim reason>)` on every reporting surface — never fold it into
+  `done`, and never let a green intent/review gate upstream mask a failed push downstream.
+- **Feed the error back**, don't strand it. The git/gh error text is usually **machine-fixable** by an
+  agent that reads it (e.g. a push blocked by secret scanning → remove the offending file/history; a
+  non-fast-forward → rebase). In a loop/campaign this is a remediation round on the delivery error
+  itself, bounded like any other; only a failure that survives the budget is a real hard blocker.
+- **A multi-unit deliverable (e.g. one PR per repo) is not `done` until *every* impacted unit delivered.**
+  One unit's delivery failure is isolated from the others but keeps the whole out of clean `done`.
+
 **Carve-out 1 — branch delivery is legitimate `done` with `prsOpened:0`.** A run/child delivering to a
 branch (`deliver=="branch"`) is *legitimately* `done` with no PR — its delivery **is** the branch commit,
 and the parent campaign opens the PR (`core/build` → *Multi-repo delivery*).
