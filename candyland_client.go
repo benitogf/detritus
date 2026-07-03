@@ -183,11 +183,12 @@ type launchReference struct {
 	owner string
 	repo  string
 	num   int
-	bare  bool // "#N" with no owner/repo — resolve owner/repo from the cwd repo
+	bare  bool   // "#N" with no owner/repo — resolve owner/repo from the cwd repo
+	text  string // the exact matched substring (used to detect a hand-off vs a prose citation)
 }
 
 var (
-	refURLRe  = regexp.MustCompile(`github\.com/([\w.\-]+)/([\w.\-]+)/(?:pull|issues)/(\d+)`)
+	refURLRe  = regexp.MustCompile(`(?:https?://)?github\.com/([\w.\-]+)/([\w.\-]+)/(?:pull|issues)/(\d+)`)
 	refNWORe  = regexp.MustCompile(`([\w.\-]+)/([\w.\-]+)#(\d+)`)
 	refBareRe = regexp.MustCompile(`#(\d+)`)
 )
@@ -197,15 +198,48 @@ var (
 // cwd repo). Returns found=false when the input names no reference (new work).
 func parseLaunchReference(input string) (launchReference, bool) {
 	if m := refURLRe.FindStringSubmatch(input); m != nil {
-		return launchReference{owner: m[1], repo: m[2], num: atoiOr0(m[3])}, true
+		return launchReference{owner: m[1], repo: m[2], num: atoiOr0(m[3]), text: m[0]}, true
 	}
 	if m := refNWORe.FindStringSubmatch(input); m != nil {
-		return launchReference{owner: m[1], repo: m[2], num: atoiOr0(m[3])}, true
+		return launchReference{owner: m[1], repo: m[2], num: atoiOr0(m[3]), text: m[0]}, true
 	}
 	if m := refBareRe.FindStringSubmatch(input); m != nil {
-		return launchReference{num: atoiOr0(m[1]), bare: true}, true
+		return launchReference{num: atoiOr0(m[1]), bare: true, text: m[0]}, true
 	}
 	return launchReference{}, false
+}
+
+// isLaunchHandoff reports whether the input IS the reference (a hand-off) rather
+// than merely citing it inside prose (a plan/brief). A hand-off is a single
+// trimmed line whose content is the reference alone, optionally preceded by a
+// short intent verb phrase ("review ", "address feedback on ", "fix the review
+// on ", "update ") and/or trailing punctuation — nothing else. Anything embedded
+// in longer or multi-line prose is a citation. This is the predicate that decides
+// whether gh state may drive the launch (hand-off) or whether an explicit
+// feedback/review intent marker is additionally required (citation).
+func isLaunchHandoff(input, refText string) bool {
+	trimmed := strings.TrimSpace(input)
+	if strings.ContainsAny(trimmed, "\n\r") {
+		return false // multi-line prose is always a citation
+	}
+	idx := strings.Index(trimmed, refText)
+	if idx < 0 {
+		return false
+	}
+	after := strings.TrimRight(strings.TrimSpace(trimmed[idx+len(refText):]), " .!?;:,)")
+	if after != "" {
+		return false // the reference is followed by more than trailing punctuation
+	}
+	before := strings.TrimSpace(trimmed[:idx])
+	if before == "" {
+		return true // the reference is the whole objective
+	}
+	// A leading intent verb phrase is short and clause-punctuation-free; a prose
+	// clause ("Rework the pipeline; this supersedes ") is not.
+	if strings.ContainsAny(before, ".;:,") {
+		return false
+	}
+	return len(strings.Fields(before)) <= 4
 }
 
 // classifyLaunchInput mirrors the flows/github/gh Phase 0/1 classification OUTCOME
@@ -213,17 +247,24 @@ func parseLaunchReference(input string) (launchReference, bool) {
 // It is the one classifier all sidecar launchers share.
 //
 // Launcher inputs are objective/plan/campaign-brief TEXT, which routinely cite
-// issues/PRs in prose (a settled plan may mention "#97" in passing). A bare "#N"
-// with no feedback/review intent must NOT hijack delivery — that is the safety the
-// old marker-only path had. An explicit reference (a full github URL or an
-// owner/repo#N shorthand) is unambiguous and is always treated as the target, the
-// same way /gh treats a URL/ref it is handed. So the gate is narrow: only the bare
-// "#N" form is conditioned on an explicit feedback/review intent marker being
-// present (hasFeedbackIntent / hasReviewIntent — verbs like "review PR #N",
-// "address feedback on PR #N", "update PR #N"). Rows (see the /gh doc):
+// issues/PRs in prose (a settled plan may mention "#97" or a full URL in passing).
+// A citation must NOT hijack delivery — that is the safety the old marker-only
+// path had. The distinction that matters is NOT bare-vs-explicit; it is whether
+// the reference IS the input (a hand-off) or is embedded in prose (a citation),
+// decided by isLaunchHandoff for ALL reference forms alike (bare #N, full URL,
+// owner/repo#N):
+//   - a HAND-OFF (the trimmed input is essentially just the reference, optionally
+//     with a short intent verb phrase and trailing punctuation) is always driven
+//     by live gh state, the same way /gh treats a URL/ref it is handed;
+//   - a CITATION (the reference sits inside longer/multi-line prose) drives gh
+//     state only when an explicit feedback/review intent marker is also present
+//     (hasFeedbackIntent / hasReviewIntent); otherwise it is new work (pr/0, gh
+//     untouched).
+//
+// Rows (see the /gh doc):
 //   - no reference → pr (new work; gh untouched)
-//   - bare "#N" with no feedback/review intent marker → pr (new work; the prose
-//     mentions a number but does not ask to act on that PR)
+//   - prose citation with no feedback/review intent marker → pr (new work; gh
+//     untouched — the text mentions a ref but does not ask to act on it)
 //   - open PR + unaddressed CHANGES_REQUESTED → feedback (even with review text)
 //   - open PR + feedback-intent text → feedback (an explicit "address … feedback"
 //     phrase wins over a bare "review" word)
@@ -231,7 +272,9 @@ func parseLaunchReference(input string) (launchReference, bool) {
 //   - open PR + post-last-commit comments, no intent text → feedback
 //   - open PR + none of the above → Ambiguous (CLI asks once before launch)
 //   - open issue → pr (the issue ref stays in the objective)
-//   - merged/closed PR or closed issue → error (verbatim state), aborting launch
+//   - merged/closed PR or closed issue on a HAND-OFF → error (verbatim state),
+//     aborting launch; the same state reached via a CITATION → pr/0 (a citation
+//     of a merged PR must not abort a new-work launch)
 //
 // A `gh api` failure degrades to marker-only derivation (deriveMarkerDelivery) and
 // signals Degraded, so a missing/erroring gh never fails the launch.
@@ -240,10 +283,11 @@ func classifyLaunchInput(input, cwd string) (launchClassification, error) {
 	if !found {
 		return launchClassification{Deliver: "pr"}, nil
 	}
-	if ref.bare {
+	handoff := isLaunchHandoff(input, ref.text)
+	if !handoff {
 		lower := strings.ToLower(input)
 		if !hasFeedbackIntent(lower) && !hasReviewIntent(lower) {
-			return launchClassification{Deliver: "pr"}, nil // prose "#N" citation, no intent to act
+			return launchClassification{Deliver: "pr"}, nil // prose citation, no intent to act on the ref
 		}
 	}
 	if ref.bare {
@@ -267,7 +311,10 @@ func classifyLaunchInput(input, cwd string) (launchClassification, error) {
 	if pr, ok := issue["pull_request"]; !ok || pr == nil {
 		state, _ := issue["state"].(string)
 		if state != "open" {
-			return launchClassification{}, fmt.Errorf("issue #%d in %s/%s is %s — not open work; aborting launch", ref.num, ref.owner, ref.repo, state)
+			if handoff {
+				return launchClassification{}, fmt.Errorf("issue #%d in %s/%s is %s — not open work; aborting launch", ref.num, ref.owner, ref.repo, state)
+			}
+			return launchClassification{Deliver: "pr"}, nil // citation of a non-open issue → new work
 		}
 		return launchClassification{Deliver: "pr"}, nil // new work; issue ref stays in the objective
 	}
@@ -279,6 +326,9 @@ func classifyLaunchInput(input, cwd string) (launchClassification, error) {
 	}
 	state, _ := pull["state"].(string)
 	if state != "open" {
+		if !handoff {
+			return launchClassification{Deliver: "pr"}, nil // citation of a merged/closed PR → new work, not an abort
+		}
 		verb := "closed"
 		if mergedAt, ok := pull["merged_at"]; ok && mergedAt != nil {
 			verb = "merged"

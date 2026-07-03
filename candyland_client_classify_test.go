@@ -164,6 +164,24 @@ func TestClassifyLaunchInput(t *testing.T) {
 			want:     "feedback", wantPR: 5,
 		},
 		{
+			name:     "hand-off review PR #N (bare)",
+			input:    "review PR #5",
+			fixtures: merge(prFixtures(approvedAll, noComments), map[string]string{"nwo": "acme/widget\n"}),
+			want:     "review", wantPR: 5,
+		},
+		{
+			name:     "hand-off address feedback on owner/repo#N",
+			input:    "address feedback on acme/widget#5",
+			fixtures: prFixtures(approvedAll, noComments),
+			want:     "feedback", wantPR: 5,
+		},
+		{
+			name:      "hand-off bare URL as whole objective is ambiguous",
+			input:     "https://github.com/acme/widget/pull/5",
+			fixtures:  prFixtures(noReviews, noComments),
+			ambiguous: true, wantPR: 5,
+		},
+		{
 			name:     "gh failure degrades to marker derivation",
 			input:    "address feedback on PR #7",
 			fixtures: map[string]string{},
@@ -241,6 +259,49 @@ func TestClassifyLaunchInputProseCitationIsNewWork(t *testing.T) {
 	}
 	if got.Deliver != "pr" || got.TargetPR != 0 || got.Ambiguous || got.Degraded {
 		t.Fatalf("got %+v, want pr/0, not ambiguous/degraded", got)
+	}
+}
+
+// A prose citation of a PR/issue by full URL or owner/repo#N — with NO
+// feedback/review verb — classifies as new work (pr/0) and never touches gh,
+// exactly like the bare "#N" case. This generalizes the citation gate to every
+// reference form (the residual defect: URL/nwo refs used to skip the gate and
+// hijack the launch). Empty fixtures model an absent gh; reaching pr/0 without a
+// fetch error proves gh was untouched. The merged-URL case additionally proves a
+// citation of a MERGED PR does NOT abort the launch.
+func TestClassifyLaunchInputProseCitationForms(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    string
+		fixtures map[string]string
+	}{
+		{
+			name:     "prose full-URL citation, no verb",
+			input:    "Rework the pipeline; this supersedes https://github.com/acme/widget/pull/5.",
+			fixtures: map[string]string{},
+		},
+		{
+			name:     "prose owner/repo#N citation, no verb",
+			input:    "Rework the pipeline; this supersedes benitogf/candyland#23.",
+			fixtures: map[string]string{},
+		},
+		{
+			name:     "prose citation of a MERGED url, no verb, does not abort",
+			input:    "Rework the pipeline; this supersedes https://github.com/acme/widget/pull/5.",
+			fixtures: map[string]string{"repos_acme_widget_issues_5": openPRIssue, "repos_acme_widget_pulls_5": mergedPull},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			installGHStub(t, tc.fixtures)
+			got, err := classifyLaunchInput(tc.input, t.TempDir())
+			if err != nil {
+				t.Fatalf("classifyLaunchInput: %v", err)
+			}
+			if got.Deliver != "pr" || got.TargetPR != 0 || got.Ambiguous || got.Degraded {
+				t.Fatalf("got %+v, want pr/0, not ambiguous/degraded", got)
+			}
+		})
 	}
 }
 
