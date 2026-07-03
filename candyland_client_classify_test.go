@@ -354,6 +354,114 @@ func TestClassifyLaunchInputLooseReviewWordNoHijack(t *testing.T) {
 	}
 }
 
+// classifyBabysitInput resolves the ONE open PR a /babysit loop watches against
+// live (stubbed) gh state. Load-bearing rows: an explicit reference in any form
+// validates OPEN; an issue / merged / closed target errors (nothing to
+// babysit); no reference falls back to the current-branch PR; a gh failure with
+// a PR number in the input degrades rather than fails.
+func TestClassifyBabysitInput(t *testing.T) {
+	prURL := "https://github.com/acme/widget/pull/5"
+	cases := []struct {
+		name     string
+		input    string
+		fixtures map[string]string
+		wantPR   int
+		degraded bool
+		wantErr  string
+	}{
+		{
+			name:     "open PR by URL",
+			input:    "babysit " + prURL,
+			fixtures: map[string]string{"repos_acme_widget_issues_5": openPRIssue, "repos_acme_widget_pulls_5": openPull},
+			wantPR:   5,
+		},
+		{
+			name:     "open PR by owner/repo#N",
+			input:    "watch acme/widget#5",
+			fixtures: map[string]string{"repos_acme_widget_issues_5": openPRIssue, "repos_acme_widget_pulls_5": openPull},
+			wantPR:   5,
+		},
+		{
+			name:     "open PR by bare #N resolves cwd repo",
+			input:    "babysit #5",
+			fixtures: map[string]string{"nwo": "acme/widget\n", "repos_acme_widget_issues_5": openPRIssue, "repos_acme_widget_pulls_5": openPull},
+			wantPR:   5,
+		},
+		{
+			name:     "issue reference is not a PR",
+			input:    "babysit https://github.com/acme/widget/issues/5",
+			fixtures: map[string]string{"repos_acme_widget_issues_5": openIssue},
+			wantErr:  "issue, not a PR",
+		},
+		{
+			name:     "merged PR has nothing to watch",
+			input:    "babysit " + prURL,
+			fixtures: map[string]string{"repos_acme_widget_issues_5": openPRIssue, "repos_acme_widget_pulls_5": mergedPull},
+			wantErr:  "merged",
+		},
+		{
+			name:     "closed PR has nothing to watch",
+			input:    "babysit " + prURL,
+			fixtures: map[string]string{"repos_acme_widget_issues_5": openPRIssue, "repos_acme_widget_pulls_5": closedPull},
+			wantErr:  "closed",
+		},
+		{
+			name:     "gh failure with a PR number degrades",
+			input:    "babysit PR #7",
+			fixtures: map[string]string{},
+			wantPR:   7, degraded: true,
+		},
+		{
+			name:     "gh failure with no recoverable PR number errors",
+			input:    "babysit " + prURL, // a URL carries no #N / "pr N" marker for parsePRNumber to recover
+			fixtures: map[string]string{},
+			wantErr:  "cannot resolve",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			installGHStub(t, tc.fixtures)
+			got, err := classifyBabysitInput(tc.input, t.TempDir())
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err = %v, want containing %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("classifyBabysitInput: %v", err)
+			}
+			if got.TargetPR != tc.wantPR {
+				t.Fatalf("targetPR = %d, want %d (%+v)", got.TargetPR, tc.wantPR, got)
+			}
+			if got.Degraded != tc.degraded {
+				t.Fatalf("degraded = %v, want %v (%+v)", got.Degraded, tc.degraded, got)
+			}
+		})
+	}
+}
+
+// With no PR reference in the input, classifyBabysitInput auto-detects the
+// current branch's open PR (branchPRLookup) — and errors when the branch has none.
+func TestClassifyBabysitInputBranchFallback(t *testing.T) {
+	orig := branchPRLookup
+	defer func() { branchPRLookup = orig }()
+
+	branchPRLookup = func(string) int { return 42 }
+	got, err := classifyBabysitInput("babysit this pr", t.TempDir())
+	if err != nil {
+		t.Fatalf("classifyBabysitInput: %v", err)
+	}
+	if got.TargetPR != 42 || got.Degraded {
+		t.Fatalf("got %+v, want targetPR 42 not degraded", got)
+	}
+
+	branchPRLookup = func(string) int { return 0 }
+	if _, err := classifyBabysitInput("babysit this pr", t.TempDir()); err == nil {
+		t.Fatal("no reference and no branch PR must error")
+	}
+}
+
 func merge(a, b map[string]string) map[string]string {
 	out := map[string]string{}
 	for k, v := range a {

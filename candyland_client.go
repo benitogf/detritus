@@ -108,6 +108,23 @@ func runCandyland(detritusPath, promptFile string, folders []string, cwd string)
 	return nil
 }
 
+// runCandylandUp is the `detritus --candyland-up` handler: bring the sidecar
+// online (health check, start it detached if down, poll until ready) and print
+// the API + UI ports. It starts NO run — it is the bare "get candyland online"
+// entry the dashboard / observability flows use before launching any work, and
+// the one /babysit uses to be sure the sidecar is reachable before it begins
+// watching a PR. ensureCandylandUp failures are returned so the caller exits
+// non-zero.
+func runCandylandUp(detritusPath string) error {
+	if err := ensureCandylandUp(detritusPath); err != nil {
+		return err
+	}
+	fmt.Printf("candyland is up\n")
+	fmt.Printf("API: %s\n", candylandBaseURL)
+	fmt.Printf("UI / Dashboard: %s\n", candylandDashboardURL)
+	return nil
+}
+
 // resolveCandylandDelivery classifies a --candyland-run into a delivery mode +
 // target PR, so a feedback run updates the existing PR in place instead of
 // opening a new one. Two tiers, reference first:
@@ -521,6 +538,90 @@ func resolveLaunchDelivery(input, cwd string) (deliver string, targetPR int, deg
 		}
 	}
 	return c.Deliver, c.TargetPR, c.Degraded, nil
+}
+
+// babysitClassification is the outcome of classifyBabysitInput: the ONE open PR
+// a /babysit loop will watch until merged. Degraded marks a `gh` failure that
+// fell back to marker-only PR-number derivation, so the caller can surface the
+// reduced confidence — the same signal launchClassification carries.
+type babysitClassification struct {
+	TargetPR int
+	Degraded bool
+}
+
+// classifyBabysitInput resolves the ONE open PR a /babysit loop watches,
+// mirroring the flows/github/babysit "Inputs" rules against live gh state. It is
+// the babysit homologue of classifyLaunchInput, but there is no delivery axis —
+// babysit always watches-then-merges — so the only success outcome is a target
+// PR number (or an error that aborts the watch before it starts).
+//
+// Resolution order (first match wins):
+//   - an explicit PR reference in the input (full URL, owner/repo#N, or bare #N
+//     resolved against the cwd repo), validated OPEN against live gh state. A
+//     babysit input IS the reference (a hand-off), never a prose citation, so
+//     there is no citation gate — the reference always drives;
+//   - otherwise the cwd repo's current-branch open PR (branchPRLookup) — the "no
+//     PR argument" auto-detect in babysit.md.
+//
+// Errors (there is nothing to babysit — the caller aborts / asks which PR):
+//   - the reference is an ISSUE, not a PR (babysit watches a pull request);
+//   - the referenced PR is merged/closed (no longer open);
+//   - no reference and the branch has no open PR.
+//
+// A `gh api` failure on an explicit reference degrades to marker-only PR-number
+// derivation (parsePRNumber) with Degraded set, so a missing/erroring gh never
+// fails the watch when the input already names a PR number; with no number to
+// fall back on it still errors rather than guess a target.
+func classifyBabysitInput(input, cwd string) (babysitClassification, error) {
+	ref, found := parseLaunchReference(input)
+	if !found {
+		if pr := branchPRLookup(cwd); pr > 0 {
+			return babysitClassification{TargetPR: pr}, nil
+		}
+		return babysitClassification{}, fmt.Errorf("no PR reference in input and no open PR for the current branch — specify which PR to babysit")
+	}
+	if ref.bare {
+		nwo := ghRepoNWO(cwd)
+		parts := strings.SplitN(strings.TrimSpace(nwo), "/", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return degradedBabysit(input)
+		}
+		ref.owner, ref.repo = parts[0], parts[1]
+	}
+
+	issue, err := ghAPIJSON(cwd, fmt.Sprintf("repos/%s/%s/issues/%d", ref.owner, ref.repo, ref.num))
+	if err != nil {
+		return degradedBabysit(input)
+	}
+	// .pull_request present & non-null ⇒ a PR; otherwise an issue (babysit needs a PR).
+	if pr, ok := issue["pull_request"]; !ok || pr == nil {
+		return babysitClassification{}, fmt.Errorf("#%d in %s/%s is an issue, not a PR — babysit watches a pull request", ref.num, ref.owner, ref.repo)
+	}
+
+	pull, err := ghAPIJSON(cwd, fmt.Sprintf("repos/%s/%s/pulls/%d", ref.owner, ref.repo, ref.num))
+	if err != nil {
+		return degradedBabysit(input)
+	}
+	state, _ := pull["state"].(string)
+	if state != "open" {
+		verb := "closed"
+		if mergedAt, ok := pull["merged_at"]; ok && mergedAt != nil {
+			verb = "merged"
+		}
+		return babysitClassification{}, fmt.Errorf("PR #%d in %s/%s is %s — no longer open; nothing to babysit", ref.num, ref.owner, ref.repo, verb)
+	}
+	return babysitClassification{TargetPR: ref.num}, nil
+}
+
+// degradedBabysit is the `gh`-unavailable fallback for classifyBabysitInput:
+// marker-only PR-number derivation (parsePRNumber) with Degraded set. With a PR
+// number in the input it watches that PR at reduced confidence; with none it
+// errors rather than guess a target.
+func degradedBabysit(input string) (babysitClassification, error) {
+	if pr := parsePRNumber(strings.ToLower(input)); pr > 0 {
+		return babysitClassification{TargetPR: pr, Degraded: true}, nil
+	}
+	return babysitClassification{}, fmt.Errorf("gh unavailable and no PR number in input — cannot resolve a PR to babysit")
 }
 
 // deriveShortTitle yields a compact display label from an objective/plan/input:
