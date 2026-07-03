@@ -13,6 +13,7 @@ import (
 )
 
 const reachableCap = 100 // bound the reachable-from BFS; truncation is noted, never silent
+const impactDepth = 3    // bound the impacted-by (reverse-transitive) walk; truncation is noted, never silent
 
 // GraphQuery configures a code_graph navigation.
 type GraphQuery struct {
@@ -20,20 +21,55 @@ type GraphQuery struct {
 	Scope  string // dir to load; empty → the current project
 }
 
+// GraphRef is one symbol reference in a structured code_graph result.
+type GraphRef struct {
+	Name string `json:"name"`
+	Pos  string `json:"pos"`
+}
+
+// GraphResult is the typed structured result of code_graph so the SDK emits an
+// outputSchema + structuredContent (mirrors kb_search/skill_search). Callers is
+// who-calls (1-hop reverse); Reachable is reachable-from (transitive forward via
+// callees); ImpactedBy is what transitively reaches the symbol (reverse walk via
+// callers, bounded to impactDepth — "what breaks if I change this"); AffectedTests
+// are the _test.go files that define the target or any dependent. Truncated is set
+// when any bounded walk was cut short. The interface path leaves the walk fields
+// empty.
+type GraphResult struct {
+	Symbol        string     `json:"symbol"`
+	Callers       []GraphRef `json:"callers"`
+	Reachable     []GraphRef `json:"reachable"`
+	ImpactedBy    []GraphRef `json:"impacted_by"`
+	AffectedTests []string   `json:"affected_tests"`
+	Truncated     bool       `json:"truncated"`
+}
+
+// newGraphResult returns a result with non-nil slices so structuredContent
+// renders JSON arrays (not null) even on the empty paths.
+func newGraphResult(symbol string) *GraphResult {
+	return &GraphResult{
+		Symbol:        symbol,
+		Callers:       []GraphRef{},
+		Reachable:     []GraphRef{},
+		ImpactedBy:    []GraphRef{},
+		AffectedTests: []string{},
+	}
+}
+
 // BuildCodeGraph returns precise, type-resolved navigation for a symbol:
 // who-calls and reachable-from for a function, or implementers for an
 // interface. It loads the package with full type info via go/packages; when
 // the package does not load or compile it falls back to the structural map
 // (with a note) rather than erroring. It is never auto-run by code_map.
-func BuildCodeGraph(q GraphQuery) (string, error) {
+func BuildCodeGraph(q GraphQuery) (string, *GraphResult, error) {
 	if strings.TrimSpace(q.Symbol) == "" {
-		return "", fmt.Errorf("symbol required")
+		return "", nil, fmt.Errorf("symbol required")
 	}
 	scope := q.Scope
 	if scope == "" {
 		wd, err := os.Getwd()
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 		scope = ResolveProjectRoot(wd)
 	}
@@ -42,30 +78,35 @@ func BuildCodeGraph(q GraphQuery) (string, error) {
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
 			packages.NeedImports | packages.NeedDeps | packages.NeedTypes |
 			packages.NeedSyntax | packages.NeedTypesInfo,
-		Dir: scope,
+		// Tests:true loads _test.go files so test functions enter the call graph
+		// (needed to compute affected tests). It yields package/test-variant
+		// duplicates of the same decl, which buildCallEdges collapses by position.
+		Tests: true,
+		Dir:   scope,
 	}
 	pkgs, err := packages.Load(cfg, "./...")
 	if err != nil {
-		return graphFallback(scope, q.Symbol, "package failed to load"), nil
+		return graphFallback(scope, q.Symbol, "package failed to load"), newGraphResult(q.Symbol), nil
 	}
 	if len(pkgs) == 0 {
-		return graphFallback(scope, q.Symbol, "no Go packages in scope"), nil
+		return graphFallback(scope, q.Symbol, "no Go packages in scope"), newGraphResult(q.Symbol), nil
 	}
 	if pkgErrors(pkgs) {
-		return graphFallback(scope, q.Symbol, "package does not compile"), nil
+		return graphFallback(scope, q.Symbol, "package does not compile"), newGraphResult(q.Symbol), nil
 	}
 
 	// Interface query first: if the symbol names an interface, list its implementers.
 	if iface, name := findInterface(pkgs, q.Symbol); iface != nil {
-		return renderImplementers(pkgs, name, iface), nil
+		return renderImplementers(pkgs, name, iface), newGraphResult(q.Symbol), nil
 	}
 
 	edges := buildCallEdges(pkgs)
 	targets := edges.byName[q.Symbol]
 	if len(targets) == 0 {
-		return fmt.Sprintf("symbol %q not found as a function or interface in %s", q.Symbol, scope), nil
+		return fmt.Sprintf("symbol %q not found as a function or interface in %s", q.Symbol, scope), newGraphResult(q.Symbol), nil
 	}
-	return renderFunctionGraph(edges, q.Symbol, targets), nil
+	text, res := renderFunctionGraph(edges, q.Symbol, targets)
+	return text, res, nil
 }
 
 func pkgErrors(pkgs []*packages.Package) bool {
@@ -95,9 +136,24 @@ func buildCallEdges(pkgs []*packages.Package) *callEdges {
 		pos:     map[*types.Func]token.Position{},
 		byName:  map[string][]*types.Func{},
 	}
+	// canon collapses the package/test-variant duplicates of one declaration to a
+	// single representative *types.Func. packages.Load shares one FileSet across
+	// all loaded packages, so a source position uniquely identifies a decl.
+	canon := map[token.Position]*types.Func{}
+	canonical := func(fn *types.Func, fset *token.FileSet) *types.Func {
+		pos := fset.Position(fn.Pos())
+		if c, ok := canon[pos]; ok {
+			return c
+		}
+		canon[pos] = fn
+		return fn
+	}
 	seenEdge := map[[2]*types.Func]bool{}
 	for _, pkg := range pkgs {
 		info := pkg.TypesInfo
+		if info == nil {
+			continue
+		}
 		for _, file := range pkg.Syntax {
 			for _, decl := range file.Decls {
 				fd, ok := decl.(*ast.FuncDecl)
@@ -108,6 +164,7 @@ func buildCallEdges(pkgs []*packages.Package) *callEdges {
 				if self == nil {
 					continue
 				}
+				self = canonical(self, pkg.Fset)
 				e.record(self, pkg.Fset)
 				if fd.Body == nil {
 					continue
@@ -121,6 +178,7 @@ func buildCallEdges(pkgs []*packages.Package) *callEdges {
 					if callee == nil {
 						return true
 					}
+					callee = canonical(callee, pkg.Fset)
 					e.record(callee, pkg.Fset)
 					key := [2]*types.Func{self, callee}
 					if !seenEdge[key] {
@@ -166,8 +224,9 @@ func calleeFunc(info *types.Info, call *ast.CallExpr) *types.Func {
 	return nil
 }
 
-func renderFunctionGraph(e *callEdges, symbol string, targets []*types.Func) string {
+func renderFunctionGraph(e *callEdges, symbol string, targets []*types.Func) (string, *GraphResult) {
 	var b strings.Builder
+	res := newGraphResult(symbol)
 
 	callerSet := map[*types.Func]bool{}
 	for _, t := range targets {
@@ -181,22 +240,60 @@ func renderFunctionGraph(e *callEdges, symbol string, targets []*types.Func) str
 	} else {
 		for _, fn := range sortFuncs(callerSet) {
 			fmt.Fprintf(&b, "  %s  (%s)\n", qualified(fn), shortPos(e.pos[fn]))
+			res.Callers = append(res.Callers, graphRef(e, fn))
 		}
 	}
 
-	reach, truncated := reachableFrom(e, targets)
+	reach, reachTrunc := reachableFrom(e, targets)
 	fmt.Fprintf(&b, "\nreachable from %s (≤%d):\n", symbol, reachableCap)
 	if len(reach) == 0 {
 		b.WriteString("  (calls nothing in scope)\n")
 	} else {
 		for _, fn := range reach {
 			fmt.Fprintf(&b, "  %s  (%s)\n", qualified(fn), shortPos(e.pos[fn]))
+			res.Reachable = append(res.Reachable, graphRef(e, fn))
 		}
-		if truncated {
+		if reachTrunc {
 			fmt.Fprintf(&b, "  … truncated at %d (scope is large)\n", reachableCap)
 		}
 	}
-	return b.String()
+
+	// impacted-by: who transitively REACHES the symbol — the "what breaks if I
+	// change this" (blast radius) direction, walking e.callers up to impactDepth.
+	impacted, impactTrunc := impactedBy(e, targets)
+	fmt.Fprintf(&b, "\nimpacted-by %s (≤%d):\n", symbol, impactDepth)
+	if len(impacted) == 0 {
+		b.WriteString("  (nothing depends on it in scope)\n")
+	} else {
+		for _, fn := range impacted {
+			fmt.Fprintf(&b, "  %s  (%s)\n", qualified(fn), shortPos(e.pos[fn]))
+			res.ImpactedBy = append(res.ImpactedBy, graphRef(e, fn))
+		}
+		if impactTrunc {
+			fmt.Fprintf(&b, "  … truncated at depth %d (deeper dependents exist)\n", impactDepth)
+		}
+	}
+
+	// affected tests: _test.go files that define the target or any dependent, so a
+	// change to the symbol may break them.
+	tests := affectedTests(e, targets, impacted)
+	res.AffectedTests = tests
+	b.WriteString("\naffected tests:\n")
+	if len(tests) == 0 {
+		b.WriteString("  (none in scope)\n")
+	} else {
+		for _, f := range tests {
+			fmt.Fprintf(&b, "  %s\n", f)
+		}
+	}
+
+	res.Truncated = reachTrunc || impactTrunc
+	return b.String(), res
+}
+
+// graphRef renders a func into a structured reference (qualified name + short pos).
+func graphRef(e *callEdges, fn *types.Func) GraphRef {
+	return GraphRef{Name: qualified(fn), Pos: shortPos(e.pos[fn])}
 }
 
 func reachableFrom(e *callEdges, targets []*types.Func) ([]*types.Func, bool) {
@@ -225,6 +322,85 @@ func reachableFrom(e *callEdges, targets []*types.Func) ([]*types.Func, bool) {
 	}
 	sort.Slice(out, func(i, j int) bool { return qualified(out[i]) < qualified(out[j]) })
 	return out, truncated
+}
+
+// impactedBy walks the REVERSE call graph (e.callers) transitively from targets,
+// bounded to impactDepth hops, to answer "what breaks if I change this". It
+// mirrors reachableFrom but follows callers instead of callees. Returns the
+// dependent set (excluding the targets) and whether the walk was cut short by
+// depth or the reachableCap item bound — truncation is always surfaced, never
+// silent.
+func impactedBy(e *callEdges, targets []*types.Func) ([]*types.Func, bool) {
+	visited := map[*types.Func]bool{}
+	for _, t := range targets {
+		visited[t] = true
+	}
+	type item struct {
+		fn    *types.Func
+		depth int
+	}
+	queue := make([]item, 0, len(targets))
+	for _, t := range targets {
+		queue = append(queue, item{fn: t, depth: 0})
+	}
+	var out []*types.Func
+	truncated := false
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		if cur.depth >= impactDepth {
+			// A caller beyond the depth bound exists but is not expanded.
+			for _, caller := range e.callers[cur.fn] {
+				if !visited[caller] {
+					truncated = true
+					break
+				}
+			}
+			continue
+		}
+		for _, caller := range e.callers[cur.fn] {
+			if visited[caller] {
+				continue
+			}
+			visited[caller] = true
+			if len(out) >= reachableCap {
+				truncated = true
+				continue
+			}
+			out = append(out, caller)
+			queue = append(queue, item{fn: caller, depth: cur.depth + 1})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return qualified(out[i]) < qualified(out[j]) })
+	return out, truncated
+}
+
+// affectedTests returns the _test.go files that define the target or any of its
+// (bounded) dependents — tests that transitively exercise the symbol and so may
+// break when it changes. Uses the definition positions already recorded in e.pos.
+func affectedTests(e *callEdges, targets, impacted []*types.Func) []string {
+	seen := map[string]bool{}
+	files := []string{}
+	add := func(fn *types.Func) {
+		p := e.pos[fn]
+		if p.Filename == "" {
+			return
+		}
+		f := filepathToSlash(p.Filename)
+		if !strings.HasSuffix(f, "_test.go") || seen[f] {
+			return
+		}
+		seen[f] = true
+		files = append(files, f)
+	}
+	for _, t := range targets {
+		add(t)
+	}
+	for _, fn := range impacted {
+		add(fn)
+	}
+	sort.Strings(files)
+	return files
 }
 
 func findInterface(pkgs []*packages.Package, symbol string) (*types.Interface, string) {
