@@ -305,6 +305,51 @@ func TestClassifyLaunchInputProseCitationForms(t *testing.T) {
 	}
 }
 
+// A prose citation of a CLOSED (non-open) ISSUE with NO strict marker classifies
+// as new work (pr/0): the citation→issue branch must treat a closed issue exactly
+// like an open one when the input is not a hand-off — the ref stays in the
+// objective, gh is consulted but never aborts. (Guards the previously-untested
+// citation-of-a-closed-issue path.)
+func TestClassifyLaunchInputProseCitationClosedIssue(t *testing.T) {
+	installGHStub(t, map[string]string{"repos_acme_widget_issues_5": closedIssue})
+	input := "Build a fresh importer; the old attempt in https://github.com/acme/widget/issues/5 was abandoned."
+	got, err := classifyLaunchInput(input, t.TempDir())
+	if err != nil {
+		t.Fatalf("classifyLaunchInput: %v", err)
+	}
+	if got.Deliver != "pr" || got.TargetPR != 0 || got.Ambiguous || got.Degraded {
+		t.Fatalf("got %+v, want pr/0, not ambiguous/degraded", got)
+	}
+}
+
+// The canonical hijack case: a multi-sentence new-work plan that cites an OPEN PR
+// URL and merely contains the LOOSE word "review" (e.g. "design review") but NO
+// strict PR-directed phrase marker must stay new work (pr/0) and preserve the
+// objective — it must NOT be hijacked into delivering a review ON the cited PR.
+// The strict-marker gate (not the loose word helper) is what makes this hold.
+func TestClassifyLaunchInputLooseReviewWordNoHijack(t *testing.T) {
+	cases := []string{
+		"Build the new dashboard. See prior art in https://github.com/acme/widget/pull/5. Needs design review before merge.",
+		"Refactor auth; the old approach in https://github.com/acme/widget/pull/5 failed code review, redo it fresh.",
+		"# Plan\nBuild X.\nWe will review the design later.\nContext: https://github.com/acme/widget/pull/5\n",
+	}
+	// openPRIssue/openPull present so that, were the gate loose, it would reach
+	// classifyOpenPR and yield review/5 — reaching pr/0 proves the strict gate held.
+	fixtures := map[string]string{"repos_acme_widget_issues_5": openPRIssue, "repos_acme_widget_pulls_5": openPull, "repos_acme_widget_pulls_5_reviews": approvedAll}
+	for _, input := range cases {
+		t.Run(deriveShortTitle(input), func(t *testing.T) {
+			installGHStub(t, fixtures)
+			got, err := classifyLaunchInput(input, t.TempDir())
+			if err != nil {
+				t.Fatalf("classifyLaunchInput: %v", err)
+			}
+			if got.Deliver != "pr" || got.TargetPR != 0 || got.Ambiguous || got.Degraded {
+				t.Fatalf("got %+v, want pr/0 (no hijack), not ambiguous/degraded", got)
+			}
+		})
+	}
+}
+
 func merge(a, b map[string]string) map[string]string {
 	out := map[string]string{}
 	for k, v := range a {

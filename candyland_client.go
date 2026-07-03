@@ -257,9 +257,10 @@ func isLaunchHandoff(input, refText string) bool {
 //     with a short intent verb phrase and trailing punctuation) is always driven
 //     by live gh state, the same way /gh treats a URL/ref it is handed;
 //   - a CITATION (the reference sits inside longer/multi-line prose) drives gh
-//     state only when an explicit feedback/review intent marker is also present
-//     (hasFeedbackIntent / hasReviewIntent); otherwise it is new work (pr/0, gh
-//     untouched).
+//     state only when an explicit STRICT feedback/review phrase marker is also
+//     present (hasStrictFeedbackMarker / hasStrictReviewMarker — the same gate the
+//     degraded fallback uses); a bare "review"/"feedback" word in a new-work plan
+//     does NOT act on the ref, so it stays new work (pr/0, gh untouched).
 //
 // Rows (see the /gh doc):
 //   - no reference → pr (new work; gh untouched)
@@ -285,8 +286,13 @@ func classifyLaunchInput(input, cwd string) (launchClassification, error) {
 	}
 	handoff := isLaunchHandoff(input, ref.text)
 	if !handoff {
+		// Prose citation: gate on the SAME strict phrase markers as the degraded
+		// fallback (deriveMarkerDelivery), NOT the loose word-level intent helpers.
+		// A new-work plan that merely contains "design review"/"audit the schema"
+		// must keep pr/0 and its objective — only an explicit PR-directed phrase
+		// ("address feedback on PR #N", "review PR #N") acts on the cited ref.
 		lower := strings.ToLower(input)
-		if !hasFeedbackIntent(lower) && !hasReviewIntent(lower) {
+		if !hasStrictFeedbackMarker(lower) && !hasStrictReviewMarker(lower) {
 			return launchClassification{Deliver: "pr"}, nil // prose citation, no intent to act on the ref
 		}
 	}
@@ -427,8 +433,37 @@ func hasPostCommitComments(cwd string, ref launchReference) bool {
 }
 
 // hasReviewIntent reports review/check-only intent in the (lowercased) input.
+// LOOSE: a bare "review"/"audit" word anywhere counts. Use ONLY where the input
+// IS the PR reference (the hand-off path / classifyOpenPR), never to gate a prose
+// citation — there a bare word inside a new-work plan must NOT hijack the launch.
 func hasReviewIntent(lower string) bool {
 	return containsWord(lower, "review") || containsWord(lower, "audit")
+}
+
+// hasStrictReviewMarker reports a STRICT review/check-only phrase tied to a PR
+// context (questReviewMarkers, e.g. "review pr", "review #"). It is the gate the
+// prose-citation branch and the degraded fallback (deriveMarkerDelivery) share,
+// so they cannot drift — a loose word like "design review" does not match.
+func hasStrictReviewMarker(lower string) bool {
+	for _, marker := range questReviewMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasStrictFeedbackMarker reports a STRICT feedback/fix-on-a-PR phrase
+// (questFeedbackMarkers, e.g. "address feedback", "review feedback", "feedback on
+// pr"). Like hasStrictReviewMarker it is shared by the prose-citation gate and the
+// degraded fallback so both agree; a bare "feedback" word does not match.
+func hasStrictFeedbackMarker(lower string) bool {
+	for _, marker := range questFeedbackMarkers {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 // hasFeedbackIntent reports feedback/fix-on-a-PR intent in the (lowercased) input.
@@ -644,15 +679,11 @@ func deriveMarkerDelivery(objective string) (deliver string, targetPR int) {
 	if pr == 0 {
 		return "pr", 0
 	}
-	for _, marker := range questFeedbackMarkers {
-		if strings.Contains(lower, marker) {
-			return "feedback", pr
-		}
+	if hasStrictFeedbackMarker(lower) {
+		return "feedback", pr
 	}
-	for _, marker := range questReviewMarkers {
-		if strings.Contains(lower, marker) {
-			return "review", pr
-		}
+	if hasStrictReviewMarker(lower) {
+		return "review", pr
 	}
 	return "pr", 0
 }
