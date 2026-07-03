@@ -213,7 +213,7 @@ delivery the mode promised did not land). Rules:
 - **Feed the error back**, don't strand it. The git/gh error text is usually **machine-fixable** by an
   agent that reads it (e.g. a push blocked by secret scanning → remove the offending file/history; a
   non-fast-forward → rebase). In a loop/campaign this is a remediation round on the delivery error
-  itself, bounded like any other; only a failure that survives the budget is a real hard blocker.
+  itself, bounded like any other; only a failure that survives the budget is a real capability blocker.
 - **A multi-unit deliverable (e.g. one PR per repo) is not `done` until *every* impacted unit delivered.**
   One unit's delivery failure is isolated from the others but keeps the whole out of clean `done`.
 

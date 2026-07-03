@@ -92,4 +92,4 @@ A `green` return carries these mandatory fields — **missing field = incomplete
 
 ## Out-of-scope work
 
-A coder reports out-of-scope needs or risky adjacent code to the tech-lead as part of its `blocked`/status output — it never acts on them or folds them in. Disposition is the tech-lead's call per `core/completion`'s three dispositions (`roles/tech-lead` → *Dispositions*): in-scope work is done now, a genuinely separate feature becomes a feature-split, a hard blocker is surfaced. A coder never converts an in-scope need into a deferral.
+A coder reports out-of-scope needs or risky adjacent code to the tech-lead as part of its `blocked`/status output — it never acts on them or folds them in. Disposition is the tech-lead's call per `core/completion`'s three dispositions (`roles/tech-lead` → *Dispositions*): in-scope work is done now, a genuinely separate feature becomes a feature-split, a capability blocker is surfaced. A coder never converts an in-scope need into a deferral.
