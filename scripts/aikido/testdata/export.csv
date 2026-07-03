@@ -1,0 +1,4 @@
+File Path,Line Number,Rule ID,Severity
+internal/server/auth.go,42,go.jwt.hardcoded-secret,Critical
+scripts/detritus-mcp.js,7,js.child-process.injection,High
+docs/core/build.md,,md.broken-link,Low

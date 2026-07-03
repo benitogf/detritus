@@ -15,6 +15,7 @@ related:
   - flows/github/gh
   - flows/github/gh-issue-work
   - flows/github/gh-pr
+  - flows/github/aikido-guard
   - core/review-rigor
   - flows/principles/truthseeker
 ---
@@ -24,6 +25,10 @@ related:
 The same rigor `/gh-pr` applies to a posted PR, applied to local changes that haven't been committed, pushed, or PR'd. The wrapping skill collects the scope and the diff; the actual review work is **delegated to a fresh sub-agent via the `Agent` tool** so the audit runs without the conversational context that produced the code. The author's blind spots stay with the author; the sub-agent sees only the diff and the stated intent.
 
 The analysis itself — principles, claim verification, second-pass checklist, correctness / fragility / performance / tests / security / scope / conventions / Godot subsections — lives in `core/review-rigor` and is shared verbatim with `/gh-pr`. The sub-agent loads it via `kb_get` and applies it end-to-end.
+
+## Pairs with `/aikido-guard` — the pre-PR security scan
+
+`/gh-self-review` audits mechanics and correctness; it does not run scanners (see *Limits* — it reasons over the diff, it doesn't execute tools). Its security companion in the same pre-PR path is **`/aikido-guard`** (`flows/github/aikido-guard`): it scans the branch's own merge-base diff with the vendored scanners, predicts the per-severity verdict the Aikido bot would post on the PR, and fixes the in-scope findings before the PR opens. Run both before opening a PR — the self-review for correctness/fragility/tests, `/aikido-guard` for the automated security verdict — and treat an `/aikido-guard` finding the change introduced as an in-scope blocker (`core/completion`'s no-deferral gate), not a "known non-blocker".
 
 ## Limits
 

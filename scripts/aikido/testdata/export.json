@@ -1,0 +1,21 @@
+{
+  "findings": [
+    {
+      "filePath": "internal/server/auth.go",
+      "startLine": 42,
+      "ruleId": "go.jwt.hardcoded-secret",
+      "severity": "critical"
+    },
+    {
+      "location": "scripts/detritus-mcp.js",
+      "line": 7,
+      "check": "js.child-process.injection",
+      "level": "High"
+    },
+    {
+      "file": "docs/core/build.md",
+      "rule": "md.broken-link",
+      "priority": "Low"
+    }
+  ]
+}

@@ -20,3 +20,16 @@
 .smith/
 .plan/
 .consult/
+
+# Aikido offline export scratch — raw dashboard exports (CSV/JSON) are dumped
+# here for the normaliser to read; never committed (may carry finding details).
+/scripts/aikido/scratch/
+
+# Vendored Opengrep ruleset — populated locally at PINNED_COMMIT by
+# scripts/aikido-install.sh (a full third-party mirror carrying secret-detection
+# test fixtures that trip push protection; never committed, only the pin is).
+/plugins/aikido-rules/rules/
+
+# Python bytecode artifacts (compiled, interpreter-version-specific)
+__pycache__/
+*.pyc

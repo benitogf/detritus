@@ -18,6 +18,7 @@ related:
   - flows/build/janitor
   - flows/github/gh
   - flows/github/gh-self-review
+  - flows/github/aikido-guard
   - flows/github/gh-issue-work
   - flows/github/gh-issue-create
   - core/janitor-platforms
@@ -142,6 +143,7 @@ Do not pollute the user's main thread with raw audit logs.
 When the final acceptance item ticks green:
 
 1. **Loop `/gh-self-review` to a clean read.** Run the convergence in `core/build` → *Delivery* step 1 against the full `feat/<slug>` diff: on any amendment, fix it with build-phase ticks (commit + verify + update scratchpad) and re-review; stop only at a no-blocker pass on a diff unchanged since that pass. This is the same convergence `gh-issue-work` enforces in its Phase 8a — `/smith` inherits it verbatim, not a relaxed variant.
+1a. **Run the `/aikido-guard` pre-PR security scan.** On the same clean diff, run `/aikido-guard` (`flows/github/aikido-guard`) over the branch's merge-base diff and loop it to a clean predicted verdict: any security finding the change introduced is in-scope build work (`core/completion` disposition 1) — fix it with build-phase ticks (commit + verify + update scratchpad) and re-scan, exactly as step 1 loops the self-review. A finding fixed here re-opens step 1's clean read, so the two loops converge together before the PR opens; do not open the PR while `/aikido-guard`'s predicted verdict is still blocked at any severity the change caused.
 2. **Push the branch.** `git push -u origin feat/<slug>`. The hand-off below enters `gh-issue-work` at Phase 9 (open PR), which assumes the branch is already pushed.
 3. **Open one PR per impacted repo via `gh-issue-work` Phase 9** (`core/build` → *Delivery* steps 2–3 and *Multi-repo delivery*; do not re-implement `gh pr create`). If no GitHub issue is linked yet, invoke `/gh-issue-create` first against the captured *Feature spec* + *Acceptance criteria*. `/smith` adds one carve-out to that delivery: skip `gh-issue-work` Phase 8a (step 1 above already produced a clean read on the exact diff being shipped) and Phase 8b (the user's Plan-time approval that initiated the run IS the authorisation, captured in the scratchpad's *Last user directive*). The "skip 8a/8b" carve-out is `/smith`-only — do not generalise it to other `gh-issue-work` callers.
 
@@ -222,6 +224,7 @@ Build phase — not allowed:
 - Dependency additions not in the spec. If the spec implies a new dependency, name it as a feature-split and ask before adding.
 - Skipping verification. A build-phase tick that doesn't verify green does not commit.
 - Opening a PR before all acceptance items are checked.
+- Opening a PR while `/aikido-guard`'s predicted Aikido verdict is still blocked at a severity the change introduced (*restated from Build-to-Audit Transition step 1a*). The security scan is a pre-PR gate, not a post-PR cleanup — fix the in-scope findings first.
 - Opening a PR with a stale self-review (*restated from Build-to-Audit Transition step 1*). If `/gh-self-review` forced any amendment to the diff — blocker fix, non-blocker cleanup, anything — the prior clean read is stale and the self-review MUST re-run before delegating to `gh-issue-work`'s Phase 9.
 - Re-implementing `gh pr create` in the smith flow instead of delegating to `gh-issue-work` Phase 9 (*restated from Build-to-Audit Transition step 3*). Drift between two PR-opening paths is exactly what the self-review-loop fix exists to prevent.
 - Inserting a confirmation gate before the autonomous PR transition — pausing to ask "should I push / open the PR?" once the self-review has converged, **even with a live user in the session**. The transition opens the PR autonomously (*Build-to-Audit Transition* steps 1–3); the only legitimate hand-back is *after* the PR is open (*The loop must never stall* point (a)). Gating before it bypasses the `/smith` flow the user invoked.

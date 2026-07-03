@@ -18,6 +18,7 @@ related:
   - core/dream
   - flows/build/smith
   - flows/build/janitor
+  - flows/github/aikido-guard
 ---
 
 # /forge — In-Process Implementation Loop
@@ -38,7 +39,7 @@ The contract (shape in `flows/plan/plan`) carries the feature spec, acceptance c
 
 ## Execution — be the tech-lead, in-process
 
-Act as the tech-lead per `roles/tech-lead`, with the **in-process driver substrate**: spawn each coder as a **sub-agent via the Agent tool**, one per fork-safe task, each told only its single task and the context it depends on. This is `core/coordination` Realization A — the Agent tool *is* the single-writer transport, the `.plan` checklist is the durable task-graph, and a blocked coder returns the fenced `BLOCKED {json}` line for you to answer and re-spawn (no bus). Drive the full choreography — partition → test-first → parallel build → sequential integration (loop back to the owning coder on a dirty merge) → `/gh-self-review` convergence → one PR per impacted repo via `gh-issue-work` Phase 9 (`core/build` → *Multi-repo delivery*).
+Act as the tech-lead per `roles/tech-lead`, with the **in-process driver substrate**: spawn each coder as a **sub-agent via the Agent tool**, one per fork-safe task, each told only its single task and the context it depends on. This is `core/coordination` Realization A — the Agent tool *is* the single-writer transport, the `.plan` checklist is the durable task-graph, and a blocked coder returns the fenced `BLOCKED {json}` line for you to answer and re-spawn (no bus). Drive the full choreography — partition → test-first → parallel build → sequential integration (loop back to the owning coder on a dirty merge) → `/gh-self-review` convergence → `/aikido-guard` pre-PR security scan → one PR per impacted repo via `gh-issue-work` Phase 9 (`core/build` → *Multi-repo delivery*). The pre-PR gate is the same one `/smith` runs (`flows/build/smith` → *Build-to-Audit Transition* steps 1–1a): loop `/gh-self-review` and `/aikido-guard` (`flows/github/aikido-guard`) together to a clean read and a clean predicted Aikido verdict before opening any PR — a security finding the plan's work introduced is in-scope for the owning coder to fix (`core/completion` disposition 1), not a deferral.
 
 ## How /forge relates to /smith and candyland
 

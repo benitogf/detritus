@@ -17,6 +17,7 @@ related:
   - flows/github/gh-issue-create
   - flows/github/gh-issue-work
   - flows/github/gh-self-review
+  - flows/github/aikido-guard
   - core/loop
   - core/completion
   - flows/principles/truthseeker
@@ -52,7 +53,7 @@ The user is a **non-technical stakeholder**. They describe a requirement — **a
 
 ## Quality is not gated away
 
-No approval gate ≠ no quality gate. `/vibe` inherits `/smith`'s **mandatory `/gh-self-review` convergence** before the PR opens (`flows/build/smith` → *Build-to-Audit Transition* step 1). That loop may run many iterations over a long time — **that is expected and is not a reason to stop or surface**; it runs to a clean read autonomously. The fresh-agent self-review, plus the human review of the resulting PR, are what make autonomous delivery safe.
+No approval gate ≠ no quality gate. `/vibe` inherits `/smith`'s **mandatory `/gh-self-review` convergence** before the PR opens (`flows/build/smith` → *Build-to-Audit Transition* step 1), and with it the **`/aikido-guard` pre-PR security scan** (`flows/github/aikido-guard`) that runs on the same pre-PR path — scanning the change's own diff and fixing the security findings Aikido would flag before the PR opens. That loop may run many iterations over a long time — **that is expected and is not a reason to stop or surface**; it runs to a clean read autonomously. The fresh-agent self-review, the automated security scan, plus the human review of the resulting PR, are what make autonomous delivery safe.
 
 ## Hazards are dealt with, never deferred
 

@@ -15,6 +15,7 @@ related:
   - core/completion
   - flows/github/gh
   - flows/github/gh-self-review
+  - flows/github/aikido-guard
   - core/janitor-platforms
   - flows/principles/truthseeker
   - flows/testing/testing
@@ -103,7 +104,7 @@ Each scheduled wake must follow this order:
 6. Critically review the audit findings. Drop vague, risky, feature-changing, or unsupported findings.
 7. Implement only small, safe, reviewable improvements that preserve intended behavior.
 8. Run the project's canonical verification command after any code change. If the full suite is slower than the wake interval, the change is still delivered only on a tick where verification completes green — partial-tick verification does not count.
-9. Run `/gh-self-review` on the resulting diff before delivery.
+9. Run `/gh-self-review` on the resulting diff before delivery, then run the `/aikido-guard` pre-PR security scan (`flows/github/aikido-guard`) over the change's merge-base diff. Loop both to a clean read and a clean predicted Aikido verdict; a security finding the tick introduced is an in-scope fix (`core/completion` disposition 1), done before the PR opens — not deferred.
 10. Route issue, branch, commit, push, and PR work through `/gh`.
 11. Report concisely AND append a dated entry to the scratchpad's tick log; overwrite the State block at the bottom with the new live truth (in-flight work, metric value if any, blockers & feature-splits added, next-tick plan).
 

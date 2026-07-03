@@ -53,6 +53,8 @@ and intentionally absent — they are not commands.
 
 | Command | Use it for |
 | --- | --- |
+| `/aikido-guard` | Pre-PR security gate — predict the Aikido CI security verdict locally, offline, before pushing: compute the merge-base diff, run each mapped open-source scanner scoped to only the changed files/deps, print a per-scanner per-severity green/red matrix under Aikido threshold semantics, then fix the in-scope findings before the PR opens. |
+| `/aikido-triage-loop` | Recurring Aikido finding triage loop — one PR per fix-cluster, each pre-cleared by aikido-guard, findings marked Handled/Ignored, and plane-labeled tracking issues for deferred work. |
 | `/gh` | Router for GitHub issue/PR workflows — reads conversation context and dispatches to gh-issue-create, gh-issue-work, gh-feedback-work, gh-self-review, or gh-pr. |
 | `/gh-feedback-work` | Address open review feedback on a PR, push fixes, and update the PR body in place — never posts issue/PR comments. |
 | `/gh-issue-create` | Draft a GitHub issue from the current conversation, confirm with the user unless the post was already directed, post it with the Claude Code attribution footer, then offer next steps (/gh-issue-work, refine, or leave). |
@@ -93,6 +95,7 @@ and intentionally absent — they are not commands.
 | Command | Use it for |
 | --- | --- |
 | `/cleanup-extra-rules` | Remove all detritus-generated rule files, hook scripts, and the matching settings.json hook entries. |
+| `/detritus-release` | Cut a release of detritus and/or candyland (bump → annotated tag → CI build), then update the local installation. |
 | `/detritus-update` | Update detritus to the latest released version by running `detritus --update`. |
 | `/grow` | Learn from conversation corrections - distill manual fixes into KB updates |
 | `/optimize` | Re-index and optimize KB docs for agent retrieval efficiency |
