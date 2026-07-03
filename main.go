@@ -98,6 +98,18 @@ func main() {
 				os.Exit(1)
 			}
 			return
+		case "--candyland-up":
+			// detritus --candyland-up
+			// Bring the candyland sidecar online (health check, start it detached if
+			// down, poll until ready) WITHOUT starting any run — the bare entry the
+			// dashboard / observability flows use before launching work, and the one
+			// /babysit uses to be sure the sidecar is reachable before it watches a PR.
+			self, _ := os.Executable()
+			if err := runCandylandUp(self); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
 		case "--candyland-run":
 			// detritus --candyland-run <prompt-file> [folder ...]
 			if len(os.Args) < 3 {
@@ -178,6 +190,7 @@ func main() {
 			fmt.Println("  detritus --readme                                     Regenerate the README command table from docs/flows/")
 			fmt.Println("  detritus --plugin-commands                            Regenerate plugin command shims from docs/flows/")
 			fmt.Println("  detritus --setup [--dry-run]                          Configure all detected IDEs")
+			fmt.Println("  detritus --candyland-up                               Bring the candyland sidecar online (no run)")
 			fmt.Println("  detritus --candyland-run <prompt-file> [folder ...]   Start a candyland sidecar build run over REST")
 			fmt.Println("  detritus --quest-run <objective-file> [folder ...]   Start a candyland-native bounded quest over REST")
 			fmt.Println("  detritus --adventure-run <objective-file> [folder ...] Start a candyland open-ended adventure over REST")
