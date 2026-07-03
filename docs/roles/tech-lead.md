@@ -21,6 +21,7 @@ related:
   - flows/build/forge
   - flows/plan/plan
   - core/dream
+  - core/flows
 ---
 
 # Tech Lead — partition, coordinate, integrate, deliver
@@ -33,7 +34,7 @@ The tech-lead is the orchestrating role of the parallel implementation loop. It 
 ## Two drivers, one choreography
 
 - **`/forge` (in-process driver):** the session running `/forge` *acts as* the tech-lead and spawns coders as **sub-agents via the Agent tool**. Visibility is the terminal only.
-- **candyland conductor (out-of-process driver):** the tech-lead runs as a candyland-launched process; it **emits** the partition and per-phase decisions, and **candyland** spawns each coder as its own process it can watch, pause, and kill. The tech-lead does **not** spawn coders itself in this mode.
+- **candyland conductor (out-of-process driver):** the conductor is candyland's **Go orchestrator** — a driver process, never an agent. The tech-lead runs as a candyland-launched process; it **emits** the partition and per-phase decisions, and **candyland** spawns each coder as its own process it can watch, pause, and kill. The tech-lead does **not** spawn coders itself in this mode.
 
 The critical invariant in both: **the tech-lead decides and emits; it never hides coders inside its own context in a way the driver can't see.** Under candyland that means emit-don't-spawn; under `/forge` the sub-agents are the spawn.
 
@@ -47,7 +48,7 @@ The tech-lead reads `.plan/<slug>.md`, the settled plan-contract artifact writte
    - **A single atomic task is a valid partition.** When the work genuinely doesn't decompose, emit exactly **one** task — do not manufacture a split, and never treat "one task" as a failure. The *only* partition failure is emitting nothing actionable at all.
    - **Cross-domain work (backend + frontend) → choose by size and coupling.** If it is **small and tightly coupled** (the UI consumes an API shaped in the same change), make it **one `Fullstack` task** owned by a single agent (`roles/coder-fullstack`) — two parallel agents would drift the API contract against its consumer and force a dirty merge. If it is **large**, split backend/frontend into separate tasks and sequence the dependent one with `deps`.
    - **Concurrency is the target, not a nice-to-have — always attempt it first.** The partition's job is to *find* the fork-safe split (disjoint repos, files, modules) so units run in parallel; independent work run serially is wasted wall-clock. Sequencing via `deps` is the **exception you justify** with a real output dependency, never the default shape. Serializing units that had no dependency is a partition failure, the mirror of the over-coupled split above.
-   - **At program altitude (a campaign), the partition emits quests, never bare runs.** When the driver is the campaign conductor rather than `/forge`, each partitioned unit is a **child quest** (which owns its own runs as it ticks), and the same two rules bind harder: iterative / open-ended / multi-PR commitments (a recurring triage loop, staged remediation waves) are quests by nature — do **not** flatten them into one-shot units; and independent quests (separate repos, disjoint files) fan out concurrently. A flat, sequential list of one bare run per commitment — zero quests, no fan-out — for independent and/or iterative work is the program-level partition failure to avoid (`flows/build/campaign` → *Decompose into quests — concurrent by default*).
+   - **At campaign altitude, this is the tech manager's doctrine: the partition emits quests, never bare runs.** The campaign's **tech manager** role loads this doc via `kb_get` and partitions the Intent Brief into **child quests** (each owning its own runs as it ticks), emitting them as a `QUESTS [...]` line (format below). The same two rules bind harder: iterative / open-ended / multi-PR commitments (a recurring triage loop, staged remediation waves) are quests by nature — do **not** flatten them into one-shot units; and independent quests (separate repos, disjoint files) fan out concurrently (`deps` only for real dependencies). A flat, sequential list of one bare run per commitment — zero quests, no fan-out — for independent and/or iterative work is the program-level partition failure to avoid (`flows/build/campaign` → *Decompose into quests — concurrent by default*).
 2. **Define tasks with failing tests.** The test-engineer (`roles/coder-test-engineer`) writes the failing test that defines each task. "Done" for every downstream coder is that test green (`core/coder` TDD gate).
 3. **Parallel build.** Each task goes to a coder (`roles/coder-backend` / `roles/coder-frontend` / `roles/coder-fullstack`) in its own worktree, working only inside its boundary. Coders run concurrently; they emit `green`/`blocked` status.
 4. **Integrate sequentially.** Merge completed tasks one at a time, re-running the canonical verification after each. **On a dirty merge or a red suite, loop the work back to the owning coder** — the tech-lead never hand-fixes a coder's task silently, because a silent fix erases the test-defined contract and hides the regression.
@@ -62,6 +63,16 @@ PARTITION [{"id":"tests","title":"Failing tests for the export","role":"Test eng
 ```
 
 Per task: `id` (stable slug), `title`, `role` (Backend / Frontend / Fullstack / Test eng / …), optional `emoji`, `files` (the disjoint fork-safe boundary — for a `Fullstack` task this spans both server and client files, still disjoint from every other task), `test` (the defining test), and `deps` (task ids that must finish first). A one-element array (a single atomic task) is a valid emission. The driver parses this line, renders the task DAG, and spawns one coder process per task with its slice. In-process drivers (`/forge`) may ignore the line and spawn sub-agents directly; the format is a no-op there, so emitting it is always safe.
+
+## QUESTS line format (campaign altitude)
+
+At campaign altitude the **tech manager** hands its quest partition to the candyland conductor the same way — a **single line** beginning with `QUESTS ` followed by a JSON array of quest specs, then stop:
+
+```
+QUESTS [{"id":"q-export","title":"CSV export pipeline","objective":"Stream CSV export for reports, per the brief's export commitment","folders":["api/"],"deps":[]},{"id":"q-export-ui","title":"Export UI","objective":"Download button + progress wired to the export endpoint","folders":["src/"],"deps":["q-export"]}]
+```
+
+Per quest: `id` (stable slug), `title` (short display label), `objective` (what the quest must deliver, self-contained), `folders` (the disjoint scope boundary), and `deps` (quest ids that must finish first — real dependencies only; independent quests run concurrently). The conductor parses this line and launches one child quest per spec with `deliver: branch` stamped by the supervisor, not the agent.
 
 ## Dispositions
 

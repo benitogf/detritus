@@ -1,5 +1,5 @@
 ---
-description: Recurring loop that takes a feature from /plan all the way to merged PR and then transitions into a janitor-style audit phase on the changed code. Sibling to /janitor; opposite intent.
+description: Recurring loop that takes a feature from /plan all the way to an open PR — the in-session single-agent instantiation of the universal pipeline. Sibling to /janitor; /janitor is the maintenance loop, /smith is the feature loop.
 argument-hint: <feature description> [interval] [--platform auto|codex|claude-code|github-actions|cursor|windsurf|generic]
 triggers:
   - smith
@@ -8,8 +8,9 @@ triggers:
   - build feature
   - feature worker
   - feature smith
-when: User invokes /smith with a feature description to build. The first tick passes through /plan to settle scope and acceptance criteria with the user; subsequent ticks run autonomously toward the agreed checklist, then transition to a maintenance audit phase on the changed code.
+when: User invokes /smith with a feature description to build. The first tick passes through /plan to settle scope and acceptance criteria with the user; subsequent ticks run autonomously toward the agreed checklist and end at the open PR (one per impacted repo).
 related:
+  - core/flows
   - core/loop
   - core/build
   - core/completion
@@ -20,21 +21,24 @@ related:
   - flows/github/gh-self-review
   - flows/github/gh-issue-work
   - flows/github/gh-issue-create
+  - flows/github/gh-feedback-work
   - core/janitor-platforms
   - flows/principles/truthseeker
 ---
 
 # /smith — Feature Loop with /plan Gate
 
-Drive a feature from a fresh `/plan` conversation through to a merged PR, then keep auditing the changed code as a scoped maintenance loop. `/smith` is the sibling to `/janitor`: same loop mechanics, opposite primary directive — `/janitor` preserves behavior, `/smith` adds it within an agreed spec, then transitions back into preserve-behavior mode to settle the new code.
+Drive a feature from a fresh `/plan` conversation through to an open PR. `/smith` is the sibling to `/janitor`: same loop mechanics, opposite intent — `/janitor` is the maintenance loop (preserves behavior), `/smith` is the feature loop (adds behavior within an agreed spec).
 
-Shared mechanics (scratchpad layout, durability rule, cadence guideline, skip-streak guardrail, mid-loop pivot, `/gh` delivery, shared main/audit-agent rules) live in `core/loop`, and the **build unit** (smallest delta → verification hard gate → commit) and **delivery** (self-review convergence → one PR per impacted repo via `gh-issue-work`) live in `core/build` — both referenced rather than restated here. `/smith` runs that build unit *sequentially*; the parallel loop (`/forge`, candyland) runs one per coder. This doc owns `/smith`'s `/plan` pass-through, feature-spec scratchpad sections, how the build unit applies within its acceptance-checklist/feature-branch structure, the build-to-audit transition, audit phase scope, and `/smith`-specific safety boundaries.
+`/smith` is the **in-session single-agent instantiation of the universal pipeline** (`core/flows`): plan → execute → review-with-rework → deliver, run sequentially with **no worker fan-out** — all build work happens in and is visible from the main session. The one sub-agent it spawns is the bounded build-phase audit **reporter** (*Build Phase Audit Agent Contract* below): an anti-bloat device returning a compact per-tick file, never a worker that builds.
+
+Shared mechanics (scratchpad layout, durability rule, cadence guideline, skip-streak guardrail, mid-loop pivot, `/gh` delivery, shared main/audit-agent rules) live in `core/loop`, and the **build unit** (smallest delta → verification hard gate → commit) and **delivery** (self-review convergence → one PR per impacted repo via `gh-issue-work`) live in `core/build` — both referenced rather than restated here. `/smith` runs that build unit *sequentially*; the parallel loop (`/forge`, candyland) runs one per coder. This doc owns `/smith`'s `/plan` pass-through, feature-spec scratchpad sections, how the build unit applies within its acceptance-checklist/feature-branch structure, delivery, and `/smith`-specific safety boundaries.
 
 > ## ⛔ The loop must never stall
 >
 > `/smith` is autonomous-to-done. The single most common — and most damaging — failure is **ending a turn with a status report and no live trigger for the next tick**. The loop then sits dead until the user pokes it, which defeats the entire command. A status report is *not* progress; only a committed delta plus a guaranteed next tick is.
 >
-> The only legitimate places to hand control back to the user are: **(a)** the build-to-audit transition (PR opened, awaiting merge), **(b)** a hard blocker the loop cannot resolve within its authority (surface it immediately — do not sit idle), or **(c)** an explicit user halt. **Anywhere else, the tick MUST end by guaranteeing the next tick fires** — see *Initial /plan Pass-Through* step 5 and *Self-continuation* below. If you catch yourself writing "I'll continue next" without having armed a trigger, you have already stalled.
+> The only legitimate places to hand control back to the user are: **(a)** *Delivery* — the PR(s) are open and the loop is done, **(b)** a hard blocker the loop cannot resolve within its authority (surface it immediately — do not sit idle), or **(c)** an explicit user halt. **Anywhere else, the tick MUST end by guaranteeing the next tick fires** — see *Initial /plan Pass-Through* step 5 and *Self-continuation* below. If you catch yourself writing "I'll continue next" without having armed a trigger, you have already stalled.
 
 ## Inputs
 
@@ -74,7 +78,7 @@ Every tick must end by guaranteeing the next one fires. There are two valid arra
 - **Platform scheduler present** (Desktop/Cloud Routines, an external cron/launchd/systemd job driving `claude -p`, a Codex automation, GitHub Actions): the scheduler fires subsequent ticks. The agent does its tick, updates the scratchpad, and lets the schedule wake it again. This is the default that *Initial /plan Pass-Through* step 5 sets up.
 - **Interactive session with no external scheduler (the agent IS the runner):** the agent must self-arm the next tick before yielding — e.g. call `ScheduleWakeup` with a short delay and a prompt that re-enters the build loop — so work advances without the user typing anything. The on-disk scratchpad plus the pushed branch carry state across the gap (durability mode 1). Maximize work per tick (one self-wake should cover a meaningful, verified, committed delta, not a single line). **Never** end the turn with a report-and-wait; that is the exact stall this section exists to prevent.
 
-In both arrangements the rule is identical: a tick that did not reach the build-to-audit transition, hit a hard blocker, or get explicitly halted MUST leave a live trigger for the next tick. Report progress *in passing* when useful, never *instead of* continuing. Stop arming the trigger only at the three legitimate hand-back points named in *The loop must never stall*.
+In both arrangements the rule is identical: a tick that did not reach *Delivery*, hit a hard blocker, or get explicitly halted MUST leave a live trigger for the next tick. Report progress *in passing* when useful, never *instead of* continuing. Stop arming the trigger only at the three legitimate hand-back points named in *The loop must never stall*.
 
 If `/plan` reaches a settled state but the user pushes back on scope or risk afterward, that's a mid-loop pivot via chat (`core/loop` → *Shared Main Agent Rules*) — the truthseeker pause applies before rewriting the scratchpad's spec, and the next scheduled tick honors the revised state.
 
@@ -82,14 +86,12 @@ If `/plan` reaches a settled state but the user pushes back on scope or risk aft
 
 The build phase requires a durable runner (`core/loop` → *Durability* mode 1). Disposable runners (Cloud Routines, Codex `worktree`, stateless GitHub Actions) cannot host build-phase state under either fallback mode:
 
-- **Mode 2 (GitHub-state-only) does not apply.** The mode-2 fallback puts the State block "in the issue or PR bodies the loop maintains." `/smith`'s build phase opens no PR until every acceptance item ticks green — there is nothing to write the State block into between ticks. A long-lived tracking issue isn't a /gh-router convention (issues describe problems, not loop state); using one anyway would create a documentation trail outside the established flow.
+- **Mode 2 (GitHub-state-only) does not apply.** The mode-2 fallback puts the State block "in the issue or PR bodies the loop maintains." `/smith` opens no PR until every acceptance item ticks green — there is nothing to write the State block into between ticks. A long-lived tracking issue isn't a /gh-router convention (issues describe problems, not loop state); using one anyway would create a documentation trail outside the established flow.
 - **Mode 3 (report incompatibility) is the right fallback.** The platform adapter must check at setup that the selected scheduler is durable; if not, report the incompatibility and ask the user to pick a durable scheduler (Desktop Routines, external scheduler, Codex `local`) or a different platform. Do not silently fall through to mode 2.
 
-Durable local mode 1 is therefore the default for the build phase on every platform. Which scheduler is durable vs disposable is owned by `core/janitor-platforms`, not restated here: on Codex, `local` (or a thread heartbeat) is durable and `worktree` is disposable; on Claude Code, Desktop Routines or the external scheduler run against the real checkout while Cloud Routines are disposable. The disposable runners (Codex `worktree`, Claude Cloud Routines) stay incompatible with the **build phase** — they remain valid for `/janitor` and for `/smith`'s audit phase; only the build phase requires mode 1.
+Durable local mode 1 is therefore the default on every platform. Which scheduler is durable vs disposable is owned by `core/janitor-platforms`, not restated here: on Codex, `local` (or a thread heartbeat) is durable and `worktree` is disposable; on Claude Code, Desktop Routines or the external scheduler run against the real checkout while Cloud Routines are disposable. The disposable runners (Codex `worktree`, Claude Cloud Routines) stay incompatible with `/smith` — they remain valid for `/janitor`.
 
-**Future — portable state mode (non-default).** A future GitHub-backed state mode could re-enable disposable runners for the build phase by carrying the compact State block in a GitHub issue or PR body — `core/loop` → *Durability* mode 2, but with a host that exists *before* any PR opens. That needs new machinery and is only worth it if the disposable-runner cost is justified for a given loop. Until it exists, mode 2 stays inapplicable to the build phase and mode 3 is the required fallback (see *Safety Boundaries*).
-
-The audit phase, which opens **after** the build-phase PR merges, has no such constraint — it inherits `/janitor`'s full durability handling and can run on any of the three modes per the changed-files scope.
+**Future — portable state mode (non-default).** A future GitHub-backed state mode could re-enable disposable runners by carrying the compact State block in a GitHub issue or PR body — `core/loop` → *Durability* mode 2, but with a host that exists *before* any PR opens. That needs new machinery and is only worth it if the disposable-runner cost is justified for a given loop. Until it exists, mode 2 stays inapplicable to `/smith` and mode 3 is the required fallback (see *Safety Boundaries*).
 
 ## Scratchpad — smith-specific sections
 
@@ -97,8 +99,7 @@ The shared scratchpad spine (current orientation, tick log, state block) is defi
 
 - **Feature spec** — the agreed Plan section from `/plan` (or `/vibe`'s readiness handoff), captured verbatim. One paragraph or short list describing what is being built and why. This is immutable during build unless an explicit pivot rewrites it.
 - **User-stated rules** — verbatim constraints from the `/plan` conversation. Quoted, not paraphrased.
-- **Acceptance criteria** — checklist of objectively-verifiable items derived from `/plan`'s steps or `/vibe`'s settled spec. Each item: `- [ ] <item description> — <verification: test name, function signature, endpoint shape, etc.>`. Items tick green during the build phase; when all are checked, the phase transitions. Do not add, remove, or reinterpret acceptance items during build except through an explicit pivot.
-- **Current phase** — `build` or `audit`. Drives loop behavior at every wake.
+- **Acceptance criteria** — checklist of objectively-verifiable items derived from `/plan`'s steps or `/vibe`'s settled spec. Each item: `- [ ] <item description> — <verification: test name, function signature, endpoint shape, etc.>`. Items tick green during the build phase; when all are checked, the loop delivers. Do not add, remove, or reinterpret acceptance items during build except through an explicit pivot.
 
 The State block (defined in `core/loop`) gets these `/smith`-specific fields added; the generic fields `core/loop`'s *State block* already requires (in-flight work, metric + delta, loop-end progress, skip-streak counter, blockers & feature-splits, next-tick plan, last directive) are not re-listed here:
 
@@ -107,17 +108,19 @@ The State block (defined in `core/loop`) gets these `/smith`-specific fields add
 - **Verification command** — the canonical command this loop runs to gate a commit.
 - **Last verification result** — `green` / `red`, dated; on red, the failure evidence (failing test name, assertion, or first error) the next tick retries against.
 - **Feature branch** — `feat/<slug>` long-lived branch where build-phase commits accumulate.
-- **Build-phase PR** — the open PR if build phase ended and PR is in review; otherwise empty.
+- **PR(s) opened** — the PR URL(s) once *Delivery* opens them (one per impacted repo); otherwise empty.
+
+### Checkpoint-then-/clear
+
+Every scratchpad update in build loop step 10 is a checkpoint per `core/loop` → *Checkpoint-then-/clear*: after it lands, the scratchpad + git are the complete resume state, and at the heavy boundaries `core/loop` names the tick report ends with the literal `checkpoint complete — safe to /clear` line. A user `/clear` at that point is lossless — the next tick resumes from the ledger. Never rely on `/compact`; summarized chat is not a state carrier.
 
 ## Completion
 
 `/smith`'s definition of done is `core/completion`'s, not a local variant. The build phase's **exit gate is the four done-conditions** there — every acceptance box `[x]` with evidence, the verification gate green, a clean `/gh-self-review` pass, and no new deferral markers — computed from the durable ledger (the scratchpad's *Acceptance criteria*), never from memory. The loop continues until all four hold; it does not exit, hand back as "done", or convert a remaining in-scope item into a deferral (`core/completion` → *Exit gate*).
 
-Disposition of anything the build encounters follows `core/completion`'s three dispositions: in-scope & handle-able now is **done now** (the default — no phases, no "future work", no stub); a **genuinely separate feature** is a disposition-2 feature-split surfaced in the State block's *Blockers & feature-splits* for the user to triage (never a silent park); a **hard blocker** beyond the loop's authority is surfaced (disposition 3). "Hazard" is not a parking lot for handle-able in-scope work. A feature whose in-scope work lands in **more than one repo** is still disposition 1 — `/smith` delivers **one PR per impacted repo** (see *Build-to-Audit Transition*), never demoting the cross-repo half to a feature-split or a blocker.
+Disposition of anything the build encounters follows `core/completion`'s three dispositions: in-scope & handle-able now is **done now** (the default — no phases, no "future work", no stub); a **genuinely separate feature** is a disposition-2 feature-split surfaced in the State block's *Blockers & feature-splits* for the user to triage (never a silent park); a **hard blocker** beyond the loop's authority is surfaced (disposition 3). "Hazard" is not a parking lot for handle-able in-scope work. A feature whose in-scope work lands in **more than one repo** is still disposition 1 — `/smith` delivers **one PR per impacted repo** (see *Delivery*), never demoting the cross-repo half to a feature-split or a blocker.
 
 ## Smith Loop
-
-Two phases share the same scheduled wake but follow different steps. The State block's *Current phase* field decides which set runs.
 
 ### Build phase
 
@@ -132,12 +135,12 @@ Each scheduled wake during the build phase follows this order:
 7. Implement the smallest in-spec delta on `feat/<slug>`.
 8. Run the canonical verification command. Verification must complete green on this tick — partial-tick verification does not count, and a tick that fails verification does **not** commit.
 9. If verification is green and at least one acceptance item moves from `[ ]` to `[x]`, commit + push to `feat/<slug>`. Do **not** open a PR yet — commits accumulate on the branch until all acceptance items are checked.
-10. Update the scratchpad — this is a **compaction checkpoint** (`core/loop` → *Compaction checkpoint*): tick log entry, State block (acceptance items checked, changed files, verification command + last result/failure evidence, next-tick plan, blockers & feature-splits if any), Acceptance criteria section (move ticked items to `[x]`) — left sufficient for a fresh agent to resume from scratchpad + git alone. The build phase's checkpoint events are: each completed acceptance item, each failed-verification cluster (serialize the failure evidence — this never softens step 8's hard gate or commits on red), the self-review pass (Build-to-Audit Transition step 1), and the build-to-audit phase transition. Manual context clearing is allowed only after this update lands.
-11. If all acceptance items are now checked, transition to the *Build-to-Audit Transition* below. Otherwise, the next wake continues the build phase.
+10. Update the scratchpad — this is a **checkpoint** (`core/loop` → *Checkpoint-then-/clear*): tick log entry, State block (acceptance items checked, changed files, verification command + last result/failure evidence, next-tick plan, blockers & feature-splits if any), Acceptance criteria section (move ticked items to `[x]`) — left sufficient for a fresh agent to resume from scratchpad + git alone. The build phase's checkpoint events are: each completed acceptance item, each failed-verification cluster (serialize the failure evidence — this never softens step 8's hard gate or commits on red), the self-review pass (*Delivery* step 1), and the delivery itself. A user `/clear` is safe only after this update lands.
+11. If all acceptance items are now checked, proceed to *Delivery* below. Otherwise, the next wake continues the build phase.
 
 Do not pollute the user's main thread with raw audit logs.
 
-### Build-to-Audit Transition
+### Delivery
 
 When the final acceptance item ticks green:
 
@@ -147,32 +150,13 @@ When the final acceptance item ticks green:
 
    **Multi-repo:** when the feature's in-scope work spans **N repos** (N≥1, no cap), run steps 1–3 **once per impacted repo**, per `core/build` → *Multi-repo delivery* (disposition 1, not a feature-split). The loop is **not** done when the first repo's PR opens — it continues until every impacted repo's PR is open (or that repo's specific failure is surfaced).
 
-**This holds even when `/smith` runs interactively** (the agent is the runner, a user is in the session). A live session does **not** convert the autonomous transition into a gated one — the invocation is the authorisation regardless of who is watching. Do **not** pause to ask "want me to push / open the PR?": that is a stall (it is none of the three legitimate hand-back points in *The loop must never stall*), and it imports the ad-hoc "confirm before pushing/PR" default into a loop whose contract explicitly overrides it. Open the PR, then report the URL.
-4. Set State block's *Current phase* to `audit` AND *Build-phase PR* to the URL(s) `gh-issue-work` returns (one per impacted repo).
-5. Pause the autonomous loop until the user merges the PR. Mid-loop pivots and PR review comments are handled via `/gh-feedback-work` on subsequent ticks; PR-comment changes go onto `feat/<slug>` and update the PR in place.
-6. Once the PR is merged, the next scheduled tick begins the audit phase against `main` (or the project's default branch).
+**This holds even when `/smith` runs interactively** (the agent is the runner, a user is in the session). A live session does **not** convert the autonomous delivery into a gated one — the invocation is the authorisation regardless of who is watching. Do **not** pause to ask "want me to push / open the PR?": that is a stall (it is none of the three legitimate hand-back points in *The loop must never stall*), and it imports the ad-hoc "confirm before pushing/PR" default into a loop whose contract explicitly overrides it. Open the PR, then report the URL.
 
-### Audit phase
-
-Each scheduled wake during the audit phase follows the `/janitor` loop, narrowed to the changed-files scope:
-
-1. Resolve the target. Load the audit scope from the State block — typically: files changed by the build phase + their direct test files + files that import them.
-2. Read the scratchpad (same file). Honor current orientation.
-3. Check in-flight work per `core/loop` → *State And Non-Overlap*.
-4. If work is pending, continue.
-5. If no work, run a discovery audit (see `flows/build/janitor` → *Audit Agent Contract*) restricted to the audit scope, using `/gh-self-review` rubric.
-6. Critically review findings; drop the same categories `/janitor` drops.
-7. Implement only smallest-safe-improvement changes per `flows/build/janitor` → *Main Agent Contract*. No new feature work in this phase.
-8. Run the canonical verification command. Don't ship on a tick that didn't finish green.
-9. Run `/gh-self-review` on the resulting diff.
-10. Route through `/gh` — one PR per safe finding, same as `/janitor`.
-11. Report and update scratchpad.
-
-The audit phase has no hard end. It runs until the user stops it OR the skip-streak guardrail (`core/loop` → *Skip-Streak Guardrail*) fires repeatedly enough that the user picks an exit when prompted.
+After the PR(s) open, `/smith` is **done** — record the URL(s) in the State block's *PR(s) opened*, report them, and end the loop. Later review feedback on those PRs is handled by `/gh-feedback-work` on a new invocation, not by this loop.
 
 ## Build Phase Audit Agent Contract
 
-Shared audit rules in `core/loop` → *Shared Audit Agent Rules* apply. On top of those, the build-phase audit is a **verification + gap-finding** audit, not a discovery audit:
+Shared audit rules in `core/loop` → *Shared Audit Agent Rules* apply. On top of those, the build-phase audit is a **verification + gap-finding** audit, not a discovery audit — a bounded anti-bloat reporter, never a worker:
 
 - Read the scratchpad's *Feature spec* and *Acceptance criteria*.
 - Code context is zero-setup (no pack/index): use `code_map`/`code_outline` for structure, `code_graph` for navigation, native Grep for text (`flows/project/code`).
@@ -185,10 +169,6 @@ GOOD tasks to delegate — each a single bounded read against the current item: 
 
 Report shape follows `core/loop` → *Per-tick report files*, with the smith fields: finding/status per item, evidence (file:line / test name), affected files, smallest next delta (files + change + verification), and the verification command + result.
 
-## Audit Phase Audit Agent Contract
-
-Same as `/janitor` → *Audit Agent Contract*. Cross-reference, don't duplicate.
-
 ## Build Phase Main Agent Contract
 
 Shared main-agent rules in `core/loop` → *Shared Main Agent Rules* apply. On top of those, during the build phase:
@@ -198,22 +178,18 @@ Shared main-agent rules in `core/loop` → *Shared Main Agent Rules* apply. On t
 - Implement only the proposed in-spec delta. No drive-by refactors, no scope creep.
 - Verification is a hard gate per commit — a failing verification does not commit, the tick logs the failure as next-tick context, and the next wake retries with the gap evidence in hand.
 - If the proposed delta would require touching files or APIs outside what the spec named, **stop** and report as a feature-split or blocker (`core/completion` disposition 2/3). The user pivots the spec if it should be expanded; the loop does not silently expand its own scope.
-- One feature branch (`feat/<slug>`) **per impacted repo** accumulates that repo's build-phase commits. Do not open intermediate PRs; the PR(s) open only when all acceptance items tick (see *Build-to-Audit Transition*). A feature spanning N repos opens N coordinated PRs (`core/build` → *Multi-repo delivery*) — the cross-repo half is in-scope (disposition 1), never a feature-split.
-
-## Audit Phase Main Agent Contract
-
-Same as `/janitor` → *Main Agent Contract*. Cross-reference, don't duplicate.
+- One feature branch (`feat/<slug>`) **per impacted repo** accumulates that repo's build-phase commits. Do not open intermediate PRs; the PR(s) open only when all acceptance items tick (see *Delivery*). A feature spanning N repos opens N coordinated PRs (`core/build` → *Multi-repo delivery*) — the cross-repo half is in-scope (disposition 1), never a feature-split.
 
 ## Safety Boundaries
 
-Build phase — allowed:
+Allowed:
 
 - Feature work that matches the captured spec and ticks an acceptance item.
 - Test additions that prove acceptance items (verification scaffolding).
 - Refactoring strictly inside files the spec named, when the refactor is required to implement an acceptance item.
 - Documentation updates for the new feature.
 
-Build phase — not allowed:
+Not allowed:
 
 - Work outside the spec (touches files the spec didn't name, adds behavior not in the acceptance checklist). This is a feature-split (disposition 2), not a finding.
 - Quietly mutating the captured Feature spec, User-stated rules, or Acceptance criteria during build. Spec changes require an explicit pivot and scratchpad revision before more build work continues.
@@ -222,12 +198,10 @@ Build phase — not allowed:
 - Dependency additions not in the spec. If the spec implies a new dependency, name it as a feature-split and ask before adding.
 - Skipping verification. A build-phase tick that doesn't verify green does not commit.
 - Opening a PR before all acceptance items are checked.
-- Opening a PR with a stale self-review (*restated from Build-to-Audit Transition step 1*). If `/gh-self-review` forced any amendment to the diff — blocker fix, non-blocker cleanup, anything — the prior clean read is stale and the self-review MUST re-run before delegating to `gh-issue-work`'s Phase 9.
-- Re-implementing `gh pr create` in the smith flow instead of delegating to `gh-issue-work` Phase 9 (*restated from Build-to-Audit Transition step 3*). Drift between two PR-opening paths is exactly what the self-review-loop fix exists to prevent.
-- Inserting a confirmation gate before the autonomous PR transition — pausing to ask "should I push / open the PR?" once the self-review has converged, **even with a live user in the session**. The transition opens the PR autonomously (*Build-to-Audit Transition* steps 1–3); the only legitimate hand-back is *after* the PR is open (*The loop must never stall* point (a)). Gating before it bypasses the `/smith` flow the user invoked.
-- Scheduling the build phase on a disposable runner. See *Build Phase Durability* above — mode 2 has no PR body to host the State block until acceptance items tick, and mode 3 (report incompatibility) is the required fallback.
-
-Audit phase — allowed / not allowed: same as `/janitor` → *Safety Boundaries*. The audit phase is `/janitor` mode with a scoped target.
+- Opening a PR with a stale self-review (*restated from Delivery step 1*). If `/gh-self-review` forced any amendment to the diff — blocker fix, non-blocker cleanup, anything — the prior clean read is stale and the self-review MUST re-run before delegating to `gh-issue-work`'s Phase 9.
+- Re-implementing `gh pr create` in the smith flow instead of delegating to `gh-issue-work` Phase 9 (*restated from Delivery step 3*). Drift between two PR-opening paths is exactly what the self-review-loop fix exists to prevent.
+- Inserting a confirmation gate before the autonomous PR delivery — pausing to ask "should I push / open the PR?" once the self-review has converged, **even with a live user in the session**. Delivery opens the PR autonomously (*Delivery* steps 1–3); the only legitimate hand-back is *after* the PR is open (*The loop must never stall* point (a)). Gating before it bypasses the `/smith` flow the user invoked.
+- Scheduling the loop on a disposable runner. See *Build Phase Durability* above — mode 2 has no PR body to host the State block until acceptance items tick, and mode 3 (report incompatibility) is the required fallback.
 
 ## Initial Run
 
@@ -242,8 +216,8 @@ The post-`/plan` report follows `core/loop` → *Initial Run Reporting*. Concret
 Smith scheduled on <target>: <one-line feature description>.
 Cadence: <human cadence — e.g. "every 30 minutes" or "weeknights at 10pm">.
 Acceptance items: <N total>; first tick will start <item 1 title>.
-Phase: build. Feature branch will be feat/<slug>.
+Feature branch will be feat/<slug>.
 Manage anytime at <management URL if the platform exposes one>.
 ```
 
-When build phase completes and the PR opens, surface the PR URL on its own line and let the user know the loop is paused until merge. When audit phase begins after merge, name that explicitly in the tick report so the user knows the loop's intent has shifted from "build" to "maintain."
+When the build completes and the PR(s) open, surface each PR URL on its own line — the loop is done.

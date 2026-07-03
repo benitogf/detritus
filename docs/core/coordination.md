@@ -36,7 +36,8 @@ ledger, the verification gate, and the K=3 escalation cap — as its coordinatio
   priority, version}`. The orchestrator single-writes; dependents auto-unblock when their deps reach
   `done`. (This is a superset of candyland's existing `partitionTask` — it adds
   `status`/`owner`/`priority`/`version`, reusing the same `PARTITION` parse path; see `roles/tech-lead`
-  → *Partition emission format*.)
+  → *Partition emission format*. At campaign altitude the tech manager mirrors the same convention with
+  a `QUESTS [...]` line — see `roles/tech-lead` → *QUESTS line format*.)
 - **Message types** (FIPA-reduced, two-tier correlation): `{from, to, type, conversationId,
   correlationId?, ts, seq, body}`, `type ∈ {question, response, feedback, directive, task_mutation}`. A
   `question` carries a `correlationId`; the `response` echoes it; `feedback`/`directive` are one-way.

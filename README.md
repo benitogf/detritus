@@ -42,12 +42,13 @@ and intentionally absent — they are not commands.
 
 | Command | Use it for |
 | --- | --- |
-| `/campaign` | A Candyland program-level campaign — launches the full intent→delivery cycle in the sidecar from a high-level goal, partial brief, or detailed plan. |
-| `/candyland` | The sidecar opt-in for the autonomous build flows. |
+| `/adventure` | An open-ended freeseeking loop in the candyland sidecar — the same quest machinery with per-finding delivery: each accepted finding becomes its own child run and its own PR. |
+| `/campaign` | A candyland program-level campaign — an intent manager and a tech manager drive a goal, partial brief, or detailed plan through two convergence gates: the brief partitions into concurrent child quests on a shared campaign branch, and the campaign opens one PR per impacted repo at its delivery gate. |
+| `/candyland` | Launch ONE candyland run in the sidecar — a tech-lead agent partitions the work, coders build it concurrently in worktrees, a reviewer loops fix→re-review until clean, then the run delivers. |
 | `/forge` | Drive a settled plan to a PR with a parallel tech-lead + coders implementation loop, in-process. |
 | `/janitor` | Create a recurring proactive code-maintenance worker that audits, safely fixes, verifies, self-reviews, and routes delivery through /gh. |
-| `/quest` | A Candyland-native iterative build loop — the out-of-process, multi-PR homologue of /janitor. |
-| `/smith` | Recurring loop that takes a feature from /plan all the way to merged PR and then transitions into a janitor-style audit phase on the changed code. |
+| `/quest` | A bounded, terminating iterative loop in the candyland sidecar — a quest-lead ticks discover→triage→launch child runs onto a quest branch until the objective is met, then opens ONE PR per impacted repo. |
+| `/smith` | Recurring loop that takes a feature from /plan all the way to an open PR — the in-session single-agent instantiation of the universal pipeline. |
 
 ### GitHub
 
@@ -93,6 +94,7 @@ and intentionally absent — they are not commands.
 | Command | Use it for |
 | --- | --- |
 | `/cleanup-extra-rules` | Remove all detritus-generated rule files, hook scripts, and the matching settings.json hook entries. |
+| `/detritus-release` | Cut a release of detritus and/or candyland (bump → annotated tag → CI build), then update the local installation. |
 | `/detritus-update` | Update detritus to the latest released version by running `detritus --update`. |
 | `/grow` | Learn from conversation corrections - distill manual fixes into KB updates |
 | `/optimize` | Re-index and optimize KB docs for agent retrieval efficiency |

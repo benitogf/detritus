@@ -70,7 +70,7 @@ Every scratchpad shares a common spine. Each consuming command (`/janitor`, `/sm
 - **Tick log** — append-only, dated entries. One section per tick.
 - **State block** (last section, overwritten each tick) — see below.
 
-Each command lists its specific sections above the tick log in its own doc (e.g. /janitor adds *North-star goal*, *User-stated rules*, *Primary metric*, *Loop-end criteria*; /smith adds *Feature spec*, *User-stated rules*, *Acceptance criteria*, *Current phase*).
+Each command lists its specific sections above the tick log in its own doc (e.g. /janitor adds *North-star goal*, *User-stated rules*, *Primary metric*, *Loop-end criteria*; /smith adds *Feature spec*, *User-stated rules*, *Acceptance criteria*).
 
 ### State block
 
@@ -84,7 +84,7 @@ The State block is the only mutable section. Every tick overwrites it. Required 
 - Next-tick plan — concrete first move for the next wake.
 - Last user directive — most recent pivot or scope change, dated.
 
-Commands may add command-specific State block fields (e.g. /smith adds *Current phase*, *Acceptance items checked*).
+Commands may add command-specific State block fields (e.g. /smith adds *Acceptance items checked*).
 
 ### Per-tick report files
 
@@ -116,14 +116,16 @@ Per-tick report files inherit the same rule. On disposable runners they must be 
 
 The tick log is append-only across the session, but older entries should be summarized into a single "cumulative since tick N" block when the user signals a phase or cluster is closed, OR the log exceeds roughly thirty entries. The thirty is soft guidance — the goal is to keep the scratchpad readable across context resets, not to grow unbounded.
 
-### Compaction checkpoint
+### Checkpoint-then-/clear
 
-The scratchpad and GitHub-side state are the only cross-tick carriers (see *Durable Cross-Tick State*) — chat history is never one. So serialize at every boundary the consuming command names, leaving the State block sufficient for a **fresh agent to resume from scratchpad + GitHub alone**: overwrite the State block and fold any open tick narrative into the log *before* moving on.
+The ledger — the scratchpad/progress file, git, and GitHub-side state (see *Durable Cross-Tick State*) — is the **ONLY resume state**. Chat history is never a state carrier. Serialize at every boundary the consuming command names, leaving the State block sufficient for a **fresh agent to resume from the ledger alone**: overwrite the State block and fold any open tick narrative into the log *before* moving on.
 
 - Serialize into the active *Durability* mode's store — the on-disk scratchpad (mode 1) or the issue / PR bodies (mode 2). There is no third store. On disposable runners the boundary collapses to **every wake-end**: serialize before the wake ends, never defer across ticks (this is the same rule *Durability* states for per-tick report files).
-- **Manual context clearing in a live session is allowed only after that serialization** — never before the State block is current. Clearing changes nothing about durability (mode 1 already persists to disk; fresh sessions already restart cold); it only trims live context once the resume point is written. The truthseeker pause (*Shared Main Agent Rules*) still applies before rewriting orientation.
+- **A user `/clear` after a checkpoint is the supported, lossless reset.** The next tick re-derives every open item from the ledger. Clearing changes nothing about durability (mode 1 already persists to disk; fresh sessions already restart cold); it only trims live context once the resume point is written. Never `/clear` before the State block is current. The truthseeker pause (*Shared Main Agent Rules*) still applies before rewriting orientation.
+- **Never rely on `/compact`.** Summarized chat is not a state carrier; the loop must stay correct even if compaction loses everything, because the ledger holds the truth.
+- **The tick report prompts the reset.** At heavy boundaries — a completed acceptance item, a failed-verification cluster, a self-review pass, an integration round — the tick report ends with the literal line `checkpoint complete — safe to /clear`, so the user knows exactly when clearing is lossless.
 
-This adds no new persistence mechanism — it is the discipline of using the existing stores as the resume point at known boundaries, so the main thread stays lean between them.
+This adds no new persistence mechanism — it is the discipline of using the existing stores as the resume point at known boundaries, so the main thread stays lean between clears.
 
 ## Usage-Limit Resilience
 

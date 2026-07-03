@@ -57,7 +57,7 @@ Use the Codex app automation API.
 - For `5min` and other short intervals, create a heartbeat automation attached to the current thread. This preserves continuity and lets each wake continue pending work.
 - For hourly, daily, or weekly detached maintenance, use a cron automation only when the janitor can run from a durable workspace. Prefer `local` execution against the resolved checkout when the loop needs gitignored `.janitor/` state across cold starts.
 - Use `worktree` execution only for janitors that can fully reconstruct state from GitHub-side branches, issues, PRs, and the automation prompt. Do not assume uncommitted or gitignored `.janitor/` files from a previous worktree tick will exist on the next tick.
-- `/smith`'s **build phase** additionally requires a durable runner (mode 1): `worktree` stays fine for `/janitor` and for `/smith`'s audit phase, but not the build phase. See `flows/build/smith` → *Build Phase Durability*.
+- `/smith` additionally requires a durable runner (mode 1): `worktree` stays fine for `/janitor`, but not for `/smith`. See `flows/build/smith` → *Build Phase Durability*.
 - Start one run immediately after creating the schedule so the user can confirm it works.
 - The automation prompt must include the full janitor loop contract, target, topics, verification expectations, and concise reporting requirements.
 - The runtime-derived scratchpad slug comes from the invocation root and topic, not from the Codex thread or automation id. Heartbeat and local cron ticks should read and update `.janitor/<slug>.md` in that resolved root; detached worktree ticks must either use a durable local checkout or report that the scratchpad cannot be persisted under the requested execution mode.
@@ -74,7 +74,7 @@ Claude Code Routines are the first-party scheduling primitive. Two variants shar
 - **In-session durable cron** (`CronCreate` with `durable: true`): a standing schedule that fires inside the running interactive session against the local checkout. Seat-billed — it never spawns `claude -p`, so it does not draw on the Agent-SDK credit pool the way the external scheduler does. Standing-schedule, so it is **usage-limit resilient** (see *core/loop* → *Usage-Limit Resilience*) where `/loop` is not. Choose this when the user wants limit-resilient durability without `claude -p` billing and is willing to keep a Claude REPL open. Details below.
 - **`/loop`**: session-scoped self-rescheduling polling inside the current conversation. **Fragile under usage limits** — it re-arms the next tick at the end of each tick, so a tick that dies on a seat/token limit stops the whole loop, not just that tick (*core/loop* → *Usage-Limit Resilience*). Stops when the session ends. Office-hours / attended use only; never present it as unattended-durable.
 
-`/smith`'s **build phase** requires a durable runner (mode 1), so Cloud Routines (disposable) cannot host it — use Desktop Routines or the external scheduler. Cloud remains fine for `/janitor` and for `/smith`'s audit phase. See `flows/build/smith` → *Build Phase Durability*.
+`/smith` requires a durable runner (mode 1), so Cloud Routines (disposable) cannot host it — use Desktop Routines or the external scheduler. Cloud remains fine for `/janitor`. See `flows/build/smith` → *Build Phase Durability*.
 
 ### Desktop Routines (default for workspace janitors)
 

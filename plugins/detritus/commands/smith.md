@@ -1,5 +1,5 @@
 ---
-description: Recurring loop that takes a feature from /plan all the way to merged PR and then transitions into a janitor-style audit phase on the changed code. Sibling to /janitor; opposite intent.
+description: Recurring loop that takes a feature from /plan all the way to an open PR — the in-session single-agent instantiation of the universal pipeline. Sibling to /janitor; /janitor is the maintenance loop, /smith is the feature loop.
 argument-hint: <feature description> [interval] [--platform auto|codex|claude-code|github-actions|cursor|windsurf|generic]
 ---
 

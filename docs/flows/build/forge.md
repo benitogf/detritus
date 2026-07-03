@@ -9,6 +9,8 @@ triggers:
   - run the implementation loop
 when: User has a settled plan (from /plan or /dream) and wants it implemented by a parallel tech-lead + coder loop in this session, without an external conductor.
 related:
+  - core/flows
+  - core/loop
   - roles/tech-lead
   - core/build
   - core/completion
@@ -40,11 +42,15 @@ The contract (shape in `flows/plan/plan`) carries the feature spec, acceptance c
 
 Act as the tech-lead per `roles/tech-lead`, with the **in-process driver substrate**: spawn each coder as a **sub-agent via the Agent tool**, one per fork-safe task, each told only its single task and the context it depends on. This is `core/coordination` Realization A — the Agent tool *is* the single-writer transport, the `.plan` checklist is the durable task-graph, and a blocked coder returns the fenced `BLOCKED {json}` line for you to answer and re-spawn (no bus). Drive the full choreography — partition → test-first → parallel build → sequential integration (loop back to the owning coder on a dirty merge) → `/gh-self-review` convergence → one PR per impacted repo via `gh-issue-work` Phase 9 (`core/build` → *Multi-repo delivery*).
 
-## How /forge relates to /smith and candyland
+## The progress ledger — .plan/PROGRESS-&lt;slug&gt;.md
 
-- **`/smith`** — single-threaded and *fused*: it runs `/plan` first, then builds sequentially in one agent, then audits. Use `/smith` when you want one all-in-one loop from a description.
-- **`/forge`** — *plan-first and parallel*: a plan already exists; multiple coders build it concurrently under a tech-lead. Use `/forge` to implement a settled plan fast with role agents.
-- **candyland** — the **out-of-process** driver over the *same* `roles/tech-lead` + `core/*`. It spawns the tech-lead and coders as processes it monitors, controls, and visualizes. candyland never calls `/forge`; `/forge` is the way to run the same loop directly when you don't need a dashboard.
+`/forge` maintains a durable progress ledger at `.plan/PROGRESS-<slug>.md`: the fork-safe **task table** (task, owner, deps, status), an append-only **tick log**, and a **state block** (in-flight coders, integration status, next move, blockers/feature-splits). It is **overwritten at checkpoints** per `core/loop` → *Checkpoint-then-/clear*: after each checkpoint the ledger + git + the `.plan/<slug>.md` contract are the complete resume state, so the tech-lead session itself can be `/clear`'d and a fresh context resumes from them — the tick report ends with `checkpoint complete — safe to /clear` at the heavy boundaries `core/loop` names. Never rely on `/compact`.
+
+## How /forge relates to /smith and /candyland
+
+- **`/forge`** — the **in-session run** (`core/flows`): the session acts as tech-lead, coders are Agent-tool sub-agents building a settled plan concurrently.
+- **`/candyland`** — the **sidecar homologue**: it launches the *same* choreography (tech-lead + coders + reviewer) as out-of-process agents over the candyland bus, watched in a dashboard. Same pipeline, different execution substrate.
+- **`/smith`** — the **single-agent sibling**: same pipeline with no spawning, all work visible in the main session; it runs `/plan` first and builds sequentially.
 
 ## Visibility trade-off
 

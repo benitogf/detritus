@@ -21,7 +21,7 @@ related:
 `dream` is the **executive intake** over the shared planning core (`core/planning`). The user is a **non-technical stakeholder**: their description — any length — is the spec. `dream` clarifies intent through quick **multiple-choice** questions, owns every technical decision as the architect, and produces a settled plan. It does not build.
 
 > ## ⛔ Internal — no standalone slash command
-> `dream` is `core/` (kb_get-only). It is not typeable on its own; it runs as the planning phase of `/vibe` (`flows/plan/vibe`). The developer-facing planning command is `/plan`.
+> `dream` is `core/` (kb_get-only). It is not typeable on its own; it runs as the planning phase of `/vibe` (`flows/plan/vibe`), and `/candyland` runs it in-session to settle a plan when given vague input. The developer-facing planning command is `/plan`.
 
 ## What it shares vs. what it adds
 

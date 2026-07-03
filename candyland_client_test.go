@@ -13,8 +13,10 @@ import (
 )
 
 // resolveCandylandDelivery is the two-tier feedback classifier: an explicit PR
-// marker in the plan text wins (and may select feedback OR review); absent a
-// marker, an open PR on the current branch selects feedback; otherwise new work.
+// reference in the plan text wins (via the shared gh-mirror classifier — here gh
+// is absent so it degrades to marker derivation, which still selects feedback OR
+// review); absent a reference, an open PR on the current branch selects feedback;
+// otherwise new work.
 func TestResolveCandylandDelivery(t *testing.T) {
 	orig := branchPRLookup
 	defer func() { branchPRLookup = orig }()
@@ -34,8 +36,12 @@ func TestResolveCandylandDelivery(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			installGHStub(t, map[string]string{}) // no gh state → degrade to marker derivation
 			branchPRLookup = func(string) int { return tc.branchPR }
-			deliver, pr := resolveCandylandDelivery(tc.prompt, "/repo")
+			deliver, pr, _, err := resolveCandylandDelivery(tc.prompt, t.TempDir())
+			if err != nil {
+				t.Fatalf("resolveCandylandDelivery: %v", err)
+			}
 			if deliver != tc.wantDelivr || pr != tc.wantPR {
 				t.Errorf("resolveCandylandDelivery = %q/%d, want %q/%d", deliver, pr, tc.wantDelivr, tc.wantPR)
 			}
@@ -176,100 +182,10 @@ func TestStartCandylandRunFeedback(t *testing.T) {
 	}
 }
 
-// startCandylandQuest POSTs the quest, reads back the id, then begins it —
-// sending objective/folders/autonomyLevel/deliver, and hitting /api/quests then
-// /api/quests/{id}/begin. Driven against a mock server, no real candyland needed.
-func TestStartCandylandQuest(t *testing.T) {
-	var createdBody map[string]any
-	beganID := ""
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/api/quests":
-			defer r.Body.Close()
-			raw, _ := io.ReadAll(r.Body)
-			_ = json.Unmarshal(raw, &createdBody)
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"id":"quest-456"}`))
-		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/quests/") && strings.HasSuffix(r.URL.Path, "/begin"):
-			beganID = strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/quests/"), "/begin")
-			w.WriteHeader(http.StatusNoContent) // 204, matching candyland's real /begin handler
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer srv.Close()
-
-	id, err := startCandylandQuestAt(srv.URL, "ship the thing", []string{"/repo/a", "/repo/b"}, "L1", "pr", 0)
-	if err != nil {
-		t.Fatalf("startCandylandQuest: %v", err)
-	}
-	if id != "quest-456" {
-		t.Errorf("quest id = %q, want quest-456", id)
-	}
-	if beganID != "quest-456" {
-		t.Errorf("begin was called for %q, want quest-456", beganID)
-	}
-	if createdBody["objective"] != "ship the thing" {
-		t.Errorf("objective not sent correctly: %v", createdBody["objective"])
-	}
-	if createdBody["autonomyLevel"] != "L1" {
-		t.Errorf("autonomyLevel not sent correctly: %v", createdBody["autonomyLevel"])
-	}
-	if createdBody["deliver"] != "pr" {
-		t.Errorf("deliver not sent correctly: %v", createdBody["deliver"])
-	}
-	folders, _ := createdBody["folders"].([]any)
-	if len(folders) != 2 || folders[0] != "/repo/a" {
-		t.Errorf("folders not sent correctly: %v", createdBody["folders"])
-	}
-}
-
-// startCandylandCampaign POSTs the campaign, reads back the id, then begins it —
-// sending input/folders/autonomyLevel, and hitting /api/campaigns then
-// /api/campaigns/{id}/begin. Driven against a mock server, no real candyland.
-func TestStartCandylandCampaign(t *testing.T) {
-	var createdBody map[string]any
-	beganID := ""
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/api/campaigns":
-			defer r.Body.Close()
-			raw, _ := io.ReadAll(r.Body)
-			_ = json.Unmarshal(raw, &createdBody)
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"id":"campaign-789"}`))
-		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/campaigns/") && strings.HasSuffix(r.URL.Path, "/begin"):
-			beganID = strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/api/campaigns/"), "/begin")
-			w.WriteHeader(http.StatusNoContent) // 204, matching candyland's real /begin handler
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer srv.Close()
-
-	id, err := startCandylandCampaignAt(srv.URL, "ship the program", []string{"/repo/a", "/repo/b"}, "L2", "pr", 0)
-	if err != nil {
-		t.Fatalf("startCandylandCampaign: %v", err)
-	}
-	if id != "campaign-789" {
-		t.Errorf("campaign id = %q, want campaign-789", id)
-	}
-	if beganID != "campaign-789" {
-		t.Errorf("begin was called for %q, want campaign-789", beganID)
-	}
-	if createdBody["input"] != "ship the program" {
-		t.Errorf("input not sent correctly: %v", createdBody["input"])
-	}
-	if createdBody["autonomyLevel"] != "L2" {
-		t.Errorf("autonomyLevel not sent correctly: %v", createdBody["autonomyLevel"])
-	}
-	folders, _ := createdBody["folders"].([]any)
-	if len(folders) != 2 || folders[0] != "/repo/a" {
-		t.Errorf("folders not sent correctly: %v", createdBody["folders"])
-	}
-}
+// The start-quest and start-campaign wire tests live in
+// candyland_client_classify_test.go (TestStartCandylandQuestSendsConvergenceAndTitle
+// / TestStartCandylandCampaignSendsTitleNoAutonomy): they assert the current
+// title + convergence contract and the absence of any autonomy field.
 
 // readQuestRunArgs reads the objective from the file and defaults folders to
 // [cwd] when none are passed, while preserving explicit folders.
