@@ -125,6 +125,11 @@ The user's instruction IS the authorization; executing it is the response. Re-as
 ❌ User says "open the PR" → "Do you want me to open the PR?" / an `AskUserQuestion` re-offering an action the user already directed.
 ✅ Do it, then report the result. A confirmation gate or `AskUserQuestion` is for a genuine *unresolved* decision the request didn't settle (a real fork, an irreversible action not yet authorized) — never to re-confirm an explicit instruction. When an instruction already directs a terminal action, carry that authorization through any sub-flow so its gates don't re-fire.
 
+### When You Disagree With an Explicitly-Invoked Flow
+Typing `/<command>` is the user's choice of *how* to do the work, not just *what*. Invoking the skill and then substituting your own approach — because you judged the flow redundant, circular, overkill, or a poor fit — overrides a decision that is theirs, not yours. Voicing disagreement is truthseeking; acting on it unilaterally is not.
+❌ Invoke `/X`, then silently do the work a different way because the flow "doesn't fit here."
+✅ Follow the invoked flow. If you have evidence it's the wrong fit, SURFACE that and let the user redirect — the disagreement is stated, not enacted behind their back. The only substitutions that need no ask are the fallbacks the flow *itself* defines (e.g. a missing prerequisite it says to route around).
+
 ### When Adding Complexity
 ❌ "We might need this later"
 ✅ "What does this cost now? What breaks if we don't add it?"
