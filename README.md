@@ -1,8 +1,14 @@
 # detritus
 
-Detritus is an MCP knowledge base for AI coding assistants. It gives the
-assistant reusable guidance for planning, testing, GitHub work, project todos,
-and codebase exploration.
+Detritus is an MCP server for AI coding assistants. It exposes a curated
+knowledge base of engineering doctrine (`kb_*` tools), live codebase exploration
+(`code_*`), and verified cross-project learned memory (`skill_*`) — and layers
+on slash commands that share one delivery pipeline: plan, build,
+review-with-rework, deliver. Those commands run either in your session (`/plan`,
+`/smith`, `/forge`, `/janitor`, `/gh-*`, `/todo`, …) or hand off to the
+out-of-process **candyland sidecar** for multi-agent, dashboard-observable
+delivery (`/candyland`, `/quest`, `/campaign`, `/adventure`). No flow merges on
+its own — the human merge stays the gate.
 
 ## Install
 
@@ -26,8 +32,9 @@ tool yourself. Manual install details for an assistant or maintainer live in
 
 Use Detritus by command name. This table is generated from `docs/flows/` (run
 `detritus --readme`); the folder a doc lives in is its category. Internal
-building blocks (`docs/core/`) and agent roles (`docs/roles/`) are kb_get-only
-and intentionally absent — they are not commands.
+building blocks (`docs/core/`), agent roles (`docs/roles/`), and reference
+material (`docs/ooo/`, `docs/patterns/`) are kb_get-only and intentionally
+absent — they are not commands.
 
 <!-- COMMANDS:START -->
 
