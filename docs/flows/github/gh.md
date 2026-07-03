@@ -20,7 +20,7 @@ related:
 
 # /gh — Router for GitHub Issue & PR Workflows
 
-One entry point for the five `gh-*` skills. Reads the conversation + any arguments, decides which sub-skill fits, and hands off. The sub-skills stay focused; this file is the dispatcher and the home for cross-skill conventions so they live in one place.
+One entry point for the five `gh-*` skills. Reads the conversation + any arguments, decides which sub-skill fits, and hands off. The sub-skills stay focused; this file is the dispatcher and the home for cross-skill conventions so they live in one place. The sidecar launchers (`/candyland`, `/quest`, `/adventure`, `/campaign`) mirror this router's Phase 1 classification outcome in Go, mapping routes to delivery modes — `core/sidecar` holds the mapping.
 
 ## Cross-skill conventions (inherited by all sub-skills)
 

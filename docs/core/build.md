@@ -9,6 +9,7 @@ triggers:
 when: Internal. Loaded by /smith and by implementation-loop roles (roles/coder-*, roles/tech-lead) to define how one unit of build work is verified and committed, and how a finished branch is delivered as a PR.
 related:
   - core/completion
+  - core/flows
   - flows/build/smith
   - flows/build/forge
   - roles/tech-lead
@@ -47,9 +48,9 @@ What a branch / PR reports as **delivered** must be honest: a branch carrying on
 
 ### One deliverable, one PR — converge, don't spray
 
-A builder or loop iterating toward a single deliverable **converges on one PR** — it never opens a pile of competing PRs for the same work. This is the delivery-side companion to `core/completion`'s exit gate (re-attempts are remediation, not new artifacts) and the build-scope analogue of `/gh`'s **one-issue-one-PR** rule. Every builder that composes this contract — a single run, an iterative loop (`/quest`, `/janitor`), or a program (`/campaign`) — inherits it:
+A builder or loop iterating toward a single deliverable **converges on one PR** — it never opens a pile of competing PRs for the same work. This is the delivery-side companion to `core/completion`'s exit gate (re-attempts are remediation, not new artifacts) and the build-scope analogue of `/gh`'s **one-issue-one-PR** rule. Every builder that composes this contract — a single run, a bounded loop (`/quest`, `/smith`, `/forge`), an open-ended loop (`/adventure`, `/janitor`), or a program (`/campaign`) — inherits it (`core/flows` → *PR policy*):
 
-- **One PR per DISTINCT shippable item, per impacted repo** — never repeated PRs for the *same* item. "Opens many PRs over time" (an iterative loop) means one per distinct item, not many attempts at one.
+- **One PR per DISTINCT shippable item, per impacted repo** — never repeated PRs for the *same* item. Bounded work (`/quest`, `/smith`, `/forge`, a campaign) **converges**: iterate on one branch, deliver one PR per repo. Only open-ended freeseeking (`/adventure`, `/janitor`) opens many PRs over time — and that means one per distinct accepted finding, not many attempts at one.
 - **Once a PR is open for a deliverable, keep working it in place.** Every later attempt at that same deliverable delivers **onto the existing PR** — `deliver: feedback` on its head branch (commit, push, update in place), never a fresh PR. New PRs are only for genuinely new, non-overlapping work.
 - **Re-attempts are remediation, not new artifacts.** Opening PR #B to "reconcile" #A, then #C to "supersede #A/#B", is **thrash** — it externalizes iteration as conflicting PRs a human must untangle. The tell is a repo accumulating **reconcile / consolidate / fold #N / supersede #N** PR titles for one deliverable instead of a single PR iterated to done.
 

@@ -18,14 +18,15 @@ related:
   - core/janitor-platforms
   - flows/principles/truthseeker
   - flows/testing/testing
-  - flows/build/quest
+  - core/flows
+  - flows/build/adventure
 ---
 
 # /janitor - Recurring Codebase Maintenance
 
 Create a recurring scheduled automation that uses otherwise idle agent quota to improve a codebase without changing product features or intended behavior.
 
-`/janitor` is the **in-session** variant of this iterative loop — it settles a crisp loop intent, then runs discover→triage→fix→verify→deliver in this conversation, one delivery at a time through `/gh`. Its Candyland-native sibling is `flows/build/quest`: `/quest` hands the same loop to the candyland sidecar to run **out-of-process** and open **many PRs over time**, watched in a dashboard.
+`/janitor` is the **in-session** variant of this iterative loop — it settles a crisp loop intent, then runs discover→triage→fix→verify→deliver in this conversation, one delivery at a time through `/gh`. Its Candyland-native sibling is `flows/build/adventure`: `/adventure` hands the same open-ended freeseeking loop to the candyland sidecar to run **out-of-process**, opening a PR per accepted finding, watched in a dashboard (`core/flows`).
 
 `/janitor` is **plan-gated**: before the audit loop runs, it refines the loop intent (objective, target scope, iteration strategy, safety boundary, verification command) so every tick is anchored to a settled intent rather than a generic scheduled audit. This gate composes the existing planning doctrine — it does not introduce a new mechanism. See *Settle the loop intent* below.
 

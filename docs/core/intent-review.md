@@ -1,12 +1,12 @@
 ---
-description: Shared intent-review method — did we build what was MEANT? A reproducible, per-commitment check of the shipped result against the original intent, complementary to core/review-rigor (which checks code mechanics). Do not invoke directly; composed by the campaign intent reviewer.
+description: Shared intent-review method — did we build what was MEANT? A reproducible, per-commitment check of the shipped result against the original intent, complementary to core/review-rigor (which checks code mechanics). Do not invoke directly; composed by the intent manager's review stage (agent id intent-reviewer).
 triggers:
   - intent review
   - intent-review
   - intent satisfaction
   - commitment verdict
   - did we build what was meant
-when: Internal. Loaded via kb_get by the role that performs a campaign's final intent review (the candyland campaign intent reviewer) to check the shipped diff/PRs against the immutable original input + Intent Brief — not a standalone workflow.
+when: Internal. Loaded via kb_get by the role that performs a campaign's final intent review (the intent manager's review stage, agent id intent-reviewer) to check the shipped diff/PRs against the immutable original input + Intent Brief — not a standalone workflow.
 related:
   - core/review-rigor
   - core/completion
@@ -26,7 +26,7 @@ only when **both** hold — a clean review-rigor pass **and** no unmet intent co
 
 > ## ⛔ Do not invoke directly
 > No slash command. Loaded via `kb_get` by the role that performs a campaign's final intent
-> review. Like every doctrine doc, the reviewer **loads this method rather than carrying a
+> review — the intent manager's review stage (agent id `intent-reviewer`). Like every doctrine doc, the reviewer **loads this method rather than carrying a
 > paraphrased rubric** — a hand-rolled "does it match intent?" prompt silently drops the
 > discipline below (see `core/review-rigor` → *the hand-rolled rubric* anti-pattern).
 
@@ -94,8 +94,9 @@ exit gate; delivery shape in `roles/tech-lead` / `core/build`). The verdicts gat
 - **`satisfied` → clears.** No annotation needed beyond the record.
 
 A campaign's final intent review is clean when **every commitment is `satisfied` or
-`partial`** (zero `missed`) — and that is necessary, not sufficient: the diff must also pass
-`core/review-rigor`. Two gates, both required.
+`partial`** (zero `missed`) — and that is necessary, not sufficient: the tech manager must also
+confirm technical done (integration green, review-loop clean per `core/review-rigor`). This is
+the campaign's dual sign-off: intent review + technical done, both required.
 
 **Passing both gates is still not `done` until delivery lands.** The gates run *before* the
 PR opens; the push/PR-open can still fail afterward (branch protection, secret-scanning push
