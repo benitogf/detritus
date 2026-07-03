@@ -1,6 +1,6 @@
 ---
-description: The sidecar opt-in for the autonomous build flows. /candyland alone runs /vibe's flow (dream intake → autonomous → PR) with the build delegated to the candyland sidecar (a tech-lead + coders spawned out-of-process over an ooo bus, watched in a dashboard); invoked alongside /smith it runs /smith's flow the same way. /vibe and /smith stay in-process while the sidecar is polished — they default to it later.
-argument-hint: "[feature description]"
+description: Launch ONE candyland run in the sidecar — a tech-lead agent partitions the work, coders build it concurrently in worktrees, a reviewer loops fix→re-review until clean, then the run delivers. Plan-gated by input shape - a settled .plan launches directly, a PR/issue link is classified per /gh, a vague description runs dream intake first.
+argument-hint: "[.plan/<slug>.md | PR/issue link | feature description] [folder ...]"
 ---
 
 The user invoked this command with: $ARGUMENTS

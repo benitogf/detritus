@@ -1,5 +1,5 @@
 ---
-description: A Candyland-native iterative build loop — the out-of-process, multi-PR homologue of /janitor. Settles a loop intent (objective, scope, safety boundary, verification command), ensures the candyland sidecar is up, then drives a quest over REST; the quest ticks discover→triage→run→review→PR and may open many PRs over time, watched in the dashboard.
+description: A bounded, terminating iterative loop in the candyland sidecar — a quest-lead ticks discover→triage→launch child runs onto a quest branch until the objective is met, then opens ONE PR per impacted repo. Feedback/review intents work the target PR's head branch instead.
 argument-hint: "[objective] [folder ...]"
 ---
 
