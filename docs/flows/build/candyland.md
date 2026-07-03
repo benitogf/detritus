@@ -1,58 +1,45 @@
 ---
-description: The sidecar opt-in for the autonomous build flows. /candyland alone runs /vibe's flow (dream intake → autonomous → PR) with the build delegated to the candyland sidecar (a tech-lead + coders spawned out-of-process over an ooo bus, watched in a dashboard); invoked alongside /smith it runs /smith's flow the same way. /vibe and /smith stay in-process while the sidecar is polished — they default to it later.
-argument-hint: "[feature description]"
+description: Launch ONE candyland run in the sidecar — a tech-lead agent partitions the work, coders build it concurrently in worktrees, a reviewer loops fix→re-review until clean, then the run delivers. Plan-gated by input shape - a settled .plan launches directly, a PR/issue link is classified per /gh, a vague description runs dream intake first.
+argument-hint: "[.plan/<slug>.md | PR/issue link | feature description] [folder ...]"
 triggers:
   - candyland
-  - sidecar
+  - sidecar run
   - build in the sidecar
   - watch the build
-when: User wants an autonomous build run AND watched out-of-process in the candyland sidecar instead of consuming this session. Invoked alone it follows /vibe; alongside /smith it follows /smith. A transitional opt-in while the sidecar is polished.
+when: User wants one unit of work built autonomously out-of-process in the candyland sidecar (watched in a dashboard) instead of consuming this session. The in-session homologue is /forge.
 related:
-  - flows/plan/vibe
-  - flows/build/smith
-  - flows/build/forge
+  - core/flows
+  - core/sidecar
   - roles/tech-lead
-  - core/coordination
-  - flows/plan/plan
+  - core/build
   - core/dream
+  - flows/build/forge
+  - flows/build/quest
+  - flows/plan/plan
 ---
 
-# /candyland — run an autonomous build in the sidecar
+# /candyland — one run in the sidecar
 
-`/candyland` is the **sidecar opt-in** for the autonomous build flows. It does not introduce a new build loop — it reuses `/vibe` and `/smith` exactly, but delegates the **build** to **candyland**, a standalone sidecar app that spawns the tech-lead + coders as real processes over an ooo bus and shows them live in a dashboard you monitor, audit, and stop. The session settles intent and hands off; candyland runs the agents out-of-process.
+`/candyland` launches **one run** in the candyland sidecar: candyland's **tech-lead agent** partitions the settled plan into fork-safe tasks, **coders** build them concurrently in worktrees, a **reviewer** loops fix→re-review until clean, and the run **delivers** — the same pipeline every flow instantiates (`core/flows`). detritus only plans and launches (`core/sidecar`); candyland owns everything after. The in-session homologue is `/forge` (this session as tech-lead, coders as sub-agents, no dashboard).
 
-## Two modes — by what it's invoked with
+## Plan-gated intake — by input shape
 
-- **`/candyland` alone → `/vibe`, in the sidecar.** Follow `flows/plan/vibe`: the executive/`dream` intake (no go-gate), settle a `.plan/<slug>.md` contract, then — instead of running `/smith` in-process — launch the build in candyland and report the dashboard. Autonomous all the way to the PR(s) — one per impacted repo; you watch it build.
-- **`/candyland` alongside `/smith` → `/smith`, in the sidecar.** When the message also contains `/smith`, follow `flows/build/smith` (the `/plan` gate, the acceptance checklist, the build-to-audit transition, the audit phase) — but its **build phase delegates to candyland** instead of building in-process. Planning and the audit phase stay in the session; only the parallel build runs in the sidecar.
+`/candyland` is gated on **knowing what will be done** before the handover. The input decides intake:
 
-In both modes `/vibe` and `/smith` themselves are unchanged — `/candyland` is a wrapper that swaps their in-process build for the sidecar.
-
-> **Rollout note.** `/candyland` is a **transitional** opt-in. The intended end-state is that `/vibe` and `/smith` default to the sidecar with no separate command. Until the sidecar is polished, `/candyland` is the explicit way in, so the in-process `/vibe` and `/smith` keep working unchanged.
-
-## Prerequisites (handled by the detritus install)
-
-The detritus install puts the **candyland binary** on the machine, beside detritus. candyland is **not** registered as an MCP server — detritus owns the sidecar lifecycle in Go and drives it over candyland's **REST API**. detritus health-checks the sidecar (`GET /api/health`), starts the installed binary detached if it's down (inheriting the environment so `gh`/`HOME`/`GH_*` credentials propagate to the spawned agents), and polls until it answers before delegating; if it can't come up it fails honestly. If the binary isn't installed at all (older install), say so and fall back to the in-process flow (`/vibe` or `/smith`) rather than pretending.
+- **A settled `.plan/<slug>.md`** (or its slug) → launch directly.
+- **A PR/issue link or `#N`** → classify per the gh-mirror table (`core/sidecar` → *PR-link intake mirrors /gh*); the classification decides `deliver`/`targetPr`. A feedback/review outcome works that PR's head branch and opens no new PR.
+- **A vague/high-level description** → run the `dream` intake (`core/dream`) in-session first to settle a `.plan/<slug>.md`, then launch. `/candyland` never invents the plan.
 
 ## Steps
 
-1. **Settle intent** for the active mode: `/candyland` alone → run `dream`'s intake to a settled `.plan/<slug>.md`; alongside `/smith` → run `/smith`'s `/plan` pass-through to the settled checklist. `/candyland` never invents the plan — it reuses the mode's intake.
-2. **Ensure candyland is up, then start the run over REST.** Run `detritus --candyland-run .plan/<slug>.md` (the settled plan file; folders default to the cwd). detritus health-checks the sidecar, starts it if down, then creates and begins the run, printing the run id and the dashboard URL.
-   - `prompt`: read from the `.plan/<slug>.md` file — candyland's tech-lead partitions it into fork-safe tasks. Passing the file (not the text) keeps a large plan off argv.
-   - `folders`: the args after the prompt file; **default to the cwd** (the repo you're in) when none are given. Every folder is a **candidate repo**: the conductor branches and opens a PR in **each folder that receives changes** — one PR per impacted repo (N≥1, no cap), inheriting `core/build` → *Multi-repo delivery*. `folders[0]` is the default/primary repo when a task names no repo.
-   - **Feedback runs update the existing PR in place.** When the run is addressing feedback on an open PR, detritus detects it and tells candyland to base the work on that PR's head branch and push back onto it — opening **no** new PR. Detection is two-tier: an explicit marker in the plan text (`address feedback on PR #N`, `review PR #N`) wins; absent a marker, the primary repo's current-branch open PR is used. A marker-less run launched from a branch that already has an open PR therefore lands on that PR — launch new work from a fresh branch (or off the default branch) to get a new PR. The chosen delivery is printed alongside the run id.
-   Under the hood detritus `POST`s `/api/runs` with `{folders, prompt, title}` (plus `deliver`/`targetPr` for a feedback/review run), reads back the run id, then `POST`s `/api/runs/{id}/begin` to start it.
-3. **Hand off to the dashboard.** Report the run id and that it's building in the candyland dashboard — that's where the live agents, task graph, and the per-task verification **audit** show, and where the run is stopped. A run may open **more than one PR** (one per impacted repo); a single repo's delivery failure is surfaced without failing the others. In `/smith` mode, resume the session's audit phase once candyland's PR(s) land.
+1. **Settle intake** per the input shape above.
+2. **Launch**: `detritus --candyland-run <plan-file> [folder ...]` — ensure-up, REST create + begin; folders default to the cwd and every folder is a candidate repo (`core/sidecar`). Passing the file (not the text) keeps a large plan off argv.
+3. **Hand off to the dashboard**, printing the launch output contract (`core/sidecar`): run id, dashboard URL, deliver mode, one-line what-it-will-do, both ports. The dashboard shows the live agents, task graph, and per-task verification audit.
 
-## Control (stop only)
+## Delivery
 
-candyland is lean: **observe + audit + stop**, no per-agent control, no resume. Halt a hung or wrong run from the dashboard's Stop — candyland owns the spawned processes, so it genuinely kills the tech-lead + coder tree. Watch live state in the dashboard rather than polling.
+A run is bounded and converges: **one PR per impacted repo** (`core/flows` → *PR policy*); a feedback/review run updates the target PR in place. A single repo's delivery failure is surfaced without failing the others.
 
-## How it relates to the in-process flows
+## Control
 
-Same `roles/tech-lead` + `core/build` + `core/coder` choreography and `core/completion` definition of done — `/candyland` only changes **where the build runs and where you watch**:
-
-- **`/forge`** — in-process, parallel, plan-first. This session is the tech-lead; coders are sub-agents. No dashboard.
-- **`/smith`** — in-process, sequential, `/plan`-gated, autonomous to a PR then an audit loop. `/candyland` + `/smith` runs this with the build in the sidecar.
-- **`/vibe`** — in-process, `dream` + `/smith`, no go-gate. `/candyland` alone runs this with the build in the sidecar.
-- **candyland (the app)** — the out-of-process driver detritus hands off to over REST: it owns the API, spawns + coordinates the tech-lead + coders over the ooo bus (`core/coordination` Realization B), and visualizes them. detritus is only the client/launcher — it ensures the sidecar is up and starts the run; candyland owns everything after.
+Observe + stop only, per `core/sidecar` — Stop genuinely kills the tech-lead + coder tree.
