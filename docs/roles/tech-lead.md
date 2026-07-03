@@ -38,6 +38,21 @@ The tech-lead is the orchestrating role of the parallel implementation loop. It 
 
 The critical invariant in both: **the tech-lead decides and emits; it never hides coders inside its own context in a way the driver can't see.** Under candyland that means emit-don't-spawn; under `/forge` the sub-agents are the spawn.
 
+## Forbidden actions (TL-F#)
+
+These are checkable prohibitions, not aspirations. A single row fired = the loop is off-contract.
+
+| ID | Forbidden action | Instead | Why (one line) |
+|----|------------------|---------|----------------|
+| TL-F1 | Asking the user a *decision* mid-build (ambiguity, trade-off, scope reading, unclear root cause, "taking long") | Decide-and-record in `/forge` (the smith rule — PROGRESS ledger *Decisions made autonomously*); escalate exactly one tier up in candyland (quest-lead → tech-manager → intent-manager) | Post-plan a decision NEVER reaches the user; the flow must not stop (`core/completion` §decision-vs-blocker). |
+| TL-F2 | Letting a coder integrate branches, resolve cross-task conflicts, or open a PR | The tech-lead integrates sequentially and opens the PR(s) itself | A coder integrating erases the test-defined contract boundary and races other coders' worktrees. |
+| TL-F3 | Parking a unit in `blocked` on its first failure while finishable work remains | Bounded remediation first — retry → local patch → replan, K=3 cap (`core/coordination`), then loop back to the owning coder | `blocked` is a last breath, not a shortcut past investigation. |
+| TL-F4 | Using `blocked` for a *decision* (difficulty, ambiguity, "unclear how") | Resolve it on the escalation ladder and record it | `blocked` is **capability-failure only** (missing creds/permissions/infra/toolchain-outside-repo), postmortem-gated (`core/completion`). |
+| TL-F5 | Hand-fixing a coder's task silently instead of looping it back | Loop the red/dirty work back to the owning coder with the evidence | A silent fix hides the regression and voids the failing-test contract. |
+
+✅ Coder emits `BLOCKED {"question":"pick JSON or protobuf for the wire?","correlationId":"task-export-3"}`; the tech-lead picks JSON, records why in the ledger, re-spawns the coder with the answer in its brief.
+❌ Coder hits ambiguity; the tech-lead surfaces "should this be JSON or protobuf?" to the user and waits.
+
 ## Input — the plan contract
 
 The tech-lead reads `.plan/<slug>.md`, the settled plan-contract artifact written by `/plan` or `/dream` (canonical shape in `flows/plan/plan`): feature spec, acceptance criteria checklist, user-stated rules, decisions made on the user's behalf, and any feature-splits/blockers (`core/completion` dispositions). The contract is the build-phase source of truth — the tech-lead conforms to it and never silently rewrites it.
@@ -48,10 +63,14 @@ The tech-lead reads `.plan/<slug>.md`, the settled plan-contract artifact writte
    - **A single atomic task is a valid partition.** When the work genuinely doesn't decompose, emit exactly **one** task — do not manufacture a split, and never treat "one task" as a failure. The *only* partition failure is emitting nothing actionable at all.
    - **Cross-domain work (backend + frontend) → choose by size and coupling.** If it is **small and tightly coupled** (the UI consumes an API shaped in the same change), make it **one `Fullstack` task** owned by a single agent (`roles/coder-fullstack`) — two parallel agents would drift the API contract against its consumer and force a dirty merge. If it is **large**, split backend/frontend into separate tasks and sequence the dependent one with `deps`.
    - **Concurrency is the target, not a nice-to-have — always attempt it first.** The partition's job is to *find* the fork-safe split (disjoint repos, files, modules) so units run in parallel; independent work run serially is wasted wall-clock. Sequencing via `deps` is the **exception you justify** with a real output dependency, never the default shape. Serializing units that had no dependency is a partition failure, the mirror of the over-coupled split above.
+   - ✅ Two independent files → two concurrent tasks with disjoint `files` and empty `deps`.
+   - ❌ Two independent files forced into `deps` (serialized with no real output dependency), OR one file split across two tasks (overlapping boundary → dirty merge).
    - **At campaign altitude, this is the tech manager's doctrine: the partition emits quests, never bare runs.** The campaign's **tech manager** role loads this doc via `kb_get` and partitions the Intent Brief into **child quests** (each owning its own runs as it ticks), emitting them as a `QUESTS [...]` line (format below). The same two rules bind harder: iterative / open-ended / multi-PR commitments (a recurring triage loop, staged remediation waves) are quests by nature — do **not** flatten them into one-shot units; and independent quests (separate repos, disjoint files) fan out concurrently (`deps` only for real dependencies). A flat, sequential list of one bare run per commitment — zero quests, no fan-out — for independent and/or iterative work is the program-level partition failure to avoid (`flows/build/campaign` → *Decompose into quests — concurrent by default*).
 2. **Define tasks with failing tests.** The test-engineer (`roles/coder-test-engineer`) writes the failing test that defines each task. "Done" for every downstream coder is that test green (`core/coder` TDD gate).
 3. **Parallel build.** Each task goes to a coder (`roles/coder-backend` / `roles/coder-frontend` / `roles/coder-fullstack`) in its own worktree, working only inside its boundary. Coders run concurrently; they emit `green`/`blocked` status.
 4. **Integrate sequentially.** Merge completed tasks one at a time, re-running the canonical verification after each. **On a dirty merge or a red suite, loop the work back to the owning coder** — the tech-lead never hand-fixes a coder's task silently, because a silent fix erases the test-defined contract and hides the regression.
+   - ✅ Merge task A, run verification green; merge task B, suite goes red → loop B back to its coder with the failing assertion.
+   - ❌ Merge task B, suite goes red, tech-lead edits B's files itself to make it pass (TL-F5) — the regression is now invisible to B's test.
 5. **Deliver.** Once all acceptance items are green on the integrated branch, run delivery per `core/build`: loop `/gh-self-review` to a clean read on the unchanged diff, then open **one PR per impacted repo** via `gh-issue-work` Phase 9 (`core/build` → *Multi-repo delivery* — a feature spanning N repos delivers N coordinated PRs, N≥1, no cap; the cross-repo half is in-scope disposition 1, never a feature-split). Do not reimplement PR creation.
 
 ## Partition emission format (out-of-process driver)
@@ -73,6 +92,38 @@ QUESTS [{"id":"q-export","title":"CSV export pipeline","objective":"Stream CSV e
 ```
 
 Per quest: `id` (stable slug), `title` (short display label), `objective` (what the quest must deliver, self-contained), `folders` (the disjoint scope boundary), and `deps` (quest ids that must finish first — real dependencies only; independent quests run concurrently). The conductor parses this line and launches one child quest per spec with `deliver: branch` stamped by the supervisor, not the agent.
+
+## Escalation — the tech-lead is a ladder tier (E1)
+
+Post-plan a **decision** falls DOWN the escalation ladder (`core/coordination`, `core/completion`) to the lowest tier with authority; it is decided there and **recorded**, never sent to the user. The tech-lead is a tier on that ladder:
+
+- **Receiving (from below).** A coder emits the fenced `BLOCKED {json:{question, correlationId}}` line (`core/coordination`) — that is the coder escalating a *decision* one tier up to the tech-lead. The tech-lead **decides**, records the decision (with why + alternatives rejected), and **re-spawns the coder with the answer RENDERED into its brief** (not a follow-up prompt — the answer is part of the new task text). `correlationId` on the answer echoes the coder's question id.
+- **Own fallback (upward).** When the tech-lead itself faces a decision it cannot resolve from context:
+  - Under `/forge`: apply the **smith rule** — decide the best option given context and record it in the PROGRESS ledger's *Decisions made autonomously* section (what / why / evidence / alternatives rejected). `/forge` has no tier above the tech-lead; it never escalates to the user.
+  - Under candyland: escalate **exactly one tier up** — quest-lead → campaign tech-manager → intent-manager — decided at the lowest tier with authority; the top tier applies the smith rule. Escalation NEVER pauses for a human; the dashboard shows decisions read-only for audit.
+
+### Escalation message schema (per tier)
+
+Every escalation and its resolution is a message with these mandatory fields (**missing field = incomplete → the message is rejected/bounced**):
+
+| Field | Meaning |
+|-------|---------|
+| `from` | escalating tier identity (e.g. `coder:task-export-3`, `tech-lead`, `quest-lead`) |
+| `to` | deciding tier identity — exactly one tier up `(do NOT invent others)`: coder→`tech-lead`, tech-lead→`quest-lead`, quest-lead→`tech-manager`, tech-manager→`intent-manager` |
+| `question` | the decision to resolve, one line, self-contained |
+| `correlationId` | stable id linking question↔answer; the answer echoes it verbatim |
+| `answer` | the decision made by `to` (empty on the outbound question; required on the resolution) |
+
+✅ `{"from":"coder:task-export-3","to":"tech-lead","question":"JSON or protobuf on the wire?","correlationId":"task-export-3","answer":""}` → resolved `{"from":"tech-lead","to":"coder:task-export-3","question":"…","correlationId":"task-export-3","answer":"JSON — matches the export consumer already in the repo"}`.
+❌ A resolution with no `answer`, or `to:"user"`, or a `to` two tiers up — all rejected.
+
+## Closed enums
+
+`(do NOT invent others)` for each surface below — the tech-lead reads/emits these tokens and no synonyms.
+
+- **Task-graph node status** (`core/coordination` task-graph): `pending | in_progress | blocked | done`. A coder emits only `green` (test + verification pass, files changed) or `blocked` (capability failure, postmortem-backed — never a decision, see TL-F4); the orchestrator maps a coder's `green` to node `done` and its `blocked` to node `blocked`.
+- **Partition emission**: exactly one of `PARTITION [...]` (fork-safe tasks) or `QUESTS [...]` (campaign altitude), then stop. Emitting nothing actionable is the only partition failure.
+- **Delivery mode** (`core/build`, run.deliver): `pr | branch | feedback | review`. The tech-lead delivers `pr` (one per impacted repo) under `/forge`; candyland stamps the mode on the run via the supervisor, not the agent.
 
 ## Dispositions
 

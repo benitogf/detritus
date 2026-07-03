@@ -19,6 +19,20 @@ Any caller that needs a review or audit — a loop's self-review (`/smith`, `/ja
 
 **Anti-pattern: the hand-rolled rubric.** Spawning a review sub-agent with an `Agent` prompt that *paraphrases* these criteria is a degraded review: it encodes only the checks the caller happened to remember, so it silently drops the classes this doc enumerates. A paraphrased review passes diffs the full rubric catches (e.g. in one case a hand-rolled self-review green-lit a change that the real `/gh-self-review` then found was shipping a broken plugin file with dead doc references). If you find yourself writing review criteria into an `Agent` prompt, stop and invoke the skill instead.
 
+## Forbidden actions (RV-F#)
+
+Checkable prohibitions for a reviewer. These give IDs to rules stated elsewhere in this doc; a single row fired = the review is degraded and must not post its verdict.
+
+| ID | Forbidden action | Instead | Why (one line) |
+|----|------------------|---------|----------------|
+| RV-F1 | Improvising / paraphrasing a rubric into an `Agent` prompt instead of loading this doc + `truthseeker` via `kb_get` | Invoke the real skill (`/gh-self-review` or `/gh-pr`); hand the agent the doc *names* to load | A paraphrase drops the classes this doc enumerates (the hand-rolled-rubric anti-pattern above). |
+| RV-F2 | Emitting a `clean`/`approve` verdict on unproven wiring (added symbol/route with no cited caller, consumer claimed "elsewhere") | Verdict `changes` with the reachability finding as a blocker (R1/R1b/V2) | Unwired = dead-in-prod; an unverified reach is a standing blocker, not a clear. |
+| RV-F3 | Clearing a finding or approving with a hedge-word (*plausibly, likely, should be, probably, seems, elsewhere, …*) | Cite VERIFIED evidence to clear, or let the finding STAND as a blocker (V1) | A verdict that needs a hedge-word is not clear — there is no third state. |
+| RV-F4 | Fixing the code yourself to make a finding go away | Write the finding (one sentence + file:line); the coder/author fixes it | The reviewer verifies; a self-fix erases the finding's evidence trail and the author's contract. |
+
+✅ Added `ExportHandler` has no non-test caller after a whole-repo grep → verdict `changes`, blocker "ExportHandler unreachable from any entrypoint (R1b) — export_reports.go:40".
+❌ Added `ExportHandler` "is probably wired in the router elsewhere" → verdict `clean` (RV-F2 + RV-F3).
+
 ## Principles
 
 - **Prove before flagging.** A blocker without evidence is noise. Cite the line, the caller, the race, the missing test. If you can't cite, don't flag.
@@ -78,6 +92,8 @@ Diff-correctness is necessary, not sufficient. A change can be internally correc
 
 The diff is never the whole system. Most expensive misses live in the *relationship* between the changed lines and the rest of the repo or the assembled running program: code that's correct in the hunk but dead in prod, a test that wires a dependency the entrypoint never builds, a doc that still describes the old behavior, a number that silently shifts on a dashboard. A green suite over a correct-looking diff does not clear any of these. Run each check below that applies; a failure here is a **blocker**, not a "verify later" note.
 
+**Per-check outcome — closed enum** `(do NOT invent others)`: each applicable check resolves to exactly one of `pass` (verified clean, cite what proved it) · `blocker` (the check's failure condition is met — cite line/caller/consumer) · `n/a` (the check's trigger did not fire — the diff has no add/delete, no security gate, no upload, etc.). There is no "verify later", no "probably fine", no "minor". A check whose trigger fired but whose result you could not verify is `blocker`, not a fourth state.
+
 - **R1 — Whole-repo reachability + build-at-HEAD + migration sweep.** On any add/delete/rename, cross out of the diff into the whole tree:
   - **Added** exported symbol / route / flag / prop / config key → `grep` the WHOLE repo for a non-test caller or a registered route. Called only by its own test, or by nothing = dead-in-prod = blocker. Don't soften it to a nit or defer it.
   - **Deleted / renamed** symbol → `grep` for surviving references at the *real merge HEAD* (the state the branch actually merges into), and rebuild at that HEAD — not at the diff in isolation.
@@ -96,6 +112,16 @@ The diff is never the whole system. Most expensive misses live in the *relations
 ## Verdict integrity (V1–V2)
 
 A blocker-class finding once DETECTED does not evaporate because clearing it is convenient. `truthseeker` §1 ("Prove Before Acting") is the foundation here: an assertion is not a fact, "it probably works" is not evidence, and a convenient explanation is rejected until proven. These rules apply that principle to the APPROVE/CLEAN decision itself and add the review-verdict-specific teeth truthseeker doesn't name.
+
+**Verdict — closed enum** `(do NOT invent others)`. A review resolves to exactly one:
+
+- `approve` / `clean` — every applicable R1–R8 check is `pass` and every finding is either resolved or a cited non-blocker. A positive claim the change is correct and safe (`Prove before approving`) — back it with what you read.
+- `changes` — at least one standing blocker (any R-check `blocker`, or a V1/V2 finding that could not be cleared by cited evidence). List each blocker as one sentence + file:line.
+
+Forbidden middle states: no `approve-with-reservations`, no `mostly-clean`, no `LGTM-but`. A finding that needs a hedge-word to clear (RV-F3 / V1) makes the verdict `changes`, not a softened `approve`.
+
+✅ Verdict-emit: three R-checks `pass`, one `blocker` (R1b unreachable symbol) → verdict `changes`, one blocker line cited.
+❌ Verdict-emit: same state, but "the symbol is likely wired elsewhere" → verdict `approve` (banned: RV-F2, RV-F3, V1).
 
 - **V1 — No speculative clears.** A reviewer that has DETECTED a blocker-class finding — unwired/dead code, a missing consumer, an unenforced constraint, an unverified claim — may clear it ONLY by VERIFIED evidence: cite the actual caller, route, consumer, sibling PR, or test that resolves it. If the mitigating fact cannot be verified, the finding STANDS as a blocker. This is `truthseeker` §1 applied to the verdict: "it's probably fine" is not a clear.
   - **Hedge-words are a verdict smell and are BANNED from a CLEAN/APPROVE verdict:** *plausibly, presumably, likely, should be, probably, seems, I assume, elsewhere, "in a sibling/other branch", "not a genuine blocker in this diff"*. If clearing a finding needs one of these words, it is NOT clear — it is either a standing blocker or a clear-with-cited-evidence. There is no third state.
