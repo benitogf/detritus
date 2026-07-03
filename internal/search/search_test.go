@@ -243,3 +243,69 @@ func TestMMRDiversity(t *testing.T) {
 		}
 	}
 }
+
+// engineFromData builds an Engine from an explicit dataset + docs FS, mirroring
+// createTestEngine's gob round-trip but letting a test supply its own corpus.
+func engineFromData(t *testing.T, data GeneratedData, docsFS fstest.MapFS) *Engine {
+	t.Helper()
+	tmpFile := t.TempDir() + "/data.gob"
+	f, err := os.Create(tmpFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gob.NewEncoder(f).Encode(data); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	dataFS := fstest.MapFS{"data.gob": &fstest.MapFile{Data: mustReadFile(t, tmpFile)}}
+	engine, err := New(dataFS, "data.gob", docsFS, "docs")
+	if err != nil {
+		t.Fatal("engine init:", err)
+	}
+	return engine
+}
+
+// TestFieldBoostTitleOutranksBody proves the P5-12 field boost: a query term that
+// matches a doc's name/section (its "title") outranks a doc that only mentions the
+// term repeatedly in body content. Without per-field boosting the body-only doc
+// wins on raw term frequency; the boost flips it.
+func TestFieldBoostTitleOutranksBody(t *testing.T) {
+	// titleDoc matches "sprocket" only in its doc_name; its body never says it.
+	// bodyDoc never has "sprocket" in name/section but repeats it in body.
+	data := GeneratedData{
+		Chunks: []ChunkMeta{
+			{DocName: "reference/sprocket", Section: "Overview", Position: 0},
+			{DocName: "guides/hardware", Section: "Parts", Position: 0},
+		},
+		DocMetadata: []DocEntry{
+			{Name: "guides/hardware", Meta: DocMeta{Sections: []string{"Parts"}}},
+			{Name: "reference/sprocket", Meta: DocMeta{Sections: []string{"Overview"}}},
+		},
+	}
+	docsFS := fstest.MapFS{
+		"docs/reference/sprocket.md": &fstest.MapFile{
+			Data: []byte("# Reference\n\n## Overview\n\nGeneral information about the component and its settings.\n"),
+		},
+		"docs/guides/hardware.md": &fstest.MapFile{
+			Data: []byte("# Hardware\n\n## Parts\n\nThe sprocket connects here. Install the sprocket. Tighten the sprocket. Replace the sprocket when it is worn.\n"),
+		},
+	}
+
+	engine := engineFromData(t, data, docsFS)
+	defer engine.Close()
+
+	results, err := engine.Search("sprocket", 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) == 0 {
+		t.Fatal("expected results for sprocket query")
+	}
+	for i, r := range results {
+		t.Logf("rank %d: %s/%s score=%.3f", i, r.DocName, r.Section, r.Score)
+	}
+	if results[0].DocName != "reference/sprocket" {
+		t.Fatalf("field boost failed: expected name-match reference/sprocket to rank first, got %s", results[0].DocName)
+	}
+}
