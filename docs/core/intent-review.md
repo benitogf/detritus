@@ -97,6 +97,15 @@ A campaign's final intent review is clean when **every commitment is `satisfied`
 `partial`** (zero `missed`) — and that is necessary, not sufficient: the diff must also pass
 `core/review-rigor`. Two gates, both required.
 
+**Passing both gates is still not `done` until delivery lands.** The gates run *before* the
+PR opens; the push/PR-open can still fail afterward (branch protection, secret-scanning push
+protection, a PR-open error). A post-gate **delivery-mechanic failure** is not a clean
+terminal — it re-enters the *same* bounded remediation model as a `missed` commitment: an
+agent reads the verbatim git/gh error (usually machine-fixable) and fixes it, then delivery
+is re-attempted (`core/completion` → *Honest terminal state* → delivery attempted-but-failed).
+For a per-repo-PR deliverable the campaign is `done` only when **every** impacted repo's PR
+actually opened; one repo's delivery failure is isolated but keeps the program out of `done`.
+
 ## Boundaries
 
 - Intent review **does not** re-do code review — fragility, correctness, and test-mechanics
