@@ -2,9 +2,11 @@ package memory
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/benitogf/detritus/internal/core"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -128,5 +130,109 @@ func TestSkillSearchStructuredOutput(t *testing.T) {
 	}
 	if next[0].(map[string]any)["tool"] != "skill_get" {
 		t.Errorf("next hop tool = %v, want skill_get", next[0].(map[string]any)["tool"])
+	}
+}
+
+// TestRerankByConfirmation checks the P3-2 ranking helper: among
+// comparably-relevant hits, the more-confirmed lesson is ordered first.
+func TestRerankByConfirmation(t *testing.T) {
+	in := []core.Result{
+		{DocName: "a", Score: 0.90},
+		{DocName: "b", Score: 0.85},
+	}
+	// b is only slightly less relevant but far more confirmed → should lead.
+	out := rerankByConfirmation(in, map[string]int{"a": 0, "b": 5})
+	if out[0].DocName != "b" {
+		t.Errorf("confirmed lesson should rank first, got %q", out[0].DocName)
+	}
+	// A single confirmation is not enough to overturn a large relevance gap.
+	out2 := rerankByConfirmation(
+		[]core.Result{{DocName: "x", Score: 0.90}, {DocName: "y", Score: 0.30}},
+		map[string]int{"y": 1})
+	if out2[0].DocName != "x" {
+		t.Errorf("weak boost must not swamp a strong lexical match, got %q", out2[0].DocName)
+	}
+}
+
+// TestSkillSearchSurfacesConfirmed seeds and re-confirms a lesson, then asserts
+// skill_search reports its confirmation count in the structured hit.
+func TestSkillSearchSurfacesConfirmed(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	for i := 0; i < 2; i++ { // one create + one confirmation → Confirmed=1
+		if _, err := Put("context-deadline-propagation", "procedure",
+			[]string{"always propagate the context deadline to downstream calls"},
+			greenSource()); err != nil {
+			t.Fatalf("seed lesson: %v", err)
+		}
+	}
+	ctx, cs := connectToolsClient(t)
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "skill_search",
+		Arguments: map[string]any{"query": "context deadline propagation downstream"},
+	})
+	if err != nil {
+		t.Fatalf("skill_search: %v", err)
+	}
+	sc := res.StructuredContent.(map[string]any)
+	hits := sc["hits"].([]any)
+	if len(hits) == 0 {
+		t.Fatal("no hits")
+	}
+	h0 := hits[0].(map[string]any)
+	if got := h0["confirmed"]; got != float64(1) {
+		t.Errorf("hit confirmed = %v, want 1", got)
+	}
+}
+
+// TestSkillPutConflictIsError checks the tool surfaces a P3-4 contradiction as
+// an isError result naming the conflicting id, and that re-putting with
+// supersedes resolves it.
+func TestSkillPutConflictIsError(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	ctx, cs := connectToolsClient(t)
+
+	put := func(args map[string]any) *mcp.CallToolResult {
+		res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "skill_put", Arguments: args})
+		if err != nil {
+			t.Fatalf("skill_put transport error: %v", err)
+		}
+		return res
+	}
+
+	ok := put(map[string]any{
+		"id": "lock-ordering-to-avoid-deadlock", "kind": "procedure", "outcome": "green",
+		"bullets": []any{"always acquire locks in a global order"},
+	})
+	if ok.IsError {
+		t.Fatalf("first put should succeed: %v", ok.Content[0])
+	}
+
+	conflict := put(map[string]any{
+		"id": "lock-ordering-to-avoid-deadlock-v2", "kind": "procedure", "outcome": "green",
+		"bullets": []any{"never impose a lock order; use a single global lock instead"},
+	})
+	if !conflict.IsError {
+		t.Fatal("expected a contradiction to be reported as isError")
+	}
+	if txt, _ := conflict.Content[0].(*mcp.TextContent); txt == nil ||
+		!strings.Contains(txt.Text, "lock-ordering-to-avoid-deadlock") {
+		t.Errorf("conflict message must name the existing id: %+v", conflict.Content[0])
+	}
+
+	// Resolve via the explicit supersedes path — the old lesson is staled first,
+	// so the write then passes the conflict check.
+	resolved := put(map[string]any{
+		"id": "lock-ordering-to-avoid-deadlock-v2", "kind": "procedure", "outcome": "green",
+		"bullets":    []any{"never impose a lock order; use a single global lock instead"},
+		"supersedes": "lock-ordering-to-avoid-deadlock",
+	})
+	if resolved.IsError {
+		t.Fatalf("supersedes should resolve the conflict: %+v", resolved.Content[0])
+	}
+	if _, err := Get("lock-ordering-to-avoid-deadlock-v2"); err != nil {
+		t.Errorf("resolved lesson not written: %v", err)
+	}
+	if old, _ := Get("lock-ordering-to-avoid-deadlock"); old.Status != "stale" {
+		t.Errorf("superseded lesson status = %q, want stale", old.Status)
 	}
 }

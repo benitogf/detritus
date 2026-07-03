@@ -3,9 +3,11 @@ package memory
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/benitogf/detritus/internal/core"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -36,19 +38,22 @@ func registerPut(server *mcp.Server) {
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, IdempotentHint: true},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args putArgs) (*mcp.CallToolResult, any, error) {
 		src := Source{Run: args.Run, Task: args.Task, Outcome: args.Outcome, TS: time.Now().UTC().Format(time.RFC3339)}
+		// Explicit supersede runs BEFORE the write so the replaced lesson is
+		// already stale when the contradiction check (P3-4) scans active
+		// lessons — this is how a caller resolves a flagged conflict.
+		var supMsg string
+		if args.Supersedes != "" {
+			if err := Supersede(args.Supersedes); err != nil {
+				supMsg = fmt.Sprintf("; supersede %q skipped: %v", args.Supersedes, err)
+			} else {
+				supMsg = fmt.Sprintf("; superseded %q (marked stale)", args.Supersedes)
+			}
+		}
 		id, err := Put(args.ID, args.Kind, args.Bullets, src)
 		if err != nil {
 			return errResult(err.Error()), nil, nil
 		}
-		msg := fmt.Sprintf("distilled lesson %q (%s)", id, args.Kind)
-		if args.Supersedes != "" {
-			if err := Supersede(args.Supersedes); err != nil {
-				msg += fmt.Sprintf("; supersede %q skipped: %v", args.Supersedes, err)
-			} else {
-				msg += fmt.Sprintf("; superseded %q (marked stale)", args.Supersedes)
-			}
-		}
-		return textResult(msg), nil, nil
+		return textResult(fmt.Sprintf("distilled lesson %q (%s)%s", id, args.Kind, supMsg)), nil, nil
 	})
 }
 
@@ -75,10 +80,20 @@ func registerSearch(server *mcp.Server) {
 		if len(results) == 0 {
 			return textResult("(no relevant lessons in memory)"), out, nil
 		}
+		// P3-2: read each hit's confirmation count and re-rank so a
+		// more-corroborated lesson surfaces first among comparably-relevant hits.
+		confirmed := map[string]int{}
+		for _, r := range results {
+			if l, err := Get(r.DocName); err == nil {
+				confirmed[r.DocName] = l.Confirmed
+			}
+		}
+		results = rerankByConfirmation(results, confirmed)
 		var b strings.Builder
 		for _, r := range results {
-			fmt.Fprintf(&b, "## %s (score %.3f)\n%s\n\n", r.DocName, r.Score, r.Snippet)
-			out.Hits = append(out.Hits, searchHit{Path: r.DocName, Section: r.Section, Score: r.Score, Snippet: r.Snippet})
+			c := confirmed[r.DocName]
+			fmt.Fprintf(&b, "## %s (score %.3f · confirmed %d)\n%s\n\n", r.DocName, r.Score, c, r.Snippet)
+			out.Hits = append(out.Hits, searchHit{Path: r.DocName, Section: r.Section, Score: r.Score, Snippet: r.Snippet, Confirmed: c})
 		}
 		// next: fetch the top lesson in full — the natural hop after a skill_search.
 		out.Next = append(out.Next, nextHop{
@@ -118,10 +133,39 @@ func registerGet(server *mcp.Server) {
 // kb_search's shape so the SDK emits an outputSchema + structuredContent. For a
 // lesson, Path is the lesson id and Section is empty.
 type searchHit struct {
-	Path    string  `json:"path"`
-	Section string  `json:"section"`
-	Score   float64 `json:"score"`
-	Snippet string  `json:"snippet"`
+	Path      string  `json:"path"`
+	Section   string  `json:"section"`
+	Score     float64 `json:"score"`
+	Snippet   string  `json:"snippet"`
+	Confirmed int     `json:"confirmed"`
+}
+
+// confirmationBoostPerHit lifts a lesson's effective rank by this fraction per
+// re-confirmation, capped at confirmationBoostCap confirmations, so corroborated
+// lessons win ties among comparably-relevant hits without letting a heavily
+// re-confirmed but weakly-relevant lesson swamp a strong lexical match.
+const (
+	confirmationBoostPerHit = 0.1
+	confirmationBoostCap    = 10
+)
+
+// rerankByConfirmation stable-sorts hits by relevance score scaled by a bounded
+// confirmation boost. It reorders only the already-retrieved set (relevance
+// gating/MMR upstream is untouched); the displayed Score stays the normalized
+// relevance so the boost is a ranking-only tiebreak.
+func rerankByConfirmation(results []core.Result, confirmed map[string]int) []core.Result {
+	weight := func(r core.Result) float64 {
+		c := confirmed[r.DocName]
+		if c > confirmationBoostCap {
+			c = confirmationBoostCap
+		}
+		return r.Score * (1 + confirmationBoostPerHit*float64(c))
+	}
+	out := append([]core.Result(nil), results...)
+	sort.SliceStable(out, func(i, j int) bool {
+		return weight(out[i]) > weight(out[j])
+	})
+	return out
 }
 
 // nextHop is a suggested follow-up tool call — the natural next hop after a search.

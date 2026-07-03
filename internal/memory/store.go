@@ -11,8 +11,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/benitogf/detritus/internal/core"
 )
@@ -36,8 +38,14 @@ type Lesson struct {
 	Source   Source
 	LastUsed string // RFC3339
 	Validity string // RFC3339 expiry, or "" for none
-	Title    string
-	Bullets  []string
+	// Confirmed counts how many times this same lesson was re-distilled (a
+	// re-Put of the same id). A higher count is corroboration — the lesson has
+	// proven useful/true across independent verified runs — and lifts its
+	// retrieval ranking. Absent in pre-P3-2 stored records → 0.
+	Confirmed     int    // times re-confirmed via re-Put
+	LastConfirmed string // RFC3339 of the last re-confirmation, or ""
+	Title         string
+	Bullets       []string
 }
 
 // MemoryDir is the learned-memory root (its own git repo).
@@ -77,9 +85,14 @@ func Put(id, kind string, bullets []string, src Source) (string, error) {
 	var lesson Lesson
 	if existing, err := Get(id); err == nil {
 		// Itemized-delta append — never collapse or rewrite prior bullets (ACE).
+		// A re-Put of an existing id is corroboration (P3-2): bump the
+		// confirmation counter even when every bullet dedups away, so a lesson
+		// re-derived by independent verified runs ranks higher.
 		existing.Bullets = appendUnique(existing.Bullets, bullets)
 		existing.Source = src
 		existing.LastUsed = nowRFC3339()
+		existing.Confirmed++
+		existing.LastConfirmed = nowRFC3339()
 		if existing.Kind == "" {
 			existing.Kind = kind
 		}
@@ -95,6 +108,17 @@ func Put(id, kind string, bullets []string, src Source) (string, error) {
 			Title:    id,
 			Bullets:  appendUnique(nil, bullets),
 		}
+	}
+	// P3-4: refuse to blind-append a lesson that strongly contradicts a
+	// different active lesson (same kind, near-identical topic, but materially
+	// different content). The caller must resolve it explicitly by re-putting
+	// with supersedes:<id> (which marks the old one stale before this write, so
+	// the check then passes) or by choosing a more specific id. Only a STRONG
+	// overlap fires, so genuinely distinct lessons are never blocked.
+	if conflictID, ok := detectConflict(lesson); ok {
+		return "", fmt.Errorf(
+			"skill_put conflict: lesson %q (same kind, near-identical topic) already holds different content; re-put with supersedes:%q to replace it, or use a more specific id",
+			conflictID, conflictID)
 	}
 	if err := write(lesson); err != nil {
 		return "", err
@@ -185,6 +209,83 @@ func normalizeBullet(s string) string {
 	return strings.Join(strings.Fields(strings.ToLower(s)), " ")
 }
 
+// Conflict-detection thresholds (P3-4). A conflict fires only when a lesson has
+// a near-identical TOPIC (title token Jaccard ≥ conflictTitleSim) AND largely
+// different CONTENT (bullet Jaccard < conflictContentOverlap) as another active
+// lesson of the same kind. Requiring both — same topic yet disjoint advice — is
+// what makes it a contradiction rather than a duplicate (high content overlap)
+// or an unrelated lesson (low title overlap), so ordinary distinct lessons,
+// whose ids/titles diverge, never trip it.
+const (
+	conflictTitleSim       = 0.8
+	conflictContentOverlap = 0.34
+)
+
+// detectConflict reports whether l strongly contradicts a different active
+// lesson, returning that lesson's id. It reads the store best-effort; a read
+// error means "no conflict" (never block a write on a transient dir error).
+func detectConflict(l Lesson) (string, bool) {
+	lessons, err := listLessons()
+	if err != nil {
+		return "", false
+	}
+	newTitle := tokenSet(l.Title)
+	newBullets := bulletSet(l.Bullets)
+	for _, other := range lessons {
+		if other.ID == l.ID || other.Status != "active" || other.Kind != l.Kind {
+			continue
+		}
+		if jaccard(newTitle, tokenSet(other.Title)) < conflictTitleSim {
+			continue // different topic — not a contradiction
+		}
+		if jaccard(newBullets, bulletSet(other.Bullets)) >= conflictContentOverlap {
+			continue // same topic, same content — a duplicate, not a conflict
+		}
+		return other.ID, true
+	}
+	return "", false
+}
+
+// tokenSet splits a title into a set of lowercased alphanumeric tokens, so
+// "retry-with-backoff" and "Retry With Backoff" compare equal.
+func tokenSet(s string) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, tok := range strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	}) {
+		out[tok] = struct{}{}
+	}
+	return out
+}
+
+// bulletSet is the set of normalized whole-bullet strings — content compared at
+// bullet granularity so differing advice on the same topic reads as disjoint.
+func bulletSet(bullets []string) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, b := range bullets {
+		out[normalizeBullet(b)] = struct{}{}
+	}
+	return out
+}
+
+// jaccard is |A∩B| / |A∪B| for two sets; 0 when both are empty.
+func jaccard(a, b map[string]struct{}) float64 {
+	if len(a) == 0 && len(b) == 0 {
+		return 0
+	}
+	inter := 0
+	for k := range a {
+		if _, ok := b[k]; ok {
+			inter++
+		}
+	}
+	union := len(a) + len(b) - inter
+	if union == 0 {
+		return 0
+	}
+	return float64(inter) / float64(union)
+}
+
 // marshalLesson renders a lesson as flat-frontmatter markdown. source.* is
 // flattened to source_<field> so the frontmatter stays line-parseable (no YAML
 // dep), mirroring the KB's hand-rolled frontmatter.
@@ -201,6 +302,8 @@ func marshalLesson(l Lesson) string {
 	fmt.Fprintf(&b, "source_ts: %s\n", l.Source.TS)
 	fmt.Fprintf(&b, "last_used: %s\n", l.LastUsed)
 	fmt.Fprintf(&b, "validity: %s\n", l.Validity)
+	fmt.Fprintf(&b, "confirmed: %d\n", l.Confirmed)
+	fmt.Fprintf(&b, "last_confirmed: %s\n", l.LastConfirmed)
 	b.WriteString("---\n")
 	title := l.Title
 	if title == "" {
@@ -248,6 +351,13 @@ func parseLesson(content string) Lesson {
 					l.LastUsed = val
 				case "validity":
 					l.Validity = val
+				case "confirmed":
+					// Absent in pre-P3-2 records → left at 0 (back-compat).
+					if n, err := strconv.Atoi(strings.TrimSpace(val)); err == nil {
+						l.Confirmed = n
+					}
+				case "last_confirmed":
+					l.LastConfirmed = val
 				case "source_ts":
 					l.Source.TS = val
 				}
