@@ -225,6 +225,74 @@ func TestGenerateClaudeSkillsPrunesStale(t *testing.T) {
 	}
 }
 
+// TestDirOnPath verifies the PATH membership check.
+func TestDirOnPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", "/usr/bin"+string(os.PathListSeparator)+dir)
+	if !dirOnPath(dir) {
+		t.Errorf("dirOnPath(%q) = false, want true", dir)
+	}
+	if dirOnPath(filepath.Join(dir, "absent")) {
+		t.Error("dirOnPath must be false for a directory not on PATH")
+	}
+}
+
+// TestSelfPlaceCopiesAndReferencesInstalledBinary verifies that when the running
+// binary is not on PATH, selfPlace copies it into installBinDir() and returns
+// that stable path for the rest of setup to reference.
+func TestSelfPlaceCopiesAndReferencesInstalledBinary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix profile placement path")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", "/usr/bin") // install dir is not on PATH
+
+	srcDir := t.TempDir()
+	src := filepath.Join(srcDir, "detritus")
+	if err := os.WriteFile(src, []byte("#!/bin/sh\necho hi\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := selfPlace(src, false)
+
+	want := filepath.Join(home, ".local", "bin", "detritus")
+	if dest != want {
+		t.Fatalf("selfPlace returned %q, want %q", dest, want)
+	}
+	if _, err := os.Stat(dest); err != nil {
+		t.Fatalf("binary not placed at %s: %v", dest, err)
+	}
+	// PATH export line landed in ~/.profile.
+	profile, err := os.ReadFile(filepath.Join(home, ".profile"))
+	if err != nil {
+		t.Fatalf("read .profile: %v", err)
+	}
+	if !strings.Contains(string(profile), filepath.Join(home, ".local", "bin")) {
+		t.Errorf(".profile missing PATH export:\n%s", profile)
+	}
+}
+
+// TestSelfPlaceNoOpWhenAlreadyOnPath verifies that a binary already reachable on
+// PATH is left in place (returned path unchanged, nothing copied).
+func TestSelfPlaceNoOpWhenAlreadyOnPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	srcDir := t.TempDir()
+	t.Setenv("PATH", srcDir)
+	src := filepath.Join(srcDir, binaryName())
+	if err := os.WriteFile(src, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := selfPlace(src, false); got != src {
+		t.Errorf("selfPlace returned %q, want unchanged %q", got, src)
+	}
+	if _, err := os.Stat(filepath.Join(installBinDir(), binaryName())); !os.IsNotExist(err) {
+		t.Errorf("nothing should be copied into installBinDir when already on PATH (stat err = %v)", err)
+	}
+}
+
 func TestUpsertTOMLTableAddsDetritusMCP(t *testing.T) {
 	input := `model = "gpt-5.5"
 
