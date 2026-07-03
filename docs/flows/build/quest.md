@@ -17,6 +17,7 @@ related:
   - core/loop
   - core/build
   - core/completion
+  - flows/github/babysit
 ---
 
 # /quest — a bounded iterative loop in the sidecar
@@ -47,6 +48,8 @@ Refine the request into four things, written to the objective file passed on arg
 - **Campaign-child quest** — integrates onto the **campaign branch** and opens **no PR**; the campaign delivers (`flows/build/campaign`).
 
 Triage never surfaces the quest's **own delivery artifacts** (its branch, its open PRs) as new work items.
+
+**Watch-to-merge is in-session, never in the sidecar** (`core/sidecar` → *Watch-to-merge is in-session, never in the sidecar*). A standalone quest's per-repo PRs are handed to `/babysit <pr>` (`flows/github/babysit`) in the user's session to reach merge on a SHA-pinned human approval — the sidecar itself never merges. (A campaign-child quest opens no PR; the campaign delivers and its PRs are watched the same way.)
 
 ## Control
 

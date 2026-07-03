@@ -14,6 +14,7 @@ related:
   - flows/build/adventure
   - flows/build/campaign
   - flows/github/gh
+  - flows/github/babysit
   - core/build
   - core/coordination
 ---
@@ -47,6 +48,10 @@ API on **:8888**, UI on **:8080** — the UI loads from :8080 but reads its data
 ## Control — observe + stop only
 
 No per-agent control, no resume. The dashboard's Stop kills the whole spawned process tree. Watch live state in the dashboard rather than polling.
+
+## Watch-to-merge is in-session, never in the sidecar
+
+The sidecar **never merges** — merge is irreversible and gated on a human review (`core/flows` → *PR-watch — the universal terminal phase*), while the sidecar surface is observe-and-stop-only. When a launched run/quest/campaign converges and opens its per-repo PR(s), the launcher reports each PR URL and points the user at `/babysit` (`flows/github/babysit`) to carry it to merge **in-session**: `/babysit` watches one PR, folds in reviewer feedback each tick, and merges the moment a SHA-pinned human `APPROVED` review covers HEAD. The watch loop runs in the user's session, not as a sidecar agent — it is the same universal terminal phase the in-session flows use, applied to the sidecar's delivered PRs.
 
 ## Launch output contract
 

@@ -12,6 +12,7 @@ related:
   - flows/github/gh-issue-create
   - flows/github/gh-feedback-work
   - flows/github/gh-self-review
+  - flows/github/babysit
 ---
 
 # /gh-issue-work — Issue → Branch → Fix → Self-Review → PR
@@ -225,7 +226,7 @@ EOF
 
 ## Phase 10: Report back
 
-Print the PR URL on its own line, then a one-sentence summary of what was done. No emoji elsewhere in the reply.
+Print the PR URL on its own line, then a one-sentence summary of what was done. No emoji elsewhere in the reply. Then **offer** `/babysit <pr>` (`flows/github/babysit`) as the optional watch-to-merge continuation — it watches this PR, folds in reviewer feedback each tick, and merges on a SHA-pinned human approval. Offer it; do not auto-start it — a developer often merges by hand, and opening a watch loop unbidden expands beyond the issue→PR contract this skill delivers. (When entered at Phase 9 by an autonomous caller such as `/smith` or `/vibe`, that caller owns the watch decision — this skill's offer applies to its own interactive use.)
 
 ## Phase 11: Handle chat follow-up
 
