@@ -1,7 +1,9 @@
 ---
 description: Watch a single PR on an interval — fix any review feedback via /gh-feedback-work, and merge once an approval lands on the latest commit. Terminating loop; merge is the exit.
 triggers:
-  - gh-merge-loop
+  - babysit
+  - babysit pr
+  - babysit this pr
   - watch pr
   - watch this pr
   - merge when approved
@@ -18,7 +20,7 @@ related:
   - core/janitor-platforms
 ---
 
-# /gh-merge-loop — Watch a PR Until Merged
+# /babysit — Watch a PR Until Merged
 
 A watch-until-merge loop over **one** PR. Each tick re-checks the PR; if a reviewer posted feedback after the last commit, it fixes it (push + body rewrite); once an `APPROVED` review covers the current HEAD and the PR's `mergeable_state` is `clean` (or `has_hooks`), it merges and stops.
 
