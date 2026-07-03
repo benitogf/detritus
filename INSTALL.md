@@ -4,27 +4,21 @@ This file is for AI tools and maintainers that need explicit shell commands.
 Human users should usually ask their AI coding tool to install Detritus from the
 GitHub repository instead of running these steps themselves.
 
-## Install From Release Scripts
+## Install From A Release
 
-Linux/macOS:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/benitogf/detritus/main/install.sh | bash
-```
-
-Windows PowerShell:
-
-```powershell
-iwr -useb https://raw.githubusercontent.com/benitogf/detritus/main/install.ps1 | iex
-```
-
-The install scripts download the latest release and run:
+Download the binary for your platform from the
+[latest release](https://github.com/benitogf/detritus/releases/latest), unpack
+it anywhere, then run it once with `--setup`:
 
 ```bash
 detritus --setup
 ```
 
-`detritus --setup` configures detected assistant apps and editors.
+`detritus --setup` is self-placing: it copies the binary into a stable,
+per-user directory on `PATH` (`~/.local/bin` on Linux/macOS,
+`%LOCALAPPDATA%\detritus` on Windows) and adds that directory to `PATH` if
+needed, then configures every detected assistant app and editor. No install
+script is required — the binary bootstraps itself.
 
 ## Add The Codex Plugin Marketplace
 

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -46,6 +47,151 @@ func homeDir() string {
 	return h
 }
 
+// binaryName is the on-disk name of the detritus executable for this platform.
+func binaryName() string {
+	if runtime.GOOS == "windows" {
+		return "detritus.exe"
+	}
+	return "detritus"
+}
+
+// installBinDir is the stable, per-user directory detritus places itself into
+// when it is not already reachable on PATH. It never requires elevation:
+// ~/.local/bin on Unix, %LOCALAPPDATA%\detritus on Windows.
+func installBinDir() string {
+	if runtime.GOOS == "windows" {
+		if la := os.Getenv("LOCALAPPDATA"); la != "" {
+			return filepath.Join(la, "detritus")
+		}
+		return filepath.Join(homeDir(), "AppData", "Local", "detritus")
+	}
+	return filepath.Join(homeDir(), ".local", "bin")
+}
+
+// dirOnPath reports whether dir is already an entry in the PATH environment
+// variable (order- and duplicate-insensitive).
+func dirOnPath(dir string) bool {
+	clean := filepath.Clean(dir)
+	for _, p := range filepath.SplitList(os.Getenv("PATH")) {
+		if p != "" && filepath.Clean(p) == clean {
+			return true
+		}
+	}
+	return false
+}
+
+// selfPlace makes the running binary reachable on PATH and returns the path the
+// rest of setup should reference. If detritus is already on PATH (e.g. it was
+// installed to a directory that is), it is left in place. Otherwise it is copied
+// into installBinDir() and that dir is added to PATH. Best-effort: on any
+// failure it warns and falls back to the current path so setup still proceeds.
+func selfPlace(binaryPath string, dryRun bool) string {
+	if dirOnPath(filepath.Dir(binaryPath)) {
+		return binaryPath
+	}
+
+	dir := installBinDir()
+	dest := filepath.Join(dir, binaryName())
+
+	if dryRun {
+		fmt.Printf("[dry-run] Would copy detritus to %s\n", dest)
+		fmt.Printf("[dry-run] Would ensure %s is on PATH\n", dir)
+		return dest
+	}
+
+	if binaryPath != dest {
+		if err := copyBinary(binaryPath, dest); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not place detritus at %s: %v\n", dest, err)
+			return binaryPath
+		}
+		fmt.Printf("Installed detritus binary: %s\n", dest)
+	}
+	ensureDirOnPath(dir)
+	return dest
+}
+
+// copyBinary copies src to dst (creating dst's directory) with the executable
+// bit set, writing to a temp file first so a partial copy never leaves a broken
+// binary at dst.
+func copyBinary(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+
+	tmp := dst + ".new"
+	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, dst)
+}
+
+// ensureDirOnPath persists dir onto the user's PATH when it isn't already there.
+// Unix appends an export line to the shell profile(s); Windows updates the
+// persistent user PATH via setx. No-op if dir is already on PATH.
+func ensureDirOnPath(dir string) {
+	if dirOnPath(dir) {
+		return
+	}
+	if runtime.GOOS == "windows" {
+		if err := addDirToWindowsUserPath(dir); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not add %s to PATH: %v\n", dir, err)
+			return
+		}
+		fmt.Printf("Added %s to user PATH (restart terminal for effect)\n", dir)
+		return
+	}
+	ensureUnixProfilePath(dir)
+}
+
+// ensureUnixProfilePath appends an idempotent PATH export for dir to the user's
+// shell profiles. It always ensures ~/.profile, and additionally updates
+// ~/.bashrc and ~/.zshrc when they already exist.
+func ensureUnixProfilePath(dir string) {
+	home := homeDir()
+	const marker = "# detritus PATH"
+	line := fmt.Sprintf("export PATH=\"%s:$PATH\"", dir)
+	block := fmt.Sprintf("\n%s\n%s\n", marker, line)
+
+	updated := false
+	for _, name := range []string{".profile", ".bashrc", ".zshrc"} {
+		p := filepath.Join(home, name)
+		data, err := os.ReadFile(p)
+		if err != nil && name != ".profile" {
+			continue // only create ~/.profile; touch the others only if present
+		}
+		if strings.Contains(string(data), marker) || strings.Contains(string(data), dir) {
+			updated = true
+			continue
+		}
+		f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			continue
+		}
+		_, _ = f.WriteString(block)
+		f.Close()
+		updated = true
+	}
+	if updated {
+		fmt.Printf("Added %s to PATH in your shell profile (restart your shell)\n", dir)
+	}
+}
+
 // RunSetup configures all detected IDEs.
 // binaryPath is the path to the detritus binary to embed in configs.
 // If dryRun is true, nothing is written to disk; actions are only printed.
@@ -57,6 +203,13 @@ func RunSetup(binaryPath string, dryRun bool) error {
 	}
 
 	home := homeDir()
+
+	// Self-place: copy this binary into a stable, PATH-reachable install
+	// directory and ensure that directory is on PATH, so running `detritus
+	// --setup` from a freshly downloaded binary is enough to bootstrap the CLI.
+	// Everything downstream (host configs, companion fetches) points at the
+	// placed binary.
+	binaryPath = selfPlace(binaryPath, dryRun)
 
 	// Fetch the candyland sidecar binary beside detritus so the launcher can
 	// start it on demand (the build flows drive it over REST; it is not
