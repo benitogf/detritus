@@ -380,3 +380,40 @@ func TestUpsertCodexMCPConfigWritesEscapedWindowsPath(t *testing.T) {
 		t.Fatalf("windows path was not escaped as a TOML basic string:\n%s", got)
 	}
 }
+
+// TestGenerateClaudeCoderAgentUsesEffortKey verifies the /forge coder subagent
+// definition carries its low reasoning effort via the dedicated `effort`
+// frontmatter key — Claude Code's per-subagent override — rather than trying to
+// smuggle it through `model` (which takes an alias/ID only) or leaning on a
+// Workflow model fallback. This locks the "effort frontmatter key vs Workflow
+// fallback" decision: the definition file owns it directly.
+func TestGenerateClaudeCoderAgentUsesEffortKey(t *testing.T) {
+	home := t.TempDir()
+
+	generateClaudeCoderAgent(home)
+
+	agentFile := filepath.Join(home, ".claude", "agents", "detritus-coder.md")
+	raw, err := os.ReadFile(agentFile)
+	if err != nil {
+		t.Fatalf("coder agent definition not written: %v", err)
+	}
+	got := string(raw)
+
+	fm, _, ok := strings.Cut(strings.TrimPrefix(got, "---\n"), "\n---")
+	if !ok {
+		t.Fatalf("agent definition missing YAML frontmatter:\n%s", got)
+	}
+	if !strings.Contains(fm, "\neffort: low") {
+		t.Errorf("frontmatter must set the effort key to low; got:\n%s", fm)
+	}
+	if !strings.Contains(fm, "\nmodel: inherit") {
+		t.Errorf("coder should inherit the session model, not pin one; got:\n%s", fm)
+	}
+	// effort must be its own key, never encoded into model (which is alias/ID only).
+	if strings.Contains(fm, "model: inherit low") || strings.Contains(fm, "model: low") {
+		t.Errorf("effort must not be smuggled into the model field; got:\n%s", fm)
+	}
+	if !strings.Contains(fm, "name: detritus-coder") {
+		t.Errorf("agent must be named detritus-coder so /forge can spawn it; got:\n%s", fm)
+	}
+}
