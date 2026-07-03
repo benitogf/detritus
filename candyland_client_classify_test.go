@@ -205,6 +205,45 @@ func TestClassifyLaunchInput(t *testing.T) {
 	}
 }
 
+// An objective whose leading heading names a feedback verb next to a bare PR
+// number ("address … feedback on … PR #749") STILL classifies as feedback: the
+// bare "#749" is gated on an intent marker, the feedback phrase supplies it, and
+// the explicit feedback verb wins over the bare "review" word in the same line.
+func TestClassifyLaunchInputHeadingFeedback(t *testing.T) {
+	fixtures := map[string]string{
+		"nwo":                                 "acme/widget\n",
+		"repos_acme_widget_issues_749":        openPRIssue,
+		"repos_acme_widget_pulls_749":         openPull,
+		"repos_acme_widget_pulls_749_reviews": approvedAll, // clean PR: no CR forces the intent path
+	}
+	installGHStub(t, fixtures)
+	got, err := classifyLaunchInput("# Objective: address review feedback on bulk PR #749", t.TempDir())
+	if err != nil {
+		t.Fatalf("classifyLaunchInput: %v", err)
+	}
+	if got.Deliver != "feedback" || got.TargetPR != 749 || got.Ambiguous || got.Degraded {
+		t.Fatalf("got %+v, want feedback/749, not ambiguous/degraded", got)
+	}
+}
+
+// A multi-paragraph plan whose prose merely mentions a bare "#97" with NO
+// feedback/review verb classifies as new work (pr, targetPR 0) and never touches
+// gh — the regression the old marker-only path guarded against. (Empty fixtures
+// model an absent gh; a fetch would exit 1, so reaching pr/0 proves gh is untouched.)
+func TestClassifyLaunchInputProseCitationIsNewWork(t *testing.T) {
+	installGHStub(t, map[string]string{})
+	plan := "# Implementation Plan\n\n" +
+		"This continues the parser work begun in #97 and adds a CSV exporter.\n\n" +
+		"## Steps\n\n1. Extract the tokenizer.\n2. Wire the exporter.\n"
+	got, err := classifyLaunchInput(plan, t.TempDir())
+	if err != nil {
+		t.Fatalf("classifyLaunchInput: %v", err)
+	}
+	if got.Deliver != "pr" || got.TargetPR != 0 || got.Ambiguous || got.Degraded {
+		t.Fatalf("got %+v, want pr/0, not ambiguous/degraded", got)
+	}
+}
+
 func merge(a, b map[string]string) map[string]string {
 	out := map[string]string{}
 	for k, v := range a {
@@ -226,7 +265,7 @@ func TestResolveLaunchDeliveryAmbiguousPrompt(t *testing.T) {
 	for _, choice := range []string{"review", "feedback"} {
 		calls := 0
 		ambiguousDeliveryPrompt = func(pr int) string { calls++; return choice }
-		deliver, pr, err := resolveLaunchDelivery("handle https://github.com/acme/widget/pull/5", t.TempDir())
+		deliver, pr, _, err := resolveLaunchDelivery("handle https://github.com/acme/widget/pull/5", t.TempDir())
 		if err != nil {
 			t.Fatalf("resolveLaunchDelivery: %v", err)
 		}
@@ -236,7 +275,7 @@ func TestResolveLaunchDeliveryAmbiguousPrompt(t *testing.T) {
 	}
 
 	ambiguousDeliveryPrompt = func(pr int) string { return "cancel" }
-	if _, _, err := resolveLaunchDelivery("handle https://github.com/acme/widget/pull/5", t.TempDir()); err == nil {
+	if _, _, _, err := resolveLaunchDelivery("handle https://github.com/acme/widget/pull/5", t.TempDir()); err == nil {
 		t.Fatal("cancel must abort the launch with an error")
 	}
 }

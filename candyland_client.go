@@ -87,7 +87,7 @@ func runCandyland(detritusPath, promptFile string, folders []string, cwd string)
 	// Recognize a PR-feedback run so it updates the existing PR in place instead
 	// of opening a new one. The primary repo (folders[0]) is where a
 	// branch-state fallback looks for an open PR.
-	deliver, targetPR, err := resolveCandylandDelivery(prompt, folders[0])
+	deliver, targetPR, degraded, err := resolveCandylandDelivery(prompt, folders[0])
 	if err != nil {
 		return err
 	}
@@ -100,6 +100,9 @@ func runCandyland(detritusPath, promptFile string, folders []string, cwd string)
 	}
 	fmt.Printf("candyland run started: %s\n", id)
 	fmt.Printf("Deliver: %s (%s)\n", deliver, questDeliveryEffect(deliver, targetPR))
+	if degraded {
+		fmt.Print(degradedClassificationNotice)
+	}
 	fmt.Printf("API: %s\n", candylandBaseURL)
 	fmt.Printf("UI / Dashboard: %s\n", candylandDashboardURL)
 	return nil
@@ -115,17 +118,17 @@ func runCandyland(detritusPath, promptFile string, folders []string, cwd string)
 //   - otherwise fall back to repo's current-branch open PR (branchPRLookup) — the
 //     same "the branch already has a PR" signal /gh infers from — which can only
 //     mean feedback (there is a PR to update).
-func resolveCandylandDelivery(prompt, repo string) (deliver string, targetPR int, err error) {
-	deliver, targetPR, err = resolveLaunchDelivery(prompt, repo)
+func resolveCandylandDelivery(prompt, repo string) (deliver string, targetPR int, degraded bool, err error) {
+	deliver, targetPR, degraded, err = resolveLaunchDelivery(prompt, repo)
 	if err != nil {
-		return "", 0, err
+		return "", 0, false, err
 	}
 	if deliver == "pr" && targetPR == 0 {
 		if pr := branchPRLookup(repo); pr > 0 {
-			return "feedback", pr, nil
+			return "feedback", pr, degraded, nil
 		}
 	}
-	return deliver, targetPR, nil
+	return deliver, targetPR, degraded, nil
 }
 
 // branchPRLookup resolves the open PR for a repo's current branch. It is a var so
@@ -207,14 +210,28 @@ func parseLaunchReference(input string) (launchReference, bool) {
 
 // classifyLaunchInput mirrors the flows/github/gh Phase 0/1 classification OUTCOME
 // against freshly-fetched (stubbed in tests) gh state, mapped to a delivery mode.
-// It is the one classifier all sidecar launchers share. Rows (see the /gh doc):
+// It is the one classifier all sidecar launchers share.
+//
+// Launcher inputs are objective/plan/campaign-brief TEXT, which routinely cite
+// issues/PRs in prose (a settled plan may mention "#97" in passing). A bare "#N"
+// with no feedback/review intent must NOT hijack delivery — that is the safety the
+// old marker-only path had. An explicit reference (a full github URL or an
+// owner/repo#N shorthand) is unambiguous and is always treated as the target, the
+// same way /gh treats a URL/ref it is handed. So the gate is narrow: only the bare
+// "#N" form is conditioned on an explicit feedback/review intent marker being
+// present (hasFeedbackIntent / hasReviewIntent — verbs like "review PR #N",
+// "address feedback on PR #N", "update PR #N"). Rows (see the /gh doc):
+//   - no reference → pr (new work; gh untouched)
+//   - bare "#N" with no feedback/review intent marker → pr (new work; the prose
+//     mentions a number but does not ask to act on that PR)
 //   - open PR + unaddressed CHANGES_REQUESTED → feedback (even with review text)
+//   - open PR + feedback-intent text → feedback (an explicit "address … feedback"
+//     phrase wins over a bare "review" word)
 //   - open PR + review-intent text → review
-//   - open PR + post-last-commit comments, no review text → feedback
+//   - open PR + post-last-commit comments, no intent text → feedback
 //   - open PR + none of the above → Ambiguous (CLI asks once before launch)
 //   - open issue → pr (the issue ref stays in the objective)
 //   - merged/closed PR or closed issue → error (verbatim state), aborting launch
-//   - no reference → pr (new work; gh is never touched)
 //
 // A `gh api` failure degrades to marker-only derivation (deriveMarkerDelivery) and
 // signals Degraded, so a missing/erroring gh never fails the launch.
@@ -222,6 +239,12 @@ func classifyLaunchInput(input, cwd string) (launchClassification, error) {
 	ref, found := parseLaunchReference(input)
 	if !found {
 		return launchClassification{Deliver: "pr"}, nil
+	}
+	if ref.bare {
+		lower := strings.ToLower(input)
+		if !hasFeedbackIntent(lower) && !hasReviewIntent(lower) {
+			return launchClassification{Deliver: "pr"}, nil // prose "#N" citation, no intent to act
+		}
 	}
 	if ref.bare {
 		nwo := ghRepoNWO(cwd)
@@ -274,20 +297,22 @@ func classifyLaunchInput(input, cwd string) (launchClassification, error) {
 // combining live review/commit/comment state with the input's intent text:
 //  1. an unaddressed CHANGES_REQUESTED (latest decisive review per reviewer) →
 //     feedback, even if the text asks for a review;
-//  2. review-intent text → review;
-//  3. feedback-intent text → feedback;
-//  4. comments after the last commit (no review text) → feedback;
+//  2. feedback-intent text → feedback (an explicit feedback phrase like
+//     "address … feedback" wins over a bare "review" word in the same input —
+//     "address review feedback" is a fix-the-feedback ask, not a review ask);
+//  3. review-intent text → review;
+//  4. comments after the last commit (no intent text) → feedback;
 //  5. otherwise "" — the caller marks it Ambiguous and asks once.
 func classifyOpenPR(cwd string, ref launchReference, input string) string {
 	if unaddressedChangesRequested(cwd, ref) {
 		return "feedback"
 	}
 	lower := strings.ToLower(input)
-	if hasReviewIntent(lower) {
-		return "review"
-	}
 	if hasFeedbackIntent(lower) {
 		return "feedback"
+	}
+	if hasReviewIntent(lower) {
+		return "review"
 	}
 	if hasPostCommitComments(cwd, ref) {
 		return "feedback"
@@ -369,6 +394,11 @@ func hasFeedbackIntent(lower string) bool {
 	return false
 }
 
+// degradedClassificationNotice is the launch-summary line printed when delivery
+// classification fell back to marker-only derivation because `gh` was unavailable,
+// so the operator sees the reduced confidence rather than trusting a silent guess.
+const degradedClassificationNotice = "classification degraded: gh unavailable, used marker fallback\n"
+
 // degradedClassification is the `gh`-unavailable fallback: marker-only derivation
 // (deriveMarkerDelivery) with Degraded set so the caller can flag reduced confidence.
 func degradedClassification(input string) launchClassification {
@@ -390,22 +420,22 @@ var ambiguousDeliveryPrompt = func(pr int) string {
 // share: it classifies input against live gh state and resolves an ambiguous open
 // PR by asking once (ambiguousDeliveryPrompt). A merged/closed target errors; a
 // cancelled ambiguous prompt errors (aborting the launch).
-func resolveLaunchDelivery(input, cwd string) (deliver string, targetPR int, err error) {
+func resolveLaunchDelivery(input, cwd string) (deliver string, targetPR int, degraded bool, err error) {
 	c, err := classifyLaunchInput(input, cwd)
 	if err != nil {
-		return "", 0, err
+		return "", 0, false, err
 	}
 	if c.Ambiguous {
 		switch ambiguousDeliveryPrompt(c.TargetPR) {
 		case "review":
-			return "review", c.TargetPR, nil
+			return "review", c.TargetPR, c.Degraded, nil
 		case "feedback":
-			return "feedback", c.TargetPR, nil
+			return "feedback", c.TargetPR, c.Degraded, nil
 		default:
-			return "", 0, fmt.Errorf("launch cancelled: ambiguous delivery for PR #%d", c.TargetPR)
+			return "", 0, false, fmt.Errorf("launch cancelled: ambiguous delivery for PR #%d", c.TargetPR)
 		}
 	}
-	return c.Deliver, c.TargetPR, nil
+	return c.Deliver, c.TargetPR, c.Degraded, nil
 }
 
 // deriveShortTitle yields a compact display label from an objective/plan/input:
@@ -526,7 +556,7 @@ func readQuestRunArgs(objectiveFile string, folders []string, cwd string) (objec
 // Their presence (alongside a parsed PR number) selects deliver:"feedback" —
 // update the referenced PR in place, never open a new one. Matched
 // case-insensitively as substrings (phrases, so word-boundary matching is not
-// used). Kept conservative — see deriveQuestDelivery.
+// used). Kept conservative — see deriveMarkerDelivery.
 var questFeedbackMarkers = []string{
 	"address feedback", "address the feedback", "address review",
 	"fix the review", "fix review", "review comments", "review feedback",
@@ -676,10 +706,13 @@ func questDeliveryEffect(deliver string, targetPR int) string {
 // (questDeliveryEffect: feedback updates PR #N in place, review reports on
 // PR #N, pr opens a new PR), and the API + UI ports with a remote/WSL
 // port-forwarding hint. kind names the flow ("quest" or "adventure").
-func questLaunchSummary(kind, id, deliver string, targetPR int) string {
+func questLaunchSummary(kind, id, deliver string, targetPR int, degraded bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "candyland %s started: %s\n", kind, id)
 	fmt.Fprintf(&b, "Deliver: %s (%s)\n", deliver, questDeliveryEffect(deliver, targetPR))
+	if degraded {
+		b.WriteString(degradedClassificationNotice)
+	}
 	fmt.Fprintf(&b, "API: %s\n", candylandBaseURL)
 	fmt.Fprintf(&b, "UI / Dashboard: %s\n", candylandDashboardURL)
 	fmt.Fprintf(&b, "Remote/WSL: forward BOTH ports — the UI on :8080 stays empty until the API on :8888 is reachable\n")
@@ -698,7 +731,7 @@ func runQuestCmd(detritusPath, objectiveFile string, folders []string, kind, con
 	if err != nil {
 		return err
 	}
-	deliver, targetPR, err := resolveLaunchDelivery(objective, folders[0])
+	deliver, targetPR, degraded, err := resolveLaunchDelivery(objective, folders[0])
 	if err != nil {
 		return err
 	}
@@ -709,7 +742,7 @@ func runQuestCmd(detritusPath, objectiveFile string, folders []string, kind, con
 	if err != nil {
 		return err
 	}
-	fmt.Print(questLaunchSummary(kind, id, deliver, targetPR))
+	fmt.Print(questLaunchSummary(kind, id, deliver, targetPR, degraded))
 	return nil
 }
 
@@ -739,7 +772,7 @@ func runCampaignCmd(detritusPath, inputFile string, folders []string, cwd string
 	if err != nil {
 		return err
 	}
-	deliver, targetPR, err := resolveLaunchDelivery(input, folders[0])
+	deliver, targetPR, degraded, err := resolveLaunchDelivery(input, folders[0])
 	if err != nil {
 		return err
 	}
@@ -750,7 +783,7 @@ func runCampaignCmd(detritusPath, inputFile string, folders []string, cwd string
 	if err != nil {
 		return err
 	}
-	fmt.Print(campaignLaunchSummary(id, deliver, targetPR))
+	fmt.Print(campaignLaunchSummary(id, deliver, targetPR, degraded))
 	return nil
 }
 
@@ -759,10 +792,13 @@ func runCampaignCmd(detritusPath, inputFile string, folders []string, cwd string
 // (questDeliveryEffect, reused), and the API + UI ports. Mirrors
 // questLaunchSummary's mode line so feedback/review/pr read the same across
 // both flows.
-func campaignLaunchSummary(id, deliver string, targetPR int) string {
+func campaignLaunchSummary(id, deliver string, targetPR int, degraded bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "candyland campaign started: %s\n", id)
 	fmt.Fprintf(&b, "Deliver: %s (%s)\n", deliver, questDeliveryEffect(deliver, targetPR))
+	if degraded {
+		b.WriteString(degradedClassificationNotice)
+	}
 	fmt.Fprintf(&b, "API: %s\n", candylandBaseURL)
 	fmt.Fprintf(&b, "UI / Dashboard: %s\n", candylandDashboardURL)
 	return b.String()

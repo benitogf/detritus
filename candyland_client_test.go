@@ -38,7 +38,7 @@ func TestResolveCandylandDelivery(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			installGHStub(t, map[string]string{}) // no gh state → degrade to marker derivation
 			branchPRLookup = func(string) int { return tc.branchPR }
-			deliver, pr, err := resolveCandylandDelivery(tc.prompt, t.TempDir())
+			deliver, pr, _, err := resolveCandylandDelivery(tc.prompt, t.TempDir())
 			if err != nil {
 				t.Fatalf("resolveCandylandDelivery: %v", err)
 			}
