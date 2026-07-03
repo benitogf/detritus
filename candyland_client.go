@@ -446,7 +446,7 @@ func hasReviewIntent(lower string) bool {
 // so they cannot drift — a loose word like "design review" does not match.
 func hasStrictReviewMarker(lower string) bool {
 	for _, marker := range questReviewMarkers {
-		if strings.Contains(lower, marker) {
+		if containsWord(lower, marker) {
 			return true
 		}
 	}
@@ -459,7 +459,7 @@ func hasStrictReviewMarker(lower string) bool {
 // degraded fallback so both agree; a bare "feedback" word does not match.
 func hasStrictFeedbackMarker(lower string) bool {
 	for _, marker := range questFeedbackMarkers {
-		if strings.Contains(lower, marker) {
+		if containsWord(lower, marker) {
 			return true
 		}
 	}

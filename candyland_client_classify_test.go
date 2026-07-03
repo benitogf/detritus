@@ -332,6 +332,10 @@ func TestClassifyLaunchInputLooseReviewWordNoHijack(t *testing.T) {
 		"Build the new dashboard. See prior art in https://github.com/acme/widget/pull/5. Needs design review before merge.",
 		"Refactor auth; the old approach in https://github.com/acme/widget/pull/5 failed code review, redo it fresh.",
 		"# Plan\nBuild X.\nWe will review the design later.\nContext: https://github.com/acme/widget/pull/5\n",
+		// "preview" ends in "review" — a substring match on the "review pr"/"review #"
+		// markers would hijack this new-work plan; word-boundary matching must not.
+		"Build a preview pr feature for the launch tracked in https://github.com/acme/widget/pull/5.",
+		"Add a preview #5 mockup; reference https://github.com/acme/widget/pull/5.",
 	}
 	// openPRIssue/openPull present so that, were the gate loose, it would reach
 	// classifyOpenPR and yield review/5 — reaching pr/0 proves the strict gate held.
