@@ -49,6 +49,17 @@ API on **:8888**, UI on **:8080** — the UI loads from :8080 but reads its data
 
 No per-agent control, no resume. The dashboard's Stop kills the whole spawned process tree. Watch live state in the dashboard rather than polling.
 
+## Worktree hygiene
+
+Each coder builds in its **own git worktree** off the run's branch (`core/coder`), so parallel siblings never collide. detritus does **not** own this lifecycle — candyland's conductor does — but the doctrine is fixed and the same idempotent rules bind every driver:
+
+- **One worktree per coder task; the add is idempotent.** Before adding a worktree the driver clears any leftover at the same path and detaches every *other* worktree still registered on the target branch — a quick stop→edit→begin, a reused id, or a sibling child's leftover integration worktree can otherwise hold the branch and make a plain `worktree add` fail with "already used by worktree". `-B` (create-or-reset) then makes the branch a clean slate. This is what lets a run be re-begun or restarted without hand-cleanup.
+- **A dirty holder is never nuked.** A worktree with uncommitted changes is left untouched — the add then fails honestly rather than destroying unsaved work. The branch ref and its commits always survive; only the (clean) worktree *registration* is removed.
+- **Shared-branch runs coordinate on the branch, not the path.** Campaign/quest children share one branch (`campaign/<id>`); because a branch can be checked out in only one worktree, the detach-other-holders step — not per-path clearing — is what keeps concurrent children from deadlocking on each other's leftover worktrees.
+- **Teardown is best-effort and path-scoped.** Removing a worktree is `--force` (handles a dirty tree) and touches only that worktree's registration; it deliberately does not delete the branch, so a later restart can re-add it.
+
+Because the lifecycle is idempotent and dirty-safe, no flow needs a manual "clean the worktrees" step; leaving that management to the conductor is the contract, not an omission (`roles/tech-lead` → TL-F6).
+
 ## Watch-to-merge is in-session, never in the sidecar
 
 The sidecar **never merges** — merge is irreversible and gated on a human review (`core/flows` → *PR-watch — the universal terminal phase*), while the sidecar surface is observe-and-stop-only. When a launched run/quest/campaign converges and opens its per-repo PR(s), the launcher reports each PR URL and points the user at `/babysit` (`flows/github/babysit`) to carry it to merge **in-session**: `/babysit` watches one PR, folds in reviewer feedback each tick, and merges the moment a SHA-pinned human `APPROVED` review covers HEAD. The watch loop runs in the user's session, not as a sidecar agent — it is the same universal terminal phase the in-session flows use, applied to the sidecar's delivered PRs.
