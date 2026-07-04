@@ -68,6 +68,11 @@ git, command output) — never from memory of the conversation:
    in-scope finding; it re-runs until clean (maker ≠ checker — see M3/M4).
 4. **No new deferral markers.** The change introduces no unjustified `TODO`/`FIXME`/`XXX`/"future
    work"/"for now"/"in a later step" (a grep over the diff is clean).
+5. **Zero units left `blocked`.** No unit / node is parked in `blocked`. `blocked` is non-`done`
+   durable state (`core/coordination` → task-graph statuses), so a single `blocked` item keeps the
+   loop out of clean `done` — convergence is **gated on zero-blocked**, not merely zero-open (see *The
+   exit gate*). The only legitimate loop-level terminal carrying an unresolved `blocked` is the honest
+   terminal `blocked` itself (postmortem-backed), never `done`.
 
 Each acceptance criterion is written as a verifiable contract: the **desired end state**, the
 **evidence required**, the **constraints not to violate**, and a **hard ceiling on turns/budget**.
@@ -153,10 +158,26 @@ the escalation ladder (`core/coordination`).
 
 ## The exit gate (the forcing function)
 
-A loop / PR MAY complete only when conditions (1)–(4) of *Definition of done* all hold. If any fails,
-the loop **continues** — next tick, next critic pass — feeding the gap back as the next iteration's
-work. It does not exit, does not hand back as "done", and does not convert remaining in-scope work into
-a deferral.
+A loop / PR MAY complete as clean `done` only when conditions (1)–(5) of *Definition of done* all hold.
+If any fails, the loop **continues** — next tick, next critic pass — feeding the gap back as the next
+iteration's work. It does not exit, does not hand back as "done", and does not convert remaining in-scope
+work into a deferral.
+
+**Convergence is gated on zero-blocked, not merely zero-open.** The stopping condition computed from the
+ledger is **`zero open items AND zero blocked items AND gate green`** — a `blocked` node is non-`done`
+state and cannot be counted toward convergence. A loop that has emptied its `[ ]` open items but still
+carries a `blocked` node has **not** converged: it either resolves that node to `done` (a decision one
+tier up may now unblock it, or the unblock condition may have changed since it was parked) or it
+terminates as an honest, postmortem-backed `blocked` — never a clean `done` that silently strands a
+blocked unit.
+
+**Blocked re-surfaces every tick until resolved.** A `blocked` node is not dropped from the open-items
+read — the selective re-grounding (`grep` of non-`done` items) re-surfaces it each tick exactly like an
+open `[ ]`, so the loop re-attempts it rather than forgetting it. Each re-surface either advances it
+(the K=3 remediation budget is per *unblock attempt*, and a changed capability/decision may now clear
+it) or reconfirms the postmortem. This is the mechanism that makes zero-blocked convergence reachable:
+the loop cannot converge past a blocked node, and the node keeps returning until it is genuinely `done`
+or genuinely terminal.
 
 **`blocked` is earned by bounded remediation, not declared on first failure.** When a verification /
 review / verdict step reports an unmet acceptance criterion or commitment, the orchestrator must feed
@@ -243,12 +264,22 @@ the terminal keyed on configuration (`deliver=="review"`) instead of on evidence
 
 - **The acceptance-criteria checklist in the loop's plan/scratchpad file IS the task ledger.** Each
   tick re-reads the contract fresh, works the highest-priority unchecked item, and ticks it `[x]` only
-  when green. The stopping condition — "all boxes checked + gate green" — is **computed from the file**,
-  not from the agent's self-assessment. An unchecked box is visible, durable state the next tick picks
+  when green. The stopping condition — "all boxes checked + zero blocked + gate green" — is **computed
+  from the file**, not from the agent's self-assessment. An unchecked box is visible, durable state the next tick picks
   up; you cannot "quietly move on."
 - **Re-grounding is selective.** Re-derive only the *open* items — a cheap grep of unchecked `[ ]`
-  lines — never reload the whole document. This is the token-economy lever: the orchestrator sheds
-  state to the ledger and re-derives open work each tick, keeping its own context lean.
+  lines plus any `blocked` nodes (they re-surface too, see *The exit gate*) — never reload the whole
+  document. This is the token-economy lever: the orchestrator sheds state to the ledger and re-derives
+  open work each tick, keeping its own context lean.
+- **Objective-met dedup — tick from evidence, do not re-do satisfied work.** Before spawning work for a
+  re-surfaced open (or `blocked`) item, check whether durable state **already** satisfies its objective:
+  the test it targets is already green, its `grep-to-zero` set is already empty, the caller it needed
+  already exists. If so, the item is **deduped** — ticked `[x]` (or the `blocked` node resolved to
+  `done`) directly from that evidence, with **no** re-spawn. This keeps the re-surface mechanism from
+  thrashing: re-surfacing a `blocked` or open item every tick must not re-run work another tick, unit,
+  or repo already completed. Dedup is *evidence-driven closure*, never assumption — an item is closed
+  only when durable state proves the objective met, exactly as condition (1) requires; it is never
+  ticked because it "looks handled."
 - This is the substrate `core/coordination` Realization A uses **in place of an in-process bus**.
   The multi-process realization (Realization B) mirrors it in ooo: a server-side open-items read filter
   over `graph/nodes/*` returns only non-`done` nodes — same discipline, different transport.
@@ -261,7 +292,7 @@ Verify** (exit gates), and **Persist** (the durable ledger).
 
 - **M1 — Ralph loop (Huntley).** Fresh context each tick; re-derive only the *open* checklist items;
   **one item per loop**; implement; run that unit's tests; tick `[x]` only when green; commit; exit
-  only when zero open items AND the gate is green. Keep a tight budget (~170k usable; output quality
+  only when zero open items AND zero blocked items AND the gate is green. Keep a tight budget (~170k usable; output quality
   degrades around 147–152k).
 - **M2 — Persist.** Progress lives in files + git, never inferred from chat history; commit per green
   unit so git is the durable ledger.
