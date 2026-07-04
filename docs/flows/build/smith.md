@@ -22,6 +22,7 @@ related:
   - flows/github/gh-issue-work
   - flows/github/gh-issue-create
   - flows/github/gh-feedback-work
+  - flows/github/babysit
   - core/janitor-platforms
   - flows/principles/truthseeker
 ---
@@ -170,6 +171,8 @@ When the final acceptance item ticks green:
 **This holds even when `/smith` runs interactively** (the agent is the runner, a user is in the session). A live session does **not** convert the autonomous delivery into a gated one — the invocation is the authorisation regardless of who is watching. Do **not** pause to ask "want me to push / open the PR?": that is a stall (it is none of the three legitimate hand-back points in *The loop must never stall*), and it imports the ad-hoc "confirm before pushing/PR" default into a loop whose contract explicitly overrides it. Open the PR, then report the URL.
 
 After the PR(s) open, `/smith` is **done** — record the URL(s) in the State block's *PR(s) opened*, report them, and end the loop. Later review feedback on those PRs is handled by `/gh-feedback-work` on a new invocation, not by this loop.
+
+**Offer the watch phase, don't auto-run it.** `/babysit` (`flows/github/babysit`) is the pipeline's optional terminal watch-to-merge step (`core/flows` → *PR-watch — the universal terminal phase*). When the PR(s) open, name `/babysit <pr>` as the one-command continuation that watches each PR to merge — folding in reviewer feedback and merging on a SHA-pinned human approval. `/smith` does **not** auto-start it: opening a watch loop unbidden is scope the invocation didn't grant, and a developer often merges by hand. Offering it is not one of the mid-loop stalls — the loop has already reached *Delivery*, its one legitimate hand-back point.
 
 ## Build Phase Audit Agent Contract
 

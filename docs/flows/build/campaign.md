@@ -16,6 +16,7 @@ related:
   - core/dream
   - core/intent-review
   - core/completion
+  - flows/github/babysit
 ---
 
 # /campaign — a program in the sidecar
@@ -44,6 +45,8 @@ Every agentic loop has exactly one bound (`core/completion`'s K-attempt circuit 
 ## Delivery — the program converges
 
 Child quests carry `deliver: branch`: their runs commit onto the **campaign branch** (`campaign/<id>`) and open **no PRs of their own**. At the delivery gate the campaign opens **one PR per impacted repo** (`core/flows` → *PR policy*). A repo's delivery-mechanic failure (push rejected, PR-open errored) is isolated from the other repos but never accepted — it re-enters the bounded remediation loop carrying the verbatim git/gh error text (`core/completion` → *Honest terminal state*).
+
+**Watch-to-merge is in-session, never in the sidecar** (`core/sidecar` → *Watch-to-merge is in-session, never in the sidecar*). The campaign never merges — merge is gated on a human review. Once the delivery gate opens the per-repo PRs, point the user at `/babysit <pr>` (`flows/github/babysit`) to carry each to merge in their own session, on a SHA-pinned human approval.
 
 ## Steps
 

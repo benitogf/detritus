@@ -108,6 +108,23 @@ func runCandyland(detritusPath, promptFile string, folders []string, cwd string)
 	return nil
 }
 
+// runCandylandUp is the `detritus --candyland-up` handler: bring the sidecar
+// online (health check, start it detached if down, poll until ready) and print
+// the API + UI ports. It starts NO run — it is the bare "get candyland online"
+// entry the dashboard / observability flows use before launching any work, and
+// the one /babysit uses to be sure the sidecar is reachable before it begins
+// watching a PR. ensureCandylandUp failures are returned so the caller exits
+// non-zero.
+func runCandylandUp(detritusPath string) error {
+	if err := ensureCandylandUp(detritusPath); err != nil {
+		return err
+	}
+	fmt.Printf("candyland is up\n")
+	fmt.Printf("API: %s\n", candylandBaseURL)
+	fmt.Printf("UI / Dashboard: %s\n", candylandDashboardURL)
+	return nil
+}
+
 // resolveCandylandDelivery classifies a --candyland-run into a delivery mode +
 // target PR, so a feedback run updates the existing PR in place instead of
 // opening a new one. Two tiers, reference first:

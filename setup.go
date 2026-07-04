@@ -358,6 +358,7 @@ func setupClaudeCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 		fmt.Printf("[dry-run] Would upsert detritus into %s (mcpServers)\n", cfgFile)
 		fmt.Printf("[dry-run] Would remove stale candyland MCP entry from %s\n", cfgFile)
 		fmt.Printf("[dry-run] Would write %d skill files to %s\n", len(docs), filepath.Join(home, ".claude", "skills"))
+		fmt.Printf("[dry-run] Would write %s\n", filepath.Join(home, ".claude", "agents", "detritus-coder.md"))
 		setupClaudeTodoGuard(home, binaryPath, hasTodoDoc(docs), true)
 		return
 	}
@@ -366,6 +367,7 @@ func setupClaudeCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 	fmt.Printf("Claude Code MCP config: %s\n", cfgFile)
 
 	generateClaudeSkills(home, docs)
+	generateClaudeCoderAgent(home)
 
 	// Enforce the flows/project/todo convention #13 when the /todo family ships: install the
 	// PreToolUse write-guard hook (idempotent). If a future build drops /todo,
@@ -411,6 +413,42 @@ func generateClaudeSkills(home string, docs []docEntry) {
 		}
 	}
 	fmt.Printf("Claude Code skills: %s\n", skillsDir)
+}
+
+// generateClaudeCoderAgent installs the subagent definition that /forge spawns
+// per fork-safe task (roles/coder-*). The tech-lead runs at the session effort;
+// its coders are the wide fan-out, so they run at low effort to keep the loop
+// cheap — set via the `effort` frontmatter key, which Claude Code honors as a
+// per-subagent override (low|medium|high|xhigh|max). Verified against the
+// subagents frontmatter contract: `effort` is a first-class key, so no Workflow
+// model/opts fallback is needed — the definition file carries it directly.
+func generateClaudeCoderAgent(home string) {
+	agentsDir := filepath.Join(home, ".claude", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: claude agents dir: %v\n", err)
+		return
+	}
+	agentFile := filepath.Join(agentsDir, "detritus-coder.md")
+	content := `---
+name: detritus-coder
+description: Implementation-loop coder spawned by /forge's tech-lead — takes one fork-safe task, loads its role via kb_get, and drives it to green. Do not invoke directly.
+tools:
+  - detritus
+model: inherit
+effort: low
+---
+
+# Detritus Coder
+
+You are a coder in the ` + "`/forge`" + ` parallel implementation loop, spawned by the tech-lead for a single fork-safe task. You run at **low effort** deliberately — the task is already partitioned and defined by a failing test; your job is the smallest delta that turns it green.
+
+1. Load your role doc with ` + "`kb_get`" + ` — ` + "`roles/coder-backend`" + `, ` + "`roles/coder-frontend`" + `, ` + "`roles/coder-fullstack`" + `, or ` + "`roles/coder-test-engineer`" + ` per the role in your brief — and follow it. It composes ` + "`core/coder`" + `.
+2. Implement only the assigned task inside your worktree; honor the interface contract the test-engineer's tests assert.
+3. Drive the defining test to green and keep the canonical verification passing.
+4. If you hit a decision you cannot make within your boundary, emit the fenced ` + "`BLOCKED {json}`" + ` line and stop — the tech-lead decides and re-spawns you.
+`
+	_ = os.WriteFile(agentFile, []byte(content), 0o644)
+	fmt.Printf("Claude Code coder agent: %s\n", agentFile)
 }
 
 // ---- Codex ------------------------------------------------------------------

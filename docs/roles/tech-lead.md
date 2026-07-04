@@ -33,7 +33,7 @@ The tech-lead is the orchestrating role of the parallel implementation loop. It 
 
 ## Two drivers, one choreography
 
-- **`/forge` (in-process driver):** the session running `/forge` *acts as* the tech-lead and spawns coders as **sub-agents via the Agent tool**. Visibility is the terminal only.
+- **`/forge` (in-process driver):** the session running `/forge` *acts as* the tech-lead and spawns coders as **sub-agents via the Agent tool with `subagent_type: detritus-coder`** — the definition `detritus --setup` installs at `~/.claude/agents/detritus-coder.md`, whose `effort: low` override keeps the coder fan-out cheap. Spawn the named subagent, not a bare unnamed one; fall back to a generic Agent-tool sub-agent only if the definition is absent. Visibility is the terminal only.
 - **candyland conductor (out-of-process driver):** the conductor is candyland's **Go orchestrator** — a driver process, never an agent. The tech-lead runs as a candyland-launched process; it **emits** the partition and per-phase decisions, and **candyland** spawns each coder as its own process it can watch, pause, and kill. The tech-lead does **not** spawn coders itself in this mode.
 
 The critical invariant in both: **the tech-lead decides and emits; it never hides coders inside its own context in a way the driver can't see.** Under candyland that means emit-don't-spawn; under `/forge` the sub-agents are the spawn.
