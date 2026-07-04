@@ -77,7 +77,7 @@ orchestration — no new Go, no daemon, no ooo bus, no comms tools.**
   per-turn polling tax for no gain.)
 - **The task-graph is the durable file ledger** from `core/completion`: the `.plan/<slug>.md` (or
   `.smith/<slug>.md`) acceptance checklist + git. The orchestrator sheds state to the ledger and
-  re-derives only the open `[ ]` items each tick.
+  re-derives only the open `[ ]` items — plus any `blocked` nodes, which re-surface each tick until resolved (`core/completion` → *The exit gate*) — each tick.
 - **Worker-asks-orchestrator = return-and-respawn.** A worker that cannot proceed ends with a structured
   final line — a fenced `BLOCKED {json: {question, correlationId}}` — mirroring the `PARTITION` line
   convention so the orchestrator greps one shape:
@@ -97,7 +97,7 @@ orchestration — no new Go, no daemon, no ooo bus, no comms tools.**
   *sees* a contradiction, never trips the K=3 cap — it just burns budget re-discovering). The render is
   what closes the loop, so it is **tested at the boundary**: a test asserts the carried context surfaces
   in the worker-visible brief, not just that the field is set.
-- **Enforcement** is the loop itself: it re-derives the open items and continues until the gate is green
+- **Enforcement** is the loop itself: it re-derives the open items plus any `blocked` nodes and continues until the gate is green
   (`core/completion`'s exit gate). No Stop hook required. The **K=3** cap escalates a stuck unit's
   *decision* to the tech-lead, who decides and records it; only a capability failure surviving the cap
   becomes a postmortem-backed blocker — never thrash quota.
