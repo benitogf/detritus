@@ -304,7 +304,7 @@ Verify** (exit gates), and **Persist** (the durable ledger).
   as the next iteration's work, until it returns no actionable in-scope finding. A "noted" finding does
   **not** satisfy the gate — findings are *fixed, not noted*.
 - **M5 — Control / leanness (lushbinary loop-engineering).** Near context limits, compact to durable
-  artifacts (M2) and continue from the re-derived open items (M1). Keep MCP tool surfaces tiny and skill
+  artifacts (M2) and continue from the re-derived open items plus any `blocked` nodes (M1). Keep MCP tool surfaces tiny and skill
   docs terse — every tool is stamped into the prompt each request; 10 focused beats 50 overlapping;
   rules stay short.
 - **M6 — Enforcement is orchestrator-driven (not a hook).** The **portable contract is this prose
