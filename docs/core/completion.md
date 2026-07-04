@@ -311,7 +311,7 @@ Verify** (exit gates), and **Persist** (the durable ledger).
   doctrine** — it ships with detritus and works everywhere with no per-machine setup. Enforcement is the
   orchestrator forcing continuation until the gate is green:
   - **In-process (`/smith`, `/forge`):** the loop itself re-derives the open `[ ]` items and continues;
-    it exits only at zero-open + green (the exit gate above). No separate process controls it.
+    it exits only at zero-open AND zero-blocked AND green (the exit gate above). No separate process controls it.
   - **Multi-process (candyland):** the **tech-lead / conductor** re-spawns a coder that stopped before
     its task's acceptance criteria + tests are green, and marks `blocked` only on a real blocker
     (`core/coordination`).
