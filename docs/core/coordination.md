@@ -77,8 +77,8 @@ orchestration — no new Go, no daemon, no ooo bus, no comms tools.**
   per-turn polling tax for no gain.)
 - **The task-graph is the durable file ledger** from `core/completion`: the `.plan/<slug>.md` (or
   `.smith/<slug>.md`) acceptance checklist + git. The orchestrator sheds state to the ledger and
-  re-derives only the open `[ ]` items — plus any `blocked` nodes, which re-surface each tick until
-  resolved (`core/completion` → *The exit gate*) — each tick.
+  re-derives, each tick, only the open `[ ]` items plus any `blocked` nodes — the latter re-surface
+  every tick until resolved (`core/completion` → *The exit gate*).
 - **Worker-asks-orchestrator = return-and-respawn.** A worker that cannot proceed ends with a structured
   final line — a fenced `BLOCKED {json: {question, correlationId}}` — mirroring the `PARTITION` line
   convention so the orchestrator greps one shape:

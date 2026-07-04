@@ -13,6 +13,7 @@ related:
   - core/completion
   - core/coordination
   - core/coder
+  - core/sidecar
   - core/todo-audit
   - roles/coder-test-engineer
   - roles/coder-backend

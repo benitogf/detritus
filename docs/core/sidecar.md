@@ -19,6 +19,7 @@ related:
   - flows/github/babysit
   - core/build
   - core/coordination
+  - roles/tech-lead
 ---
 
 # Sidecar Core — launching and driving candyland
