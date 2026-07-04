@@ -175,7 +175,8 @@ blocked unit.
 read — the selective re-grounding (`grep` of non-`done` items) re-surfaces it each tick exactly like an
 open `[ ]`, so the loop re-attempts it rather than forgetting it. Each re-surface either advances it
 (the K=3 remediation budget resets per *re-surface* — each tick's unblock episode gets its own bounded
-attempt, and a changed capability/decision may now clear it) or reconfirms the postmortem. This is the mechanism that makes zero-blocked convergence reachable:
+attempt, and a changed capability/decision may now clear it) or reconfirms the postmortem. This is
+the mechanism that makes zero-blocked convergence reachable:
 the loop cannot converge past a blocked node, and the node keeps returning until it is genuinely `done`
 or genuinely terminal.
 
@@ -265,7 +266,8 @@ the terminal keyed on configuration (`deliver=="review"`) instead of on evidence
 - **The acceptance-criteria checklist in the loop's plan/scratchpad file IS the task ledger.** Each
   tick re-reads the contract fresh, works the highest-priority unchecked item, and ticks it `[x]` only
   when green. The stopping condition — "all boxes checked + zero blocked + gate green" — is **computed
-  from the file**, not from the agent's self-assessment. An unchecked box is visible, durable state the next tick picks
+  from the file**, not from the agent's self-assessment. An unchecked box is visible, durable state
+  the next tick picks
   up; you cannot "quietly move on."
 - **Re-grounding is selective.** Re-derive only the *open* items — a cheap grep of unchecked `[ ]`
   lines plus any `blocked` nodes (they re-surface too, see *The exit gate*) — never reload the whole
@@ -290,9 +292,11 @@ Framing (Osmani): *"Agent = Model + Harness. A decent model with a great harness
 with a bad harness."* This doctrine sharpens the harness's **Control** (loop convergence), **Observe &
 Verify** (exit gates), and **Persist** (the durable ledger).
 
-- **M1 — Ralph loop (Huntley).** Fresh context each tick; re-derive only the *open* checklist items plus any `blocked` nodes (they re-surface too);
+- **M1 — Ralph loop (Huntley).** Fresh context each tick; re-derive only the *open* checklist items
+  plus any `blocked` nodes (they re-surface too);
   **one item per loop**; implement; run that unit's tests; tick `[x]` only when green; commit; exit
-  only when zero open items AND zero blocked items AND the gate is green. Keep a tight budget (~170k usable; output quality
+  only when zero open items AND zero blocked items AND the gate is green. Keep a tight budget (~170k
+  usable; output quality
   degrades around 147–152k).
 - **M2 — Persist.** Progress lives in files + git, never inferred from chat history; commit per green
   unit so git is the durable ledger.
@@ -304,14 +308,17 @@ Verify** (exit gates), and **Persist** (the durable ledger).
   as the next iteration's work, until it returns no actionable in-scope finding. A "noted" finding does
   **not** satisfy the gate — findings are *fixed, not noted*.
 - **M5 — Control / leanness (lushbinary loop-engineering).** Near context limits, compact to durable
-  artifacts (M2) and continue from the re-derived open items plus any `blocked` nodes (M1). Keep MCP tool surfaces tiny and skill
+  artifacts (M2) and continue from the re-derived open items plus any `blocked` nodes (M1). Keep MCP
+  tool surfaces tiny and skill
   docs terse — every tool is stamped into the prompt each request; 10 focused beats 50 overlapping;
   rules stay short.
 - **M6 — Enforcement is orchestrator-driven (not a hook).** The **portable contract is this prose
   doctrine** — it ships with detritus and works everywhere with no per-machine setup. Enforcement is the
   orchestrator forcing continuation until the gate is green:
-  - **In-process (`/smith`, `/forge`):** the loop itself re-derives the open `[ ]` items plus any `blocked` nodes and continues;
-    it exits only at zero-open AND zero-blocked AND green (the exit gate above). No separate process controls it.
+  - **In-process (`/smith`, `/forge`):** the loop itself re-derives the open `[ ]` items plus any
+    `blocked` nodes and continues;
+    it exits only at zero-open AND zero-blocked AND green (the exit gate above). No separate process
+    controls it.
   - **Multi-process (candyland):** the **tech-lead / conductor** re-spawns a coder that stopped before
     its task's acceptance criteria + tests are green, and marks `blocked` only on a real blocker
     (`core/coordination`).
