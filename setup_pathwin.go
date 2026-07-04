@@ -41,7 +41,17 @@ func readWindowsUserPath() (value, regType string) {
 	if err != nil {
 		return "", ""
 	}
-	for _, line := range strings.Split(string(out), "\n") {
+	return parseWindowsUserPath(string(out))
+}
+
+// parseWindowsUserPath extracts the PATH value and its registry type from the raw
+// `reg query HKCU\Environment /v PATH` output. It returns ("", "") when no PATH
+// line is present. Split out from readWindowsUserPath so the parse — the highest-
+// risk part — is unit-testable without invoking reg (which does not exist off
+// Windows). A REG_EXPAND_SZ value keeps its %VAR% literal so the write preserves
+// the type.
+func parseWindowsUserPath(out string) (value, regType string) {
+	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(strings.TrimSpace(line))
 		if len(fields) >= 3 && strings.EqualFold(fields[0], "PATH") {
 			// reg output: "PATH  REG_SZ  <value>"; value is everything after the type.
