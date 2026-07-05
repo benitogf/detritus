@@ -30,6 +30,7 @@ related:
 - **A settled `.plan/<slug>.md`** (or its slug) → launch directly.
 - **A PR/issue link or `#N`** → classify per the gh-mirror table (`core/sidecar` → *PR-link intake mirrors /gh*); the classification decides `deliver`/`targetPr`. A feedback/review outcome works that PR's head branch and opens no new PR.
 - **A vague/high-level description** → run the `dream` intake (`core/dream`) in-session first to settle a `.plan/<slug>.md`, then launch. `/candyland` never invents the plan.
+- **No input at all** (no argument AND nothing in the conversation naming what to build) → **ask which plan; never infer the target from ambient IDE state** (an open editor file, a selection) — see `core/sidecar` → *No input is not an input — never launch on ambient context*.
 
 ## Steps
 

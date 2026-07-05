@@ -71,6 +71,10 @@ The sidecar **never merges** — merge is irreversible and gated on a human revi
 
 Before handing off, print: the **id**, the **dashboard URL**, the **deliver mode**, a one-line **what this will do**, and **both ports**.
 
+## No input is not an input — never launch on ambient context
+
+Every launcher requires an **explicit target**: a plan file/slug, a PR/issue reference, or a described objective present in the conversation. When the invocation carries **none** — a bare `/candyland` / `/quest` / `/adventure` / `/campaign` with no argument and nothing in the conversation naming the work — **ask which target; do not infer one.** Ambient IDE state (the currently-open editor file, a text selection) is flagged "may or may not be related" and is **never** a launch argument. A launcher spawns a branching, out-of-process agent tree that opens PRs; inferring its target from an open file is an unrequested launch, and stopping it after the fact still burns the spawn. This is the launch-side counterpart to `core/build`'s converge-don't-spray — the cheapest wrong PR is the one never launched.
+
 ## PR-link intake mirrors /gh
 
 `flows/github/gh` Phase 1 is the ONE canonical classifier; the launchers implement its **outcome** in Go against freshly-fetched state (`gh api`) whenever the input references a PR/issue:
