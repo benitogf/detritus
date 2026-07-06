@@ -484,4 +484,9 @@ func TestGenerateClaudeCoderAgentUsesEffortKey(t *testing.T) {
 	if !strings.Contains(fm, "name: detritus-coder") {
 		t.Errorf("agent must be named detritus-coder so /forge can spawn it; got:\n%s", fm)
 	}
+	// A `tools:` restriction strips the built-in file/shell tools and leaves the
+	// coder unable to edit anything — the definition must inherit the full set.
+	if strings.Contains(fm, "tools:") {
+		t.Errorf("frontmatter must not restrict tools (the coder needs Read/Edit/Bash to code); got:\n%s", fm)
+	}
 }

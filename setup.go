@@ -582,11 +582,13 @@ func generateClaudeCoderAgent(home string) {
 		return
 	}
 	agentFile := filepath.Join(agentsDir, "detritus-coder.md")
+	// No `tools:` key: a restricted list strips the built-in file/shell tools
+	// (Read/Edit/Write/Bash/…) and leaves the coder unable to change anything —
+	// its first file-read comes back as plain text. Omitting the key inherits
+	// the session's full toolset, detritus MCP included.
 	content := `---
 name: detritus-coder
 description: Implementation-loop coder spawned by /forge's tech-lead — takes one fork-safe task, loads its role via kb_get, and drives it to green. Do not invoke directly.
-tools:
-  - detritus
 model: inherit
 effort: low
 ---
