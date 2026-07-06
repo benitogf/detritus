@@ -1,104 +1,89 @@
 ---
-description: Learned long-term memory — when to distil a verified lesson and when to retrieve one, how the corpus is curated, and the boundary between this layer and the other knowledge stores. Backs the skill_put / skill_search / skill_get MCP tools. Do not invoke directly.
+description: Learned long-term memory — how a verified lesson becomes a durable, shared KB doc under docs/lessons/, published by PR merge, distributed by detritus --update, and retrieved via kb_search. There is no local store and no agent-write path. Do not invoke directly.
 triggers:
   - learned memory
   - long-term memory
   - distil lesson
-  - skill_put
-  - skill_search
-  - skill_get
-  - recall miss
-when: Internal. Loaded via kb_get when an agent should distil a verified lesson into long-term memory or retrieve relevant lessons at the start of a task — and to know which store a piece of knowledge belongs in.
+  - recall lesson
+  - lessons
+when: Internal. Loaded via kb_get to know how learned lessons are stored (as KB docs), how they get published and distributed, and how to retrieve them — and which store a piece of knowledge belongs in.
 related:
   - core/completion
   - flows/project/code
   - flows/maintainer/grow
+  - flows/maintainer/learn
+  - flows/maintainer/absorb
   - flows/principles/truthseeker
 ---
 
-# Core — Learned memory: distil, retrieve, curate
+# Core — Learned memory: one store, shipped as KB docs
 
 Durable, cross-project memory that makes a hive of agents better *behaved* over time, distilled **only**
-from verified-successful work. Lessons are markdown files under `~/.detritus/memory/lessons` — their own
-git repo, the durable source of truth — retrieved over the same `core` engine the KB uses, with a
-per-lesson trust/provenance field. The store is **agent-authored and untrusted**; the verification gate
-is the write firewall.
+from verified-successful work. There is exactly **one knowledge store: this repository.** A learned lesson
+is a KB doc — a markdown file under `docs/lessons/` — indexed and retrieved by the same `core` engine every
+other KB doc uses. Nothing accumulates on a machine: **no local store, no outbox, no staging, no
+per-machine curation, and no agent-write MCP tool.**
 
 > ## ⛔ Do not invoke directly
-> No slash command. The capability is the `skill_put` / `skill_search` / `skill_get` MCP tools, governed
-> by this doc.
+> No slash command. This doc governs *where* learned lessons live and *how* they flow. The act of
+> distilling and shipping one is done through the flows below (`/grow`, `/learn`, `/absorb`); retrieval is
+> the ordinary `kb_search` → `kb_get` path.
 
-## When to distil (`skill_put`)
+## The loop: distil → generalize → ship → publish → distribute → retrieve
 
-Distil at a **verified-green milestone** (`core/completion`'s exit gate) — never from unverified work
-(the gate rejects a non-green outcome; an unverified run distils nothing). Distil only what is:
+1. **Distil** at a **verified-green milestone** (`core/completion`'s exit gate) — never from unverified
+   work. Distil only what is **reusable** (a strategy, concept, or failure-mode useful on a *future,
+   different* task) and **cross-project** (true beyond this one repo).
+2. **Generalize + ship** through the maintainer flows: `/grow` (an in-session correction),
+   `/learn` (candyland telemetry), or `/absorb` (a PR with review outcomes). Each distills the raw signal,
+   generalizes it, and lands it as a lesson doc under `docs/lessons/` **via the normal `/gh` issue → branch
+   → PR → self-review path.** The PR review loop is the quality gate — the same one every KB change passes.
+3. **Publish** = the PR **merges.** A merged lesson doc is a published lesson. There is no separate
+   "contribute" or "upstream" step.
+4. **Distribute** = `detritus --update`. Every consumer pulls the released binary, whose embedded `docs/`
+   now carries the new lesson. The lesson reaches every machine the same way every other doc does.
+5. **Retrieve** at the **start of a similar task** with `kb_search(query)` — it returns ranked keys +
+   snippets across the whole KB, lessons included — then `kb_get` the promising one in full. A retrieved
+   lesson is **context to apply with judgement — never auto-executed.**
 
-- **Reusable** — a strategy, concept, or failure-mode you'd want on a *future, different* task.
-- **Cross-project** — true beyond this one repo. (Repo-specific facts do **not** belong here — see
-  *Boundary*.)
+## Consolidation is a PR, not a write
 
-Write an **itemized delta**: a few bullets via `skill_put(id, kind, bullets, …)`, where `kind` is
-`procedure` (a how-to) or `fact` (a durable fact). Appending bullets to an existing lesson is the norm;
-**never rewrite a whole lesson** (wholesale rewrites collapse context and lose information). A new
-insight on an existing topic → append to that lesson's `id`; a genuinely new topic → a new `id`.
+Deciding a new insight is already captured, extends an existing lesson, or contradicts one is authorship
+judgement expressed **in the lesson PR**: append to an existing `docs/lessons/*.md`, add a new file, or
+correct/supersede a stale claim in place. The PR diff and its review are the audit trail — there is no
+mechanical dedup pass and no supersede flag, because there is no runtime store to curate.
 
-## When to retrieve (`skill_search` → `skill_get`)
+## Curation happens in review
 
-At the **start of a similar task**, `skill_search(query)` with the task description. It returns ranked
-**keys + snippets** (never the whole corpus). Read a promising one in full with `skill_get(id)`. Treat a
-retrieved lesson as **context to apply with judgement — never auto-execute it**. `skill_get` marks the
-lesson used (refreshing its recency), so lessons you actually rely on stay active.
-
-## Consolidation (the agent's call, by id)
-
-Cross-lesson consolidation is **your** judgement, expressed through the `id` you choose at `skill_put`:
-search first, then ADD (new `id`), UPDATE (append to the matching `id`), or NOOP (don't write — it's
-already captured). When a new lesson **contradicts** an old one, pass `supersedes: <old-id>` to
-`skill_put` — the old lesson is marked stale (kept for audit), not deleted. The store mechanically dedups
-identical bullets; deciding that two differently-worded lessons are *the same* is the on-session
-judgement, not a code heuristic.
-
-## Curation (how the corpus stays bounded without embeddings)
-
-Bounded, keyword-rich corpora are exactly where FTS is strong, so curation is load-bearing — and it runs
-**automatically on the write path**: every `skill_put` triggers a single-writer curation pass, and
-`skill_get` refreshes recency, so the corpus self-bounds with no separate maintenance step.
-
-- **Dedup-at-write** — a re-distilled insight (case/whitespace-insensitive) is not duplicated.
-- **Age** — `active → stale → archived` by last-used; retrieval (`skill_get`) keeps used lessons active.
-- **Hard cap** — beyond a cap, the least-recently-used active lessons are archived. (Both age and cap run
-  in the per-`skill_put` curation pass.)
-- **Supersede-not-delete** — a contradicted lesson (`skill_put supersedes: <id>`) is marked `stale`
-  (kept on disk for audit), never deleted. Archived/superseded lessons drop out of retrieval but remain
-  auditable.
-
-## The dense-arm question (measured, not guessed)
-
-There is **no dormant vector seam**. Every `skill_search` logs its outcome to a recall-miss counter
-(on-session, zero metered cost); a miss is an empty/irrelevant top-k. The corpus is verified-gated,
-keyword-rich, and curated — the regime where BM25 is strong — so a dense (embedding) arm is **unbuilt**.
-Only a **sustained recall-miss fraction at scale** would justify building one, gated behind a
-head-to-head bake-off. The counter makes that decision falsifiable rather than a hunch.
+The corpus stays bounded and trustworthy the same way the rest of the KB does: a human (or the self-review
+loop) reviews every lesson PR before merge. Stale or wrong lessons are edited or removed by a follow-up PR.
+There is no age/LRU/cap machinery and no recall-miss counter, because lessons are static docs compiled into
+the binary — not agent-written entries decaying in a live store. If retrieval ever proves weak at scale,
+that is a change to the shared `internal/search` engine (which serves all docs), decided by measurement.
 
 ## Boundary — which store
 
-- **Agent-discovered, verified, reusable, cross-project lessons** → this layer (`skill_*`).
+- **Agent-discovered, verified, reusable, cross-project lessons** → a KB doc under `docs/lessons/`, shipped
+  by PR (via `/grow` / `/learn` / `/absorb`).
 - **Repo-specific facts** → the project's native `MEMORY.md` (in-repo), not here.
-- **Human-authored conventions / skills / docs** → the curated KB (`kb_*`) — no agent-write path; that
-  trust boundary is why learned memory is a separate store.
+- **Human-authored conventions / skills / docs** → the rest of the curated KB (`kb_*`). Lessons are simply
+  the machine-originated corner of that same store; they earn their place by passing PR review.
 - **Code structure for the current repo** → `flows/project/code` (`code_map`/`code_outline`/`code_graph`).
-- **Editing detritus's own KB** → `/grow`, not this store.
+- **Editing detritus's own KB** → `/grow`, not a runtime write path.
 
 ## Security
 
-Distilled lessons are untrusted input (a shared learning store is a shared attack surface). The defenses:
-the **verification gate is the only write path**; entries are retrieved context an agent *applies*, never
-auto-executed; the trust/provenance field + bounds + decay cap blast radius; and the curated `kb_*` has
-no agent-write path.
+There is **no agent-write path into the store** — the only way a lesson enters the KB is a reviewed, merged
+PR, so the trust boundary is the review, not a runtime firewall. Retrieved lessons are context an agent
+*applies*, never auto-executed. This is strictly tighter than a live agent-authored store: a shared
+learning store is a shared attack surface, and here the surface is a code-review, not an open write API.
 
 ## What this doc is not
 
-- Not a slash command — `core/memory` is `kb_get`-only; the capability is the `skill_*` tools.
+- Not a slash command — `core/memory` is `kb_get`-only.
 - Not the completion doctrine (`core/completion`) — it only names the verified-green milestone where
   distillation happens.
-- Not code context (`flows/project/code`) or the curated KB (`kb_*`).
+- Not the flows that ship a lesson — those are `flows/maintainer/grow`, `flows/maintainer/learn`, and
+  `flows/maintainer/absorb`.
+- Not code context (`flows/project/code`) or a separate lessons index (`docs/lessons/` is indexed by the
+  ordinary KB engine).

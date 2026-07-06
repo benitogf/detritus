@@ -187,7 +187,7 @@ func categoryForName(name string) string {
 	switch {
 	case parts[0] == "flows" && len(parts) >= 2:
 		return parts[1]
-	case parts[0] == "core", parts[0] == "roles", parts[0] == "ooo", parts[0] == "patterns":
+	case parts[0] == "core", parts[0] == "roles", parts[0] == "ooo", parts[0] == "patterns", parts[0] == "lessons":
 		return parts[0]
 	default:
 		return "other"
@@ -203,7 +203,7 @@ func buildToolDescription(docs []chunk.Doc) string {
 		categoryDocs[categoryForName(doc.Name)] = append(categoryDocs[categoryForName(doc.Name)], doc)
 	}
 
-	categoryOrder := []string{"plan", "build", "github", "project", "testing", "principles", "maintainer", "core", "roles", "patterns", "ooo", "other"}
+	categoryOrder := []string{"plan", "build", "github", "project", "testing", "principles", "maintainer", "core", "roles", "patterns", "ooo", "lessons", "other"}
 	// Append any category present but not in the fixed order (sorted) so a new
 	// categoryForName output is never silently dropped from the description.
 	seen := map[string]bool{}
