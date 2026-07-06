@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,27 +17,30 @@ import (
 )
 
 // The lesson gateway (`detritus --contribute`) is a VEHICLE, not a gate: it
-// gathers EVERY local lesson and ships it into a single shared place (a
-// `lessons/` dir in the target repo) via the normal PR flow. It applies no
-// eligibility filter — Confirmed/Status/staleness ride along inside each file
-// as data for a future central "janitor", never as a promotion gate. The human
-// PR review is the only gate. The one content transform is transport hygiene:
-// a conservative secret redactor masks obvious credential spans before writing,
-// but never drops a lesson. See docs/flows/maintainer/contribute.md.
+// gathers the lesson `*.md` files staged in a local source dir (the memory
+// lesson store by default, or a `--from` staging dir) and ships them into a
+// single shared place (a `lessons/` dir in the target repo) via the normal PR
+// flow. It applies no eligibility filter and no content transform — each
+// lesson ships AS-IS. Generalizing a raw incident-bound lesson into a reusable
+// principle is a /grow flow step done BEFORE contributing (stage the results
+// with --from), not a job of this CLI. The same PR review loop that gates every
+// other PR is the filter/correction gate here too. See
+// docs/flows/maintainer/contribute.md.
 
 // contributeOptions are the parsed `--contribute` flags.
 type contributeOptions struct {
 	Repo   string // "owner/name"; "" ⇒ resolve the current repo via `gh repo view`
 	Dir    string // directory in the target repo; default "lessons"
+	From   string // local source dir of lesson *.md files; default memory.LessonsDir()
 	DryRun bool   // print the plan, make NO git/gh mutations
 }
 
 // contribLessonDoc is one lesson bound for the target repo: its id, the
-// repo-relative path it will be written to, and its redacted content.
+// repo-relative path it will be written to, and its content (shipped as-is).
 type contribLessonDoc struct {
 	ID      string
 	RelPath string // e.g. "lessons/<id>.md"
-	Content string // secrets redacted
+	Content string // shipped verbatim; the PR review loop is the filter
 }
 
 // contributionPlan is the fully-resolved, side-effect-free description of what a
@@ -85,7 +89,7 @@ func runContribute(cwd string, args []string) error {
 		return err
 	}
 	if len(plan.Docs) == 0 {
-		fmt.Println("no local lessons to contribute (nothing under the memory lessons dir)")
+		fmt.Printf("no lessons to contribute (no *.md files under %s)\n", opts.From)
 		return nil
 	}
 	if opts.DryRun {
@@ -98,7 +102,7 @@ func runContribute(cwd string, args []string) error {
 // parseContributeArgs parses the `--contribute` flags. Unknown flags are an
 // error so a typo can't silently open a PR against the wrong place.
 func parseContributeArgs(args []string) (contributeOptions, error) {
-	opts := contributeOptions{Dir: "lessons"}
+	opts := contributeOptions{Dir: "lessons", From: memory.LessonsDir()}
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--dry-run":
@@ -115,12 +119,21 @@ func parseContributeArgs(args []string) (contributeOptions, error) {
 			}
 			i++
 			opts.Dir = strings.TrimSpace(args[i])
+		case "--from":
+			if i+1 >= len(args) {
+				return opts, fmt.Errorf("--from requires a value (a local source dir)")
+			}
+			i++
+			opts.From = strings.TrimSpace(args[i])
 		default:
 			return opts, fmt.Errorf("unknown --contribute flag: %s", args[i])
 		}
 	}
 	if opts.Dir == "" {
 		opts.Dir = "lessons"
+	}
+	if opts.From == "" {
+		opts.From = memory.LessonsDir()
 	}
 	// Validate before any git/gh call: guard against arg injection (leading '-'),
 	// a malformed repo slug, and a --dir that escapes the temp clone.
@@ -136,13 +149,20 @@ func parseContributeArgs(args []string) (contributeOptions, error) {
 	if !filepath.IsLocal(opts.Dir) {
 		return opts, fmt.Errorf("--dir must be a relative path inside the repo (no '..', no absolute paths): %q", opts.Dir)
 	}
+	// --from is a LOCAL SOURCE dir (where a /grow flow staged generalized
+	// lessons), not an in-repo target path, so it may be absolute and is NOT
+	// subject to the filepath.IsLocal restriction that guards --dir. Reject only
+	// a leading '-' so a flag typo can't be swallowed as a value.
+	if strings.HasPrefix(opts.From, "-") {
+		return opts, fmt.Errorf("--from value must not begin with '-': %q", opts.From)
+	}
 	return opts, nil
 }
 
-// buildContributionPlan resolves the target repo, gathers and redacts every
-// local lesson, and composes the branch name + PR title/body. It makes NO git
-// mutation: the only external call it may make is resolving the current repo's
-// owner/name when --repo was omitted (via the contribRun seam).
+// buildContributionPlan resolves the target repo, gathers every lesson from the
+// source dir (--from), and composes the branch name + PR title/body. It makes
+// NO git mutation: the only external call it may make is resolving the current
+// repo's owner/name when --repo was omitted (via the contribRun seam).
 func buildContributionPlan(ctx context.Context, opts contributeOptions, cwd string) (contributionPlan, error) {
 	repo := opts.Repo
 	if repo == "" {
@@ -153,7 +173,7 @@ func buildContributionPlan(ctx context.Context, opts contributeOptions, cwd stri
 		repo = resolved
 	}
 
-	docs, err := gatherLessonDocs(opts.Dir)
+	docs, err := gatherLessonDocs(opts.From, opts.Dir)
 	if err != nil {
 		return contributionPlan{}, err
 	}
@@ -171,14 +191,18 @@ func buildContributionPlan(ctx context.Context, opts contributeOptions, cwd stri
 	}, nil
 }
 
-// gatherLessonDocs reads EVERY local lesson (no filtering), redacts obvious
-// secrets from each, and binds it to its repo-relative path under dir. The
-// on-disk lesson format (frontmatter + bullets) is preserved verbatim except
-// for masked secret spans, so the maturity metadata ships as data.
-func gatherLessonDocs(dir string) ([]contribLessonDoc, error) {
-	files, err := memory.AllLessonFiles()
+// gatherLessonDocs reads EVERY lesson `*.md` in the source dir fromDir (no
+// filtering), and binds each to its repo-relative path under dir. Content ships
+// verbatim — the on-disk lesson format (frontmatter + bullets) is preserved
+// exactly, so maturity metadata rides along as data. A missing fromDir or one
+// with no lessons yields zero docs (not an error), so the caller prints the
+// nothing-to-contribute message. Generalizing raw incident lessons into
+// reusable principles is a /grow flow step done before contributing (stage with
+// --from), and the PR review loop is the content filter — neither is done here.
+func gatherLessonDocs(fromDir, dir string) ([]contribLessonDoc, error) {
+	files, err := listLessonFiles(fromDir)
 	if err != nil {
-		return nil, fmt.Errorf("list local lessons: %w", err)
+		return nil, fmt.Errorf("list lessons in %s: %w", fromDir, err)
 	}
 	var docs []contribLessonDoc
 	for _, f := range files {
@@ -189,21 +213,47 @@ func gatherLessonDocs(dir string) ([]contribLessonDoc, error) {
 		docs = append(docs, contribLessonDoc{
 			ID:      f.ID,
 			RelPath: path.Join(dir, f.ID+".md"),
-			Content: redactSecrets(string(raw)),
+			Content: string(raw),
 		})
 	}
 	return docs, nil
 }
 
-// contributionBody renders the PR body: what the gateway is, that the PR review
-// is the only gate, that redaction is transport hygiene, that the central
-// curation janitor is a future step, and the list of shipped lesson ids.
+// listLessonFiles returns every `<id>.md` in dir (id = filename without the
+// suffix), sorted by id so the file list is deterministic. A missing dir is not
+// an error (nothing staged → empty slice). Unlike memory.AllLessonFiles this
+// reads an arbitrary source dir — the --from staging dir — not just the store.
+func listLessonFiles(dir string) ([]memory.LessonFile, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out []memory.LessonFile
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		out = append(out, memory.LessonFile{
+			ID:   strings.TrimSuffix(e.Name(), ".md"),
+			Path: filepath.Join(dir, e.Name()),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+// contributionBody renders the PR body: what the gateway is, that the same PR
+// review loop as every other PR is the filter, that the central curation
+// janitor is a future step, and the list of shipped lesson ids.
 func contributionBody(docs []contribLessonDoc) string {
 	var b strings.Builder
 	b.WriteString("Gathers locally-distilled lessons into the shared `lessons/` directory so they can be reviewed and curated centrally.\n\n")
-	b.WriteString("- This is a transport vehicle, not a filter: **every** local lesson is shipped. Maturity fields (confirmed count, status, staleness) ride along inside each file as data — they are not promotion gates.\n")
-	b.WriteString("- **This PR review is the only gate.** Reviewers accept, reject, or curate.\n")
-	b.WriteString("- Secret masking is **best-effort** on common credential formats (keys, tokens, passwords, connection strings, PEM private-key blocks) — it is **not exhaustive**. Masking edits only the credential span; no lesson is dropped. **This PR review is the gate.**\n")
+	b.WriteString("- This is a transport vehicle, not a filter: every staged lesson is shipped **as-is**, with no special-case scrubbing. Maturity fields (confirmed count, status, staleness) ride along inside each file as data — they are not promotion gates.\n")
+	b.WriteString("- **This PR goes through the same review loop as every other PR — that review is the filter and correction gate.** Reviewers accept, reject, or curate.\n")
+	b.WriteString("- Lessons should already be generalized past their originating incident (a /grow flow step) before being staged for contribution.\n")
 	b.WriteString("- Cross-user curation into `docs/` by a central janitor is a future step, out of scope here.\n\n")
 	fmt.Fprintf(&b, "Lessons in this contribution (%d):\n", len(docs))
 	for _, d := range docs {
@@ -231,10 +281,10 @@ func printContributionPlan(w io.Writer, plan contributionPlan) {
 }
 
 // executeContribution runs the real vehicle: clone the target repo, create the
-// branch, write every (redacted) lesson file, commit, push, and open the PR.
-// Every external command goes through the contribRun seam; files are written
-// with the os package into the clone dir. A clone dir is created under the OS
-// temp dir and removed on return.
+// branch, write every lesson file, commit, push, and open the PR. Every
+// external command goes through the contribRun seam; files are written with the
+// os package into the clone dir. A clone dir is created under the OS temp dir
+// and removed on return.
 func executeContribution(ctx context.Context, plan contributionPlan) error {
 	cloneDir, err := os.MkdirTemp("", "detritus-contribute-")
 	if err != nil {
@@ -298,65 +348,4 @@ func resolveContribRepo(ctx context.Context, cwd string) (string, error) {
 		return "", fmt.Errorf("empty repo name from gh")
 	}
 	return nwo, nil
-}
-
-// ---- Secret redaction (transport hygiene) ----------------------------------
-//
-// redactSecrets masks OBVIOUS credential spans and NOTHING else. It is
-// deliberately conservative — it must never drop a lesson and must not
-// over-redact ordinary prose or code. Detection is anchored on strong signals:
-// PEM private-key blocks, well-known token prefixes, Authorization/Bearer
-// headers, and `key: value` assignments whose key names a credential and whose
-// value looks like one (≥8 non-space chars). A bare word like "password" or
-// "token" in prose has no `=`/`:` + credential value, so it is left untouched.
-
-const redactedMask = "[REDACTED]"
-
-var (
-	// PEM private-key blocks (any key type): mask the whole block.
-	pemBlockRe = regexp.MustCompile(`(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----`)
-
-	// Well-known credential token prefixes (OpenAI, Anthropic, Stripe secret/
-	// restricted keys, GitHub, GitLab, Slack, AWS access key, Google API key).
-	// Anchored on the vendor prefix so it cannot match arbitrary identifiers.
-	// Stripe: only the SECRET (sk_live_) and RESTRICTED (rk_live_) forms are
-	// masked; the PUBLISHABLE pk_ prefix is intentionally left alone.
-	tokenPrefixRe = regexp.MustCompile(`\b(?:sk-ant-[A-Za-z0-9_\-]{8,}|sk-[A-Za-z0-9]{16,}|(?:sk|rk)_live_[A-Za-z0-9]{8,}|gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|glpat-[A-Za-z0-9_\-]{16,}|xox[baprs]-[A-Za-z0-9\-]{8,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_\-]{20,})\b`)
-
-	// Connection-string password: scheme://user:PASSWORD@host — mask ONLY the
-	// password between the ':' and the '@'. Requires the full user:pass@ shape
-	// after '://' so a plain URL (no credentials) is never touched.
-	connStringRe = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.\-]*://[^\s:/@]+:)([^\s/@]+)@`)
-
-	// AWS secret access key: the labelled 40-char base64-ish value. The exact
-	// aws_secret_access_key label + a fixed 40-char base64 alphabet makes false
-	// positives negligible; the value is masked, the label preserved.
-	awsSecretRe = regexp.MustCompile(`(?i)(aws_secret_access_key[\s:=]+["']?)([A-Za-z0-9/+]{40})`)
-
-	// Authorization header / Bearer token: keep the "Authorization:"/"Bearer"
-	// label, mask the credential.
-	authHeaderRe = regexp.MustCompile(`(?i)(authorization\s*[:=]\s*)(?:bearer\s+)?[A-Za-z0-9._\-+/=]{8,}`)
-	bearerRe     = regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._\-+/=]{8,}`)
-
-	// `credential-key: value` / `credential-key=value` assignments. The value
-	// must be ≥8 non-space chars, so short prose values ("bucket", "enabled")
-	// don't trip it. The key label and any quotes are preserved.
-	assignSecretRe = regexp.MustCompile(`(?i)\b(password|passwd|passphrase|secret|client[_-]?secret|api[_-]?key|apikey|access[_-]?token|auth[_-]?token|refresh[_-]?token|token)(\s*[:=]\s*)(["']?)([^\s"'#]{8,})(["']?)`)
-
-	// Bare JSON Web Token: anchored on the "eyJ" base64url header of the first
-	// segment (a JSON "{" ), so ordinary hyphenated/dotted text (UUIDs, versions)
-	// won't match. Catches JWTs that don't ride behind a Bearer label.
-	jwtRe = regexp.MustCompile(`eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+`)
-)
-
-func redactSecrets(content string) string {
-	content = pemBlockRe.ReplaceAllString(content, "-----BEGIN PRIVATE KEY----- [REDACTED] -----END PRIVATE KEY-----")
-	content = tokenPrefixRe.ReplaceAllString(content, redactedMask)
-	content = connStringRe.ReplaceAllString(content, "${1}***@")
-	content = awsSecretRe.ReplaceAllString(content, "${1}"+redactedMask)
-	content = authHeaderRe.ReplaceAllString(content, "${1}Bearer "+redactedMask)
-	content = bearerRe.ReplaceAllString(content, "Bearer "+redactedMask)
-	content = assignSecretRe.ReplaceAllString(content, "${1}${2}${3}"+redactedMask+"${5}")
-	content = jwtRe.ReplaceAllString(content, redactedMask)
-	return content
 }

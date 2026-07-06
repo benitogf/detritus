@@ -1,5 +1,5 @@
 ---
-description: Ship every locally-distilled lesson into a repo's shared lessons/ directory via a normal PR — a transport gateway, not a gate.
+description: Upstream your local lessons — generalize each via /grow, stage them, and ship them into a repo's shared lessons/ directory via a normal PR. A transport gateway, not a gate.
 ---
 
 The user invoked this command with: $ARGUMENTS

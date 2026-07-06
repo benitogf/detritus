@@ -23,136 +23,14 @@ func writeLesson(t *testing.T, id, content string) {
 	}
 }
 
-func TestRedactSecretsMasksCredentials(t *testing.T) {
-	cases := []struct {
-		name   string
-		in     string
-		masked []string // substrings that must NOT survive
-		keep   []string // substrings that MUST survive (label preserved)
-	}{
-		{
-			name:   "openai key",
-			in:     "use key sk-abcdef012345678901234567890 for the call",
-			masked: []string{"sk-abcdef012345678901234567890"},
-			keep:   []string{"[REDACTED]", "for the call"},
-		},
-		{
-			name:   "github token",
-			in:     "token ghp_abcdefghijklmnopqrstuvwxyz012345 leaked",
-			masked: []string{"ghp_abcdefghijklmnopqrstuvwxyz012345"},
-			keep:   []string{"[REDACTED]"},
-		},
-		{
-			name:   "bearer header",
-			in:     "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig",
-			masked: []string{"eyJhbGciOiJIUzI1NiJ9.payload.sig"},
-			keep:   []string{"Authorization:", "Bearer", "[REDACTED]"},
-		},
-		{
-			name:   "password assignment",
-			in:     "password: hunter2supersecret",
-			masked: []string{"hunter2supersecret"},
-			keep:   []string{"password:", "[REDACTED]"},
-		},
-		{
-			name:   "api_key assignment quoted",
-			in:     `api_key = "abcd1234efgh5678"`,
-			masked: []string{"abcd1234efgh5678"},
-			keep:   []string{"api_key", "[REDACTED]"},
-		},
-		{
-			name:   "pem block",
-			in:     "before\n-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----\nafter",
-			masked: []string{"MIIEpAIBAAKCAQEA"},
-			keep:   []string{"before", "after", "[REDACTED]"},
-		},
-		{
-			name:   "connection string password",
-			in:     "dsn postgres://admin:SuperSecret123@db.internal:5432/app",
-			masked: []string{"SuperSecret123"},
-			keep:   []string{"postgres://admin:", "@db.internal", "***"},
-		},
-		{
-			name:   "stripe sk_live key",
-			in:     "stripe key sk_live_abcdef0123456789ABCDEF used in prod",
-			masked: []string{"sk_live_abcdef0123456789ABCDEF"},
-			keep:   []string{"[REDACTED]", "used in prod"},
-		},
-		{
-			name:   "stripe rk_live key",
-			in:     "restricted rk_live_ZYXW9876543210abcdEF here",
-			masked: []string{"rk_live_ZYXW9876543210abcdEF"},
-			keep:   []string{"[REDACTED]"},
-		},
-		{
-			name:   "aws secret access key space and equals",
-			in:     "aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY next",
-			masked: []string{"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"},
-			keep:   []string{"aws_secret_access_key", "[REDACTED]", "next"},
-		},
-		{
-			name:   "bare jwt",
-			in:     "saw eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0In0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U in logs",
-			masked: []string{"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"},
-			keep:   []string{"saw", "in logs", "[REDACTED]"},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := redactSecrets(tc.in)
-			for _, m := range tc.masked {
-				if strings.Contains(got, m) {
-					t.Errorf("secret %q survived redaction: %q", m, got)
-				}
-			}
-			for _, k := range tc.keep {
-				if !strings.Contains(got, k) {
-					t.Errorf("expected %q to remain, got %q", k, got)
-				}
-			}
-		})
-	}
-}
-
-func TestRedactSecretsLeavesBenignStringsUntouched(t *testing.T) {
-	benign := []string{
-		"see https://host.example.com/path?q=1 for details", // plain URL, no creds
-		"trace id 550e8400-e29b-41d4-a716-446655440000",     // UUID
-		"pin to v3.33.0 before upgrading",                   // version
-		"the password rotates weekly, no value here",        // prose, no credential value
-		"publishable key pk_live_abcdef0123456789ABCDEF",    // Stripe publishable key must NOT be masked
-	}
-	for _, s := range benign {
-		if got := redactSecrets(s); got != s {
-			t.Errorf("benign string was modified.\n--- want ---\n%s\n--- got ---\n%s", s, got)
-		}
-	}
-}
-
-func TestRedactSecretsLeavesCleanLessonUnchanged(t *testing.T) {
-	clean := `---
-id: retry-with-backoff
-kind: procedure
-status: active
-confirmed: 3
----
-# retry-with-backoff
-- On a transient error, retry with exponential backoff and jitter.
-- Cap total attempts at 5; surface the last error verbatim.
-- Use context.WithTimeout to bound the whole operation.
-`
-	if got := redactSecrets(clean); got != clean {
-		t.Errorf("clean lesson was modified.\n--- want ---\n%s\n--- got ---\n%s", clean, got)
-	}
-}
-
-func TestGatherLessonDocsShipsAllAndRedacts(t *testing.T) {
+func TestGatherLessonDocsShipsAllVerbatim(t *testing.T) {
 	t.Setenv("DETRITUS_HOME", t.TempDir())
 	// A stale, unconfirmed lesson still ships (no eligibility filter).
 	writeLesson(t, "stale-one", "---\nid: stale-one\nstatus: stale\nconfirmed: 0\n---\n# stale-one\n- some advice\n")
-	writeLesson(t, "with-secret", "---\nid: with-secret\nstatus: active\n---\n# with-secret\n- set password: topsecretvalue123 in the config\n")
+	secretContent := "---\nid: with-secret\nstatus: active\n---\n# with-secret\n- set password: topsecretvalue123 in the config\n"
+	writeLesson(t, "with-secret", secretContent)
 
-	docs, err := gatherLessonDocs("lessons")
+	docs, err := gatherLessonDocs(memory.LessonsDir(), "lessons")
 	if err != nil {
 		t.Fatalf("gather: %v", err)
 	}
@@ -166,11 +44,10 @@ func TestGatherLessonDocsShipsAllAndRedacts(t *testing.T) {
 	if docs[0].RelPath != "lessons/stale-one.md" {
 		t.Errorf("bad rel path: %q", docs[0].RelPath)
 	}
-	if strings.Contains(docs[1].Content, "topsecretvalue123") {
-		t.Errorf("secret survived in shipped doc: %q", docs[1].Content)
-	}
-	if !strings.Contains(docs[1].Content, "[REDACTED]") {
-		t.Errorf("expected redaction marker in shipped doc: %q", docs[1].Content)
+	// Content ships AS-IS — no scrubbing, no transform. The PR review loop is
+	// the filter, not this CLI.
+	if docs[1].Content != secretContent {
+		t.Errorf("content must ship verbatim.\n--- want ---\n%s\n--- got ---\n%s", secretContent, docs[1].Content)
 	}
 	// Metadata rides along as data (status preserved verbatim).
 	if !strings.Contains(docs[0].Content, "status: stale") {
@@ -190,7 +67,7 @@ func TestDryRunMakesNoMutationsAndListsPlan(t *testing.T) {
 		return nil, nil
 	}
 
-	plan, err := buildContributionPlan(context.Background(), contributeOptions{Repo: "acme/kb", Dir: "lessons", DryRun: true}, t.TempDir())
+	plan, err := buildContributionPlan(context.Background(), contributeOptions{Repo: "acme/kb", Dir: "lessons", From: memory.LessonsDir(), DryRun: true}, t.TempDir())
 	if err != nil {
 		t.Fatalf("build plan: %v", err)
 	}
@@ -430,11 +307,11 @@ func TestDryRunResolvesRepoViaGhOnly(t *testing.T) {
 }
 
 func TestParseContributeArgs(t *testing.T) {
-	opts, err := parseContributeArgs([]string{"--repo", "o/n", "--dir", "kb", "--dry-run"})
+	opts, err := parseContributeArgs([]string{"--repo", "o/n", "--dir", "kb", "--from", "/tmp/staged", "--dry-run"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if opts.Repo != "o/n" || opts.Dir != "kb" || !opts.DryRun {
+	if opts.Repo != "o/n" || opts.Dir != "kb" || opts.From != "/tmp/staged" || !opts.DryRun {
 		t.Fatalf("bad parse: %+v", opts)
 	}
 	if _, err := parseContributeArgs([]string{"--bogus"}); err == nil {
@@ -443,9 +320,87 @@ func TestParseContributeArgs(t *testing.T) {
 	if _, err := parseContributeArgs([]string{"--repo"}); err == nil {
 		t.Fatal("expected error on --repo without value")
 	}
-	// Default dir.
+	if _, err := parseContributeArgs([]string{"--from"}); err == nil {
+		t.Fatal("expected error on --from without value")
+	}
+	if _, err := parseContributeArgs([]string{"--from", "-x"}); err == nil {
+		t.Fatal("expected error on --from beginning with '-'")
+	}
+	// --from accepts an ABSOLUTE path (it is a local source dir, not an in-repo
+	// path — the filepath.IsLocal guard applies only to --dir).
+	if _, err := parseContributeArgs([]string{"--from", "/abs/staging/dir"}); err != nil {
+		t.Fatalf("--from absolute path should be allowed: %v", err)
+	}
+	// Defaults: dir=lessons, from=memory lessons store.
 	def, _ := parseContributeArgs(nil)
 	if def.Dir != "lessons" {
 		t.Fatalf("default dir should be lessons, got %q", def.Dir)
+	}
+	if def.From != memory.LessonsDir() {
+		t.Fatalf("default from should be the memory lessons dir %q, got %q", memory.LessonsDir(), def.From)
+	}
+}
+
+func TestContributeFromStagingDir(t *testing.T) {
+	// --from points at an arbitrary local staging dir (where a /grow flow drops
+	// generalized lessons); those files — not the memory store — are shipped.
+	t.Setenv("DETRITUS_HOME", t.TempDir()) // memory store is a DIFFERENT dir, must be ignored
+	writeLesson(t, "store-only", "---\nid: store-only\n---\n# store-only\n- must NOT ship\n")
+
+	staging := t.TempDir()
+	if err := os.WriteFile(filepath.Join(staging, "one.md"), []byte("# one\n- generalized principle A\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staging, "two.md"), []byte("# two\n- generalized principle B\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A non-.md file in the staging dir must be ignored.
+	if err := os.WriteFile(filepath.Join(staging, "notes.txt"), []byte("ignore me\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := contribRun
+	t.Cleanup(func() { contribRun = orig })
+	contribRun = func(ctx context.Context, dir, name string, args ...string) ([]byte, error) {
+		t.Fatalf("dry-run must make NO git/gh calls, but ran: %s %v", name, args)
+		return nil, nil
+	}
+
+	plan, err := buildContributionPlan(context.Background(),
+		contributeOptions{Repo: "acme/kb", Dir: "lessons", From: staging, DryRun: true}, t.TempDir())
+	if err != nil {
+		t.Fatalf("build plan: %v", err)
+	}
+	if len(plan.Docs) != 2 {
+		t.Fatalf("want 2 staged lessons shipped, got %d: %+v", len(plan.Docs), plan.Docs)
+	}
+	// Sorted by id; the store-only lesson is absent (came from a different dir).
+	if plan.Docs[0].ID != "one" || plan.Docs[1].ID != "two" {
+		t.Fatalf("unexpected ids/order: %q, %q", plan.Docs[0].ID, plan.Docs[1].ID)
+	}
+	if plan.Docs[0].RelPath != "lessons/one.md" {
+		t.Errorf("bad rel path: %q", plan.Docs[0].RelPath)
+	}
+	if plan.Docs[0].Content != "# one\n- generalized principle A\n" {
+		t.Errorf("content mismatch: %q", plan.Docs[0].Content)
+	}
+	for _, d := range plan.Docs {
+		if d.ID == "store-only" {
+			t.Fatalf("memory-store lesson leaked into a --from contribution: %+v", plan.Docs)
+		}
+	}
+}
+
+func TestContributeFromNonexistentDirShipsNothing(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	// Populate the memory store to prove --from (not the store) is the source:
+	// a missing --from must ship nothing regardless of what the store holds.
+	writeLesson(t, "store-only", "---\nid: store-only\n---\n# store-only\n- do not ship\n")
+
+	failSeam(t) // a zero-lessons run must make NO seam call (repo is passed in)
+
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	if err := runContribute(t.TempDir(), []string{"--repo", "acme/kb", "--from", missing}); err != nil {
+		t.Fatalf("nonexistent --from should be a no-op, got error: %v", err)
 	}
 }

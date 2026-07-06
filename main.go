@@ -180,12 +180,15 @@ func main() {
 			}
 			return
 		case "--contribute":
-			// detritus --contribute [--repo owner/name] [--dir path] [--dry-run]
-			// The lesson gateway: gather EVERY local lesson and ship it into a
-			// shared lessons/ dir in the target repo via the normal PR flow. Not a
-			// gate/filter — the PR review is the gate; a conservative secret
-			// redactor is the only content transform (transport hygiene). --dry-run
-			// prints the branch/files/PR it would open and makes NO git/gh changes.
+			// detritus --contribute [--from dir] [--repo owner/name] [--dir path] [--dry-run]
+			// The lesson gateway: gather EVERY lesson *.md in the source dir
+			// (--from; the memory store by default) and ship it into a shared
+			// lessons/ dir in the target repo via the normal PR flow. Not a
+			// gate/filter and no content transform — each lesson ships as-is; the
+			// same PR review loop as every other PR is the gate. Generalizing raw
+			// lessons is a /grow flow step done before contributing (stage with
+			// --from). --dry-run prints the branch/files/PR it would open and makes
+			// NO git/gh changes.
 			cwd, _ := os.Getwd()
 			if err := runContribute(cwd, os.Args[2:]); err != nil {
 				fmt.Fprintln(os.Stderr, err)
@@ -208,7 +211,7 @@ func main() {
 			fmt.Println("  detritus --quest-run <objective-file> [folder ...]   Start a candyland-native bounded quest over REST")
 			fmt.Println("  detritus --adventure-run <objective-file> [folder ...] Start a candyland open-ended adventure over REST")
 			fmt.Println("  detritus --campaign-run <input-file> [folder ...]    Start a candyland program-level campaign over REST")
-			fmt.Println("  detritus --contribute [--repo o/n] [--dir d] [--dry-run] Ship all local lessons into a repo's lessons/ dir via PR")
+			fmt.Println("  detritus --contribute [--from dir] [--repo o/n] [--dir d] [--dry-run] Ship staged lessons into a repo's lessons/ dir via PR")
 			fmt.Println("  detritus --update [--dry-run]                         Self-update to latest release")
 			fmt.Println("  detritus --todo-guard                                 PreToolUse hook handler (internal; installed by --setup)")
 			fmt.Println("  detritus --upsert-mcp <file> <key> <cmd>              Upsert MCP config entry")
