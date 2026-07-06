@@ -13,7 +13,7 @@ import (
 
 // fieldBoosts weight a term match by WHERE it lands: a hit in a doc's name or
 // section heading (its "title") outranks one that only appears in body content,
-// mirroring idnerd-docs' titleWeight. Curated + TF-IDF triggers sit in between.
+// a classic title-weighting scheme. Curated + TF-IDF triggers sit in between.
 // content stays the 1.0 baseline; a title/section match sums with any body
 // match, so a doc matching in both always outscores a body-only mention.
 var fieldBoosts = []struct {

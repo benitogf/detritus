@@ -275,7 +275,7 @@ func bareFileToken(field string) (string, bool) {
 
 // isFilePath reports whether tok is a path-shaped token ending in a known source
 // extension (so `internal/code/store.go` and `main.go` qualify; `v3.33.0`,
-// `10.0.1.44`, and `pkg.Method` do not).
+// `192.0.2.1`, and `pkg.Method` do not).
 func isFilePath(tok string) bool {
 	if tok == "" || !pathRe.MatchString(tok) {
 		return false

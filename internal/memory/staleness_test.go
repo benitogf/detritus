@@ -242,7 +242,7 @@ func TestExtractRefsHeuristic(t *testing.T) {
 			"backticked lowercase `err` `ctx` `ok` `nil` ignored", // NOT symbols
 			"builtins `make()` `len()` are calls",                 // symbols (parens)
 			"acronyms `JSON` `API` `Config` are not symbols",      // NOT symbols (no internal caps)
-			"version `v3.33.0` and ip `10.0.1.44` are not refs",   // NOT refs
+			"version `v3.33.0` and ip `192.0.2.1` are not refs",   // NOT refs
 			"file `internal/code/store.go` and bare main.go here", // files (backticked + bare)
 			"pure prose with no code references at all",           // nothing
 		},
@@ -267,7 +267,7 @@ func TestExtractRefsHeuristic(t *testing.T) {
 	// Acronyms / single-cap words with no internal lower→upper transition are the
 	// intended false-negative: never extracted as symbols (the FP guard for prose
 	// acronyms), alongside bare lowercase words, versions, and IPs.
-	for _, no := range []string{"err", "ctx", "ok", "nil", "v3.33.0", "10.0.1.44", "JSON", "API", "Config"} {
+	for _, no := range []string{"err", "ctx", "ok", "nil", "v3.33.0", "192.0.2.1", "JSON", "API", "Config"} {
 		if _, ok := got[no]; ok {
 			t.Errorf("%q must NOT be extracted as a code ref (false-positive guard); got kind %q", no, got[no])
 		}
