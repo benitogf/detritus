@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/benitogf/detritus/internal/code"
-	"github.com/benitogf/detritus/internal/memory"
 	"github.com/benitogf/detritus/internal/search"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -179,22 +178,6 @@ func main() {
 				os.Exit(1)
 			}
 			return
-		case "--contribute":
-			// detritus --contribute [--from dir] [--repo owner/name] [--dir path] [--dry-run]
-			// The lesson gateway: gather EVERY lesson *.md in the source dir
-			// (--from; the memory store by default) and ship it into a shared
-			// lessons/ dir in the target repo via the normal PR flow. Not a
-			// gate/filter and no content transform — each lesson ships as-is; the
-			// same PR review loop as every other PR is the gate. Generalizing raw
-			// lessons is a /grow flow step done before contributing (stage with
-			// --from). --dry-run prints the branch/files/PR it would open and makes
-			// NO git/gh changes.
-			cwd, _ := os.Getwd()
-			if err := runContribute(cwd, os.Args[2:]); err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
-			}
-			return
 		case "--help", "-h":
 			fmt.Println("detritus " + version)
 			fmt.Println("MCP knowledge base server (stdio transport)")
@@ -211,7 +194,6 @@ func main() {
 			fmt.Println("  detritus --quest-run <objective-file> [folder ...]   Start a candyland-native bounded quest over REST")
 			fmt.Println("  detritus --adventure-run <objective-file> [folder ...] Start a candyland open-ended adventure over REST")
 			fmt.Println("  detritus --campaign-run <input-file> [folder ...]    Start a candyland program-level campaign over REST")
-			fmt.Println("  detritus --contribute [--from dir] [--repo o/n] [--dir d] [--dry-run] Ship staged lessons into a repo's lessons/ dir via PR")
 			fmt.Println("  detritus --update [--dry-run]                         Self-update to latest release")
 			fmt.Println("  detritus --todo-guard                                 PreToolUse hook handler (internal; installed by --setup)")
 			fmt.Println("  detritus --upsert-mcp <file> <key> <cmd>              Upsert MCP config entry")
@@ -237,7 +219,7 @@ func main() {
 	}
 }
 
-// buildMCPServer constructs the detritus MCP server with all code/memory/kb
+// buildMCPServer constructs the detritus MCP server with all code/kb
 // tools and the summary resource registered, ready to be served over the stdio
 // transport. detritus is a passive stdio MCP server: each consumer (a VSCode
 // Claude session, or a candyland-spawned agent) runs its own detritus child
@@ -256,7 +238,6 @@ func buildMCPServer(engine *search.Engine) *mcp.Server {
 	}, nil)
 
 	code.RegisterSeamlessTools(server)
-	memory.RegisterTools(server)
 
 	type ListArgs struct{}
 	mcp.AddTool(server, &mcp.Tool{
@@ -435,8 +416,8 @@ func buildMCPServer(engine *search.Engine) *mcp.Server {
 	return server
 }
 
-// searchHit is one structured retrieval hit returned by kb_search (and,
-// mirrored, by skill_search) so the SDK emits an outputSchema + structuredContent.
+// searchHit is one structured retrieval hit returned by kb_search so the SDK
+// emits an outputSchema + structuredContent.
 type searchHit struct {
 	Path    string  `json:"path"`
 	Section string  `json:"section"`

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/benitogf/detritus/internal/memory"
 	"github.com/benitogf/detritus/internal/search"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -83,8 +82,7 @@ func connectTestClient(t *testing.T) (context.Context, *mcp.ClientSession) {
 }
 
 // TestToolAnnotations asserts every read-only tool advertises ReadOnlyHint +
-// OpenWorldHint=false, and the sole write tool (skill_put) advertises
-// ReadOnlyHint=false + IdempotentHint.
+// OpenWorldHint=false. All remaining tools (kb_*/code_*) are read-only.
 func TestToolAnnotations(t *testing.T) {
 	ctx, cs := connectTestClient(t)
 	tools, err := cs.ListTools(ctx, nil)
@@ -99,7 +97,6 @@ func TestToolAnnotations(t *testing.T) {
 	readOnly := []string{
 		"kb_get", "kb_search", "kb_list", "kb_sections",
 		"code_graph", "code_outline", "code_map",
-		"skill_search", "skill_get",
 	}
 	for _, name := range readOnly {
 		tl := byName[name]
@@ -117,17 +114,6 @@ func TestToolAnnotations(t *testing.T) {
 		if tl.Annotations.OpenWorldHint == nil || *tl.Annotations.OpenWorldHint {
 			t.Errorf("%s: OpenWorldHint want *false, got %v", name, tl.Annotations.OpenWorldHint)
 		}
-	}
-
-	put := byName["skill_put"]
-	if put == nil || put.Annotations == nil {
-		t.Fatal("skill_put: missing tool or annotations")
-	}
-	if put.Annotations.ReadOnlyHint {
-		t.Error("skill_put: ReadOnlyHint should be false")
-	}
-	if !put.Annotations.IdempotentHint {
-		t.Error("skill_put: IdempotentHint should be true")
 	}
 }
 
@@ -234,19 +220,11 @@ func TestKBDocResourceResolves(t *testing.T) {
 }
 
 // TestNextHopToolsAreRegistered guards against a dead `next` hop: it collects
-// every tool name emitted in a `next` hop by kb_search and skill_search and
-// asserts each is a tool the server actually registers, so a future tool rename
-// can't leave a hop pointing at a nonexistent tool. It seeds a verified lesson so
-// skill_search returns a result (and thus emits its skill_get hop), and uses an
-// identifier-like kb_search query so kb_search emits its code_graph hop too.
+// every tool name emitted in a `next` hop by kb_search and asserts each is a
+// tool the server actually registers, so a future tool rename can't leave a hop
+// pointing at a nonexistent tool. It uses an identifier-like kb_search query so
+// kb_search emits its code_graph hop too.
 func TestNextHopToolsAreRegistered(t *testing.T) {
-	t.Setenv("DETRITUS_HOME", t.TempDir())
-	if _, err := memory.Put("waitgroup-leak-lesson", "procedure",
-		[]string{"always Wait on the WaitGroup before returning to avoid a goroutine leak"},
-		memory.Source{Outcome: "green", TS: time.Now().UTC().Format(time.RFC3339)}); err != nil {
-		t.Fatalf("seed lesson: %v", err)
-	}
-
 	ctx, cs := connectTestClient(t)
 
 	tools, err := cs.ListTools(ctx, nil)
@@ -282,26 +260,19 @@ func TestNextHopToolsAreRegistered(t *testing.T) {
 	}
 
 	// "WaitGroup" is identifier-like, so kb_search emits kb_sections + kb_get +
-	// code_graph; the seeded lesson makes skill_search emit skill_get.
+	// code_graph.
 	kbHops := nextTools("kb_search", map[string]any{"query": "WaitGroup"})
-	skillHops := nextTools("skill_search", map[string]any{"query": "goroutine leak WaitGroup"})
 
 	if len(kbHops) == 0 {
 		t.Fatal("kb_search emitted no next hops to validate")
 	}
-	if len(skillHops) == 0 {
-		t.Fatal("skill_search emitted no next hops to validate (lesson not retrieved?)")
-	}
-	// Assert we actually reached the code_graph hop (the identifier-like branch)
-	// and the skill_get hop, so both hardcoded names are genuinely exercised.
+	// Assert we actually reached the code_graph hop (the identifier-like branch),
+	// so that hardcoded name is genuinely exercised.
 	if !containsStr(kbHops, "code_graph") {
 		t.Errorf("expected kb_search to emit a code_graph hop for an identifier query; got %v", kbHops)
 	}
-	if !containsStr(skillHops, "skill_get") {
-		t.Errorf("expected skill_search to emit a skill_get hop; got %v", skillHops)
-	}
 
-	for _, hop := range append(append([]string{}, kbHops...), skillHops...) {
+	for _, hop := range kbHops {
 		if !registered[hop] {
 			t.Errorf("next hop names unregistered tool %q (registered: %v)", hop, toolNames(tools.Tools))
 		}

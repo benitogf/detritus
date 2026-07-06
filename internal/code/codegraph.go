@@ -32,7 +32,7 @@ type GraphRef struct {
 }
 
 // GraphResult is the typed structured result of code_graph so the SDK emits an
-// outputSchema + structuredContent (mirrors kb_search/skill_search). Callers is
+// outputSchema + structuredContent (mirrors kb_search). Callers is
 // who-calls (1-hop reverse); Reachable is reachable-from (transitive forward via
 // callees); ImpactedBy is what transitively reaches the symbol (reverse walk via
 // callers, bounded to impactDepth — "what breaks if I change this"); AffectedTests
