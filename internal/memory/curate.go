@@ -132,6 +132,40 @@ func Touch(id string) error {
 	return write(l)
 }
 
+// LessonFile is a stored lesson's id and its on-disk markdown file path.
+type LessonFile struct {
+	ID   string
+	Path string
+}
+
+// AllLessonFiles returns every stored lesson's id and file path with NO
+// filtering — all statuses, all trust levels, stale or not. The lesson gateway
+// (`detritus --contribute`) ships every lesson; the maturity fields ride along
+// inside each file as data for downstream curation, never as a promotion gate.
+// Results are sorted by id so a contribution's file list is deterministic. A
+// missing lessons dir is not an error (nothing stored yet → empty slice).
+func AllLessonFiles() ([]LessonFile, error) {
+	entries, err := os.ReadDir(LessonsDir())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out []LessonFile
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		out = append(out, LessonFile{
+			ID:   strings.TrimSuffix(e.Name(), ".md"),
+			Path: filepath.Join(LessonsDir(), e.Name()),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
 func listLessons() ([]Lesson, error) {
 	entries, err := os.ReadDir(LessonsDir())
 	if err != nil {

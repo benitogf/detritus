@@ -101,6 +101,7 @@ absent — they are not commands.
 | Command | Use it for |
 | --- | --- |
 | `/cleanup-extra-rules` | Remove all detritus-generated rule files, hook scripts, and the matching settings.json hook entries. |
+| `/contribute` | Ship every locally-distilled lesson into a repo's shared lessons/ directory via a normal PR — a transport gateway, not a gate. |
 | `/detritus-release` | Cut a release of detritus and/or candyland (bump → annotated tag → CI build), then update the local installation. |
 | `/detritus-update` | Update detritus to the latest released version by running `detritus --update`. |
 | `/grow` | Learn from conversation corrections - distill manual fixes into KB updates |
