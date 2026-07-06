@@ -421,11 +421,13 @@ func generateAgentFile(home string, dryRun bool) {
 		fmt.Fprintf(os.Stderr, "warning: agents dir: %v\n", err)
 		return
 	}
+	// No `tools:` key: Copilot's agent frontmatter treats it as a strict
+	// allowlist (omitted = all tools) — listing only the detritus MCP server
+	// would strip read/search/edit from a coding agent, the same defect the
+	// Claude Code detritus-coder definition had.
 	content := `---
 name: detritus
 description: Knowledge-enhanced coding agent with truthseeker principles and project-specific guardrails.
-tools:
-  - detritus
 ---
 
 # Detritus Agent
