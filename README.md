@@ -100,6 +100,7 @@ absent — they are not commands.
 
 | Command | Use it for |
 | --- | --- |
+| `/absorb` | Close the learning loop on a shipped PR - resolve its candyland unit, fix outstanding blockers, and distill the review outcome into the KB |
 | `/cleanup-extra-rules` | Remove all detritus-generated rule files, hook scripts, and the matching settings.json hook entries. |
 | `/detritus-release` | Cut a release of detritus and/or candyland (bump → annotated tag → CI build), then update the local installation. |
 | `/detritus-update` | Update detritus to the latest released version by running `detritus --update`. |
