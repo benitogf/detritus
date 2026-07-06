@@ -421,11 +421,13 @@ func generateAgentFile(home string, dryRun bool) {
 		fmt.Fprintf(os.Stderr, "warning: agents dir: %v\n", err)
 		return
 	}
+	// No `tools:` key: Copilot's agent frontmatter treats it as a strict
+	// allowlist (omitted = all tools) — listing only the detritus MCP server
+	// would strip read/search/edit from a coding agent, the same defect the
+	// Claude Code detritus-coder definition had.
 	content := `---
 name: detritus
 description: Knowledge-enhanced coding agent with truthseeker principles and project-specific guardrails.
-tools:
-  - detritus
 ---
 
 # Detritus Agent
@@ -582,11 +584,13 @@ func generateClaudeCoderAgent(home string) {
 		return
 	}
 	agentFile := filepath.Join(agentsDir, "detritus-coder.md")
+	// No `tools:` key: a restricted list strips the built-in file/shell tools
+	// (Read/Edit/Write/Bash/…) and leaves the coder unable to change anything —
+	// its first file-read comes back as plain text. Omitting the key inherits
+	// the session's full toolset, detritus MCP included.
 	content := `---
 name: detritus-coder
 description: Implementation-loop coder spawned by /forge's tech-lead — takes one fork-safe task, loads its role via kb_get, and drives it to green. Do not invoke directly.
-tools:
-  - detritus
 model: inherit
 effort: low
 ---

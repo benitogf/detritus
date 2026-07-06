@@ -484,4 +484,33 @@ func TestGenerateClaudeCoderAgentUsesEffortKey(t *testing.T) {
 	if !strings.Contains(fm, "name: detritus-coder") {
 		t.Errorf("agent must be named detritus-coder so /forge can spawn it; got:\n%s", fm)
 	}
+	// A `tools:` restriction strips the built-in file/shell tools and leaves the
+	// coder unable to edit anything — the definition must inherit the full set.
+	if strings.Contains(fm, "tools:") {
+		t.Errorf("frontmatter must not restrict tools (the coder needs Read/Edit/Bash to code); got:\n%s", fm)
+	}
+}
+
+// The Copilot agent has the same contract: its frontmatter `tools` is a strict
+// allowlist (omitted = all tools), so a coding agent must not be pinned to the
+// detritus MCP server alone.
+func TestGenerateAgentFileInheritsTools(t *testing.T) {
+	home := t.TempDir()
+
+	generateAgentFile(home, false)
+
+	raw, err := os.ReadFile(filepath.Join(home, ".copilot", "agents", "detritus.agent.md"))
+	if err != nil {
+		t.Fatalf("copilot agent definition not written: %v", err)
+	}
+	fm, _, ok := strings.Cut(strings.TrimPrefix(string(raw), "---\n"), "\n---")
+	if !ok {
+		t.Fatalf("agent definition missing YAML frontmatter:\n%s", raw)
+	}
+	if !strings.Contains(fm, "name: detritus") {
+		t.Errorf("agent must keep its name; got:\n%s", fm)
+	}
+	if strings.Contains(fm, "tools:") {
+		t.Errorf("frontmatter must not restrict tools (allowlist semantics strip read/search/edit); got:\n%s", fm)
+	}
 }
