@@ -20,6 +20,9 @@ related:
   - flows/testing/testing
   - core/flows
   - flows/build/adventure
+  - flows/maintainer/grow
+  - flows/maintainer/learn
+  - flows/maintainer/absorb
 ---
 
 # /janitor - Recurring Codebase Maintenance
@@ -200,3 +203,11 @@ First tick: <continued pending work | audited topics | opened PR | no safe chang
 Verification: <test command and result, if code changed>.
 Manage anytime at <management URL if the platform exposes one>.
 ```
+
+## Incident hook — capture the lesson after delivery
+
+A detected failure, misalignment, or user correction during the audit loop is a learning signal, but it never preempts the primary deliverable: **finish the current finding's PR first — never trade it for the lesson PR.** Once that delivery lands through `/gh`, route the signal to the matching intake, which owns the distill→ship machinery (composed by reference, not restated here):
+
+- an in-session **user correction** → `/grow` (`flows/maintainer/grow`)
+- **candyland telemetry** across runs → `/learn` (`flows/maintainer/learn`)
+- **a PR carrying review outcomes** → `/absorb` (`flows/maintainer/absorb`)

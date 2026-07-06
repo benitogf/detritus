@@ -18,6 +18,9 @@ related:
   - core/build
   - core/completion
   - flows/github/babysit
+  - flows/maintainer/grow
+  - flows/maintainer/learn
+  - flows/maintainer/absorb
 ---
 
 # /quest — a bounded iterative loop in the sidecar
@@ -50,6 +53,14 @@ Refine the request into four things, written to the objective file passed on arg
 Triage never surfaces the quest's **own delivery artifacts** (its branch, its open PRs) as new work items.
 
 **Watch-to-merge is in-session, never in the sidecar** (`core/sidecar` → *Watch-to-merge is in-session, never in the sidecar*). A standalone quest's per-repo PRs are handed to `/babysit <pr>` (`flows/github/babysit`) in the user's session to reach merge on a SHA-pinned human approval — the sidecar itself never merges. (A campaign-child quest opens no PR; the campaign delivers and its PRs are watched the same way.)
+
+## Incident hook — capture the lesson after delivery
+
+A failure, misalignment, or correction surfaced during a quest is a learning signal, but it never preempts delivery: **finish the quest's PR(s) first — never trade the deliverable for the lesson PR.** Lesson capture is **in-session, never in the sidecar** (like watch-to-merge above): once delivered, route the signal in the user's session to the matching intake, which owns the distill→ship machinery (composed by reference, not restated here):
+
+- an in-session **user correction** → `/grow` (`flows/maintainer/grow`)
+- **candyland telemetry** across runs → `/learn` (`flows/maintainer/learn`)
+- **a PR carrying review outcomes** → `/absorb` (`flows/maintainer/absorb`)
 
 ## Control
 
