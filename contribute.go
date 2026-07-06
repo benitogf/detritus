@@ -65,6 +65,11 @@ var contribRun = func(ctx context.Context, dir, name string, args ...string) ([]
 // can pin a deterministic branch name.
 var contribNow = time.Now
 
+// repoNameRe validates a "owner/name" repo slug: one path segment, a slash, and
+// a second segment, each restricted to the GitHub-safe alphabet. It blocks
+// paths, flags, and shell-meaningful characters from reaching a gh/git call.
+var repoNameRe = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$`)
+
 // runContribute is the `detritus --contribute [--repo owner/name] [--dir path]
 // [--dry-run]` handler: parse flags, build the (side-effect-free) plan, then
 // either print it (--dry-run) or execute the vehicle (clone → branch → write →
@@ -116,6 +121,20 @@ func parseContributeArgs(args []string) (contributeOptions, error) {
 	}
 	if opts.Dir == "" {
 		opts.Dir = "lessons"
+	}
+	// Validate before any git/gh call: guard against arg injection (leading '-'),
+	// a malformed repo slug, and a --dir that escapes the temp clone.
+	if strings.HasPrefix(opts.Repo, "-") {
+		return opts, fmt.Errorf("--repo value must not begin with '-': %q", opts.Repo)
+	}
+	if opts.Repo != "" && !repoNameRe.MatchString(opts.Repo) {
+		return opts, fmt.Errorf("--repo must be owner/name using letters, digits, '.', '_', '-': %q", opts.Repo)
+	}
+	if strings.HasPrefix(opts.Dir, "-") {
+		return opts, fmt.Errorf("--dir value must not begin with '-': %q", opts.Dir)
+	}
+	if !filepath.IsLocal(opts.Dir) {
+		return opts, fmt.Errorf("--dir must be a relative path inside the repo (no '..', no absolute paths): %q", opts.Dir)
 	}
 	return opts, nil
 }
@@ -184,7 +203,7 @@ func contributionBody(docs []contribLessonDoc) string {
 	b.WriteString("Gathers locally-distilled lessons into the shared `lessons/` directory so they can be reviewed and curated centrally.\n\n")
 	b.WriteString("- This is a transport vehicle, not a filter: **every** local lesson is shipped. Maturity fields (confirmed count, status, staleness) ride along inside each file as data — they are not promotion gates.\n")
 	b.WriteString("- **This PR review is the only gate.** Reviewers accept, reject, or curate.\n")
-	b.WriteString("- Obvious secrets (API keys, bearer/authorization tokens, passwords, private-key blocks) are masked before writing — transport hygiene only; no lesson is dropped.\n")
+	b.WriteString("- Secret masking is **best-effort** on common credential formats (keys, tokens, passwords, connection strings, PEM private-key blocks) — it is **not exhaustive**. Masking edits only the credential span; no lesson is dropped. **This PR review is the gate.**\n")
 	b.WriteString("- Cross-user curation into `docs/` by a central janitor is a future step, out of scope here.\n\n")
 	fmt.Fprintf(&b, "Lessons in this contribution (%d):\n", len(docs))
 	for _, d := range docs {
@@ -254,7 +273,11 @@ func executeContribution(ctx context.Context, plan contributionPlan) error {
 		"--repo", plan.Repo, "--head", plan.Branch,
 		"--title", plan.Title, "--body", plan.Body)
 	if err != nil {
-		return fmt.Errorf("gh pr create: %w\n%s", err, out)
+		createErr := fmt.Errorf("gh pr create: %w\n%s", err, out)
+		if delOut, delErr := contribRun(ctx, cloneDir, "git", "push", "origin", "--delete", plan.Branch); delErr != nil {
+			return fmt.Errorf("%w\nremote branch %q was pushed but PR creation failed, and deleting it also failed (%v) — delete it manually with: git push origin --delete %s\n%s", createErr, plan.Branch, delErr, plan.Branch, delOut)
+		}
+		return fmt.Errorf("%w\nremote branch %q was pushed but PR creation failed; the pushed branch was deleted", createErr, plan.Branch)
 	}
 	fmt.Printf("opened contribution PR: %s", string(out))
 	if !strings.HasSuffix(string(out), "\n") {
@@ -293,10 +316,22 @@ var (
 	// PEM private-key blocks (any key type): mask the whole block.
 	pemBlockRe = regexp.MustCompile(`(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----`)
 
-	// Well-known credential token prefixes (OpenAI, Anthropic, GitHub, GitLab,
-	// Slack, AWS access key, Google API key). Anchored on the vendor prefix so it
-	// cannot match arbitrary identifiers.
-	tokenPrefixRe = regexp.MustCompile(`\b(?:sk-ant-[A-Za-z0-9_\-]{8,}|sk-[A-Za-z0-9]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|glpat-[A-Za-z0-9_\-]{16,}|xox[baprs]-[A-Za-z0-9\-]{8,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_\-]{20,})\b`)
+	// Well-known credential token prefixes (OpenAI, Anthropic, Stripe secret/
+	// restricted keys, GitHub, GitLab, Slack, AWS access key, Google API key).
+	// Anchored on the vendor prefix so it cannot match arbitrary identifiers.
+	// Stripe: only the SECRET (sk_live_) and RESTRICTED (rk_live_) forms are
+	// masked; the PUBLISHABLE pk_ prefix is intentionally left alone.
+	tokenPrefixRe = regexp.MustCompile(`\b(?:sk-ant-[A-Za-z0-9_\-]{8,}|sk-[A-Za-z0-9]{16,}|(?:sk|rk)_live_[A-Za-z0-9]{8,}|gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|glpat-[A-Za-z0-9_\-]{16,}|xox[baprs]-[A-Za-z0-9\-]{8,}|AKIA[A-Z0-9]{16}|AIza[A-Za-z0-9_\-]{20,})\b`)
+
+	// Connection-string password: scheme://user:PASSWORD@host — mask ONLY the
+	// password between the ':' and the '@'. Requires the full user:pass@ shape
+	// after '://' so a plain URL (no credentials) is never touched.
+	connStringRe = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.\-]*://[^\s:/@]+:)([^\s/@]+)@`)
+
+	// AWS secret access key: the labelled 40-char base64-ish value. The exact
+	// aws_secret_access_key label + a fixed 40-char base64 alphabet makes false
+	// positives negligible; the value is masked, the label preserved.
+	awsSecretRe = regexp.MustCompile(`(?i)(aws_secret_access_key[\s:=]+["']?)([A-Za-z0-9/+]{40})`)
 
 	// Authorization header / Bearer token: keep the "Authorization:"/"Bearer"
 	// label, mask the credential.
@@ -307,13 +342,21 @@ var (
 	// must be ≥8 non-space chars, so short prose values ("bucket", "enabled")
 	// don't trip it. The key label and any quotes are preserved.
 	assignSecretRe = regexp.MustCompile(`(?i)\b(password|passwd|passphrase|secret|client[_-]?secret|api[_-]?key|apikey|access[_-]?token|auth[_-]?token|refresh[_-]?token|token)(\s*[:=]\s*)(["']?)([^\s"'#]{8,})(["']?)`)
+
+	// Bare JSON Web Token: anchored on the "eyJ" base64url header of the first
+	// segment (a JSON "{" ), so ordinary hyphenated/dotted text (UUIDs, versions)
+	// won't match. Catches JWTs that don't ride behind a Bearer label.
+	jwtRe = regexp.MustCompile(`eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+`)
 )
 
 func redactSecrets(content string) string {
 	content = pemBlockRe.ReplaceAllString(content, "-----BEGIN PRIVATE KEY----- [REDACTED] -----END PRIVATE KEY-----")
 	content = tokenPrefixRe.ReplaceAllString(content, redactedMask)
+	content = connStringRe.ReplaceAllString(content, "${1}***@")
+	content = awsSecretRe.ReplaceAllString(content, "${1}"+redactedMask)
 	content = authHeaderRe.ReplaceAllString(content, "${1}Bearer "+redactedMask)
 	content = bearerRe.ReplaceAllString(content, "Bearer "+redactedMask)
 	content = assignSecretRe.ReplaceAllString(content, "${1}${2}${3}"+redactedMask+"${5}")
+	content = jwtRe.ReplaceAllString(content, redactedMask)
 	return content
 }

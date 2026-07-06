@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,6 +66,36 @@ func TestRedactSecretsMasksCredentials(t *testing.T) {
 			masked: []string{"MIIEpAIBAAKCAQEA"},
 			keep:   []string{"before", "after", "[REDACTED]"},
 		},
+		{
+			name:   "connection string password",
+			in:     "dsn postgres://admin:SuperSecret123@db.internal:5432/app",
+			masked: []string{"SuperSecret123"},
+			keep:   []string{"postgres://admin:", "@db.internal", "***"},
+		},
+		{
+			name:   "stripe sk_live key",
+			in:     "stripe key sk_live_abcdef0123456789ABCDEF used in prod",
+			masked: []string{"sk_live_abcdef0123456789ABCDEF"},
+			keep:   []string{"[REDACTED]", "used in prod"},
+		},
+		{
+			name:   "stripe rk_live key",
+			in:     "restricted rk_live_ZYXW9876543210abcdEF here",
+			masked: []string{"rk_live_ZYXW9876543210abcdEF"},
+			keep:   []string{"[REDACTED]"},
+		},
+		{
+			name:   "aws secret access key space and equals",
+			in:     "aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY next",
+			masked: []string{"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"},
+			keep:   []string{"aws_secret_access_key", "[REDACTED]", "next"},
+		},
+		{
+			name:   "bare jwt",
+			in:     "saw eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0In0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U in logs",
+			masked: []string{"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"},
+			keep:   []string{"saw", "in logs", "[REDACTED]"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -80,6 +111,21 @@ func TestRedactSecretsMasksCredentials(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRedactSecretsLeavesBenignStringsUntouched(t *testing.T) {
+	benign := []string{
+		"see https://host.example.com/path?q=1 for details", // plain URL, no creds
+		"trace id 550e8400-e29b-41d4-a716-446655440000",     // UUID
+		"pin to v3.33.0 before upgrading",                   // version
+		"the password rotates weekly, no value here",        // prose, no credential value
+		"publishable key pk_live_abcdef0123456789ABCDEF",    // Stripe publishable key must NOT be masked
+	}
+	for _, s := range benign {
+		if got := redactSecrets(s); got != s {
+			t.Errorf("benign string was modified.\n--- want ---\n%s\n--- got ---\n%s", s, got)
+		}
 	}
 }
 
@@ -270,6 +316,116 @@ func TestExecuteContributionUsesSeamAndWritesFiles(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Errorf("gh pr create missing %q; got %q", want, joined)
 		}
+	}
+}
+
+func TestExecuteContributionDeletesBranchWhenPRCreateFails(t *testing.T) {
+	orig := contribRun
+	t.Cleanup(func() { contribRun = orig })
+
+	var calls []fakeCall
+	contribRun = func(ctx context.Context, dir, name string, args ...string) ([]byte, error) {
+		calls = append(calls, fakeCall{dir: dir, name: name, args: args})
+		if name == "gh" && len(args) >= 4 && args[0] == "repo" && args[1] == "clone" {
+			if err := os.MkdirAll(args[3], 0o755); err != nil {
+				return nil, err
+			}
+		}
+		// PR creation fails after the branch has been pushed.
+		if name == "gh" && len(args) >= 2 && args[0] == "pr" && args[1] == "create" {
+			return []byte("HTTP 422: validation failed"), errFake
+		}
+		return nil, nil
+	}
+
+	plan := contributionPlan{
+		Repo:   "acme/kb",
+		Branch: "lessons-contribution-20260706-000000",
+		Dir:    "lessons",
+		Docs:   []contribLessonDoc{{ID: "alpha", RelPath: "lessons/alpha.md", Content: "# alpha\n"}},
+		Title:  "Contribute 1 learned lesson(s)",
+		Body:   "body",
+	}
+	err := executeContribution(context.Background(), plan)
+	if err == nil {
+		t.Fatal("expected an error when gh pr create fails")
+	}
+	if !strings.Contains(err.Error(), plan.Branch) {
+		t.Errorf("error should name the pushed branch %q; got %q", plan.Branch, err.Error())
+	}
+
+	// The dangling remote branch must have a delete attempted.
+	var deleted bool
+	for _, c := range calls {
+		if c.name == "git" && len(c.args) >= 3 && c.args[0] == "push" && c.args[1] == "origin" && c.args[2] == "--delete" && len(c.args) >= 4 && c.args[3] == plan.Branch {
+			deleted = true
+		}
+	}
+	if !deleted {
+		t.Errorf("expected `git push origin --delete %s` after PR-create failure; calls=%v", plan.Branch, calls)
+	}
+}
+
+// errFake is a sentinel used by seam fakes that need to return a non-nil error.
+var errFake = fmt.Errorf("fake command failure")
+
+// failSeam replaces contribRun with a fake that fails the test if any external
+// command is attempted, and restores the original on cleanup.
+func failSeam(t *testing.T) {
+	t.Helper()
+	orig := contribRun
+	t.Cleanup(func() { contribRun = orig })
+	contribRun = func(ctx context.Context, dir, name string, args ...string) ([]byte, error) {
+		t.Fatalf("no external command should run for a rejected input, but ran: %s %v", name, args)
+		return nil, nil
+	}
+}
+
+func TestRunContributeRejectsUnsafeRepoAndDir(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"dir escapes clone", []string{"--dir", "../../etc"}},
+		{"repo arg injection", []string{"--repo", "-foo"}},
+		{"repo not owner/name", []string{"--repo", "not-a-repo"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			failSeam(t) // any seam call is a failure
+			if err := runContribute(t.TempDir(), tc.args); err == nil {
+				t.Fatalf("expected rejection for args %v", tc.args)
+			}
+		})
+	}
+}
+
+func TestDryRunResolvesRepoViaGhOnly(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	writeLesson(t, "alpha", "---\nid: alpha\n---\n# alpha\n- do the thing\n")
+
+	orig := contribRun
+	t.Cleanup(func() { contribRun = orig })
+	var calls []fakeCall
+	contribRun = func(ctx context.Context, dir, name string, args ...string) ([]byte, error) {
+		calls = append(calls, fakeCall{dir: dir, name: name, args: args})
+		if name == "gh" && len(args) >= 2 && args[0] == "repo" && args[1] == "view" {
+			return []byte("acme/kb\n"), nil
+		}
+		t.Fatalf("dry-run must make no mutating call, but ran: %s %v", name, args)
+		return nil, nil
+	}
+
+	// --dry-run with NO --repo: repo resolution must run, nothing else.
+	if err := runContribute(t.TempDir(), []string{"--dry-run"}); err != nil {
+		t.Fatalf("dry-run: %v", err)
+	}
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly one seam call (gh repo view), got %d: %v", len(calls), calls)
+	}
+	c := calls[0]
+	if c.name != "gh" || len(c.args) < 2 || c.args[0] != "repo" || c.args[1] != "view" {
+		t.Fatalf("the only seam call must be read-only `gh repo view`; got %s %v", c.name, c.args)
 	}
 }
 

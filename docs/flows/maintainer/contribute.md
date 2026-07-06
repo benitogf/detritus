@@ -33,11 +33,14 @@ the way in.
    or not. The maturity fields (`status`, `confirmed`, `validity`, …) travel
    inside each file **as data** for downstream curation; they are never a
    promotion gate here.
-2. **Redact obvious secrets (transport hygiene).** A conservative redactor masks
-   clear credential spans — API-key tokens, `Authorization`/`Bearer` headers,
-   `password:`/`api_key=` assignments, and PEM private-key blocks — before
-   writing. It masks the secret span only; it **never drops a lesson** and does
-   not touch ordinary prose or code. This is safety, not curation.
+2. **Redact obvious secrets (transport hygiene, best-effort).** A conservative
+   redactor masks common credential formats — API-key/token prefixes,
+   `Authorization`/`Bearer` headers, bare JWTs, `password:`/`api_key=`
+   assignments, connection-string passwords, AWS secret keys, and PEM
+   private-key blocks — before writing. Coverage is **best-effort, not
+   exhaustive**: it masks the credential span only, **never drops a lesson**,
+   and does not touch ordinary prose or code. The **PR review is the gate**, not
+   this redactor.
 3. **Open a PR.** Resolves the target repo (`--repo`, else the current repo via
    `gh repo view`), creates a fresh `lessons-contribution-<timestamp>` branch,
    writes `<dir>/<id>.md` for every lesson, commits, pushes, and opens a PR with
