@@ -268,3 +268,39 @@ func refNames(refs []GraphRef) map[string]bool {
 	}
 	return m
 }
+
+// TestImpactedByTestFuncsDoNotConsumeCap locks the round-2 fix: test-func
+// dependents must not eat the reachableCap budget and crowd a production
+// dependent out of the blast-radius list. Target has one production caller
+// (Prod) and two test callers; with the cap lowered to 1, the fix guarantees
+// Prod is still reported (tests are collected for affected_tests but don't
+// count toward the cap).
+func TestImpactedByTestFuncsDoNotConsumeCap(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	root := t.TempDir()
+	writeGo(t, root, "go.mod", "module cap\n\ngo 1.25\n")
+	writeGo(t, root, "core.go", "package cap\n\nfunc Target() int { return 1 }\n")
+	writeGo(t, root, "prod.go", "package cap\n\nfunc Prod() int { return Target() }\n")
+	writeGo(t, root, "x_test.go", "package cap\n\nimport \"testing\"\n\nfunc TestOne(t *testing.T) { _ = Target() }\nfunc TestTwo(t *testing.T) { _ = Target() }\n")
+
+	orig := reachableCap
+	reachableCap = 1
+	defer func() { reachableCap = orig }()
+
+	out, res, err := BuildCodeGraph(GraphQuery{Symbol: "Target", Scope: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The production dependent survives the cap regardless of discovery order.
+	if !refNames(res.ImpactedBy)["cap.Prod"] {
+		t.Errorf("Prod must remain in impacted_by despite cap=1 and test callers; got %v\n---\n%s", refNames(res.ImpactedBy), out)
+	}
+	// Test funcs are still filtered from the displayed dependents...
+	if refNames(res.ImpactedBy)["cap.TestOne"] || refNames(res.ImpactedBy)["cap.TestTwo"] {
+		t.Errorf("test funcs must not appear in impacted_by; got %v", refNames(res.ImpactedBy))
+	}
+	// ...but do surface as affected tests (proving they were collected, not dropped).
+	if len(res.AffectedTests) != 1 || !strings.HasSuffix(res.AffectedTests[0], "x_test.go") {
+		t.Errorf("affected_tests should be [.../x_test.go]; got %v", res.AffectedTests)
+	}
+}

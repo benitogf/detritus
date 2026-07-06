@@ -12,8 +12,12 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-const reachableCap = 100 // bound the reachable-from BFS; truncation is noted, never silent
-const impactDepth = 3    // bound the impacted-by (reverse-transitive) walk; truncation is noted, never silent
+// reachableCap bounds the reachable-from BFS and the impacted-by production
+// dependent count; truncation is noted, never silent. It is a var (not const)
+// only so tests can lower it to exercise the bound on small fixtures.
+var reachableCap = 100
+
+const impactDepth = 3 // bound the impacted-by (reverse-transitive) walk; truncation is noted, never silent
 
 // GraphQuery configures a code_graph navigation.
 type GraphQuery struct {
@@ -374,6 +378,7 @@ func impactedBy(e *callEdges, targets []*types.Func) ([]*types.Func, bool) {
 		queue = append(queue, item{fn: t, depth: 0})
 	}
 	var out []*types.Func
+	prodCount := 0 // only production dependents count toward reachableCap
 	truncated := false
 	for len(queue) > 0 {
 		cur := queue[0]
@@ -393,9 +398,15 @@ func impactedBy(e *callEdges, targets []*types.Func) ([]*types.Func, bool) {
 				continue
 			}
 			visited[caller] = true
-			if len(out) >= reachableCap {
-				truncated = true
-				continue
+			// Only production dependents count toward the cap. Test funcs are
+			// still collected (affectedTests needs them) but never consume the
+			// budget, so they can't crowd real dependents out of the blast radius.
+			if !isTestFunc(e, caller) {
+				if prodCount >= reachableCap {
+					truncated = true
+					continue
+				}
+				prodCount++
 			}
 			out = append(out, caller)
 			queue = append(queue, item{fn: caller, depth: cur.depth + 1})
