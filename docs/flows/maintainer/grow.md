@@ -14,6 +14,7 @@ when: User invokes /grow after correcting agent behavior, or wants to check last
 related:
   - flows/principles/truthseeker
   - flows/maintainer/optimize
+  - flows/maintainer/absorb
   - flows/plan/plan
 ---
 
