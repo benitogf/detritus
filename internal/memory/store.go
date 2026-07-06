@@ -224,6 +224,14 @@ const (
 // detectConflict reports whether l strongly contradicts a different active
 // lesson, returning that lesson's id. It reads the store best-effort; a read
 // error means "no conflict" (never block a write on a transient dir error).
+//
+// Honest scope: Put sets Title = id, so the "topic similarity" gate below (title
+// token Jaccard ≥ conflictTitleSim) is in practice ID-TOKEN similarity, not a
+// semantic topic match. The check therefore fires only when two lessons have
+// near-identical IDs yet materially disjoint bullets — a deliberately
+// conservative, false-negative-biased write guard (it will miss two same-topic
+// lessons whose ids diverge), which is the right bias for an advisory guard that
+// must never block a genuinely distinct distillation.
 func detectConflict(l Lesson) (string, bool) {
 	lessons, err := listLessons()
 	if err != nil {

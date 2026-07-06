@@ -133,24 +133,26 @@ func TestSkillSearchStructuredOutput(t *testing.T) {
 	}
 }
 
-// TestRerankByConfirmation checks the P3-2 ranking helper: among
-// comparably-relevant hits, the more-confirmed lesson is ordered first.
+// TestRerankByConfirmation checks the P3-2 ranking helper is a true ≤5% tiebreak:
+// confirmation nudges the order among comparably-relevant hits but can never flip
+// a meaningful relevance gap.
 func TestRerankByConfirmation(t *testing.T) {
-	in := []core.Result{
-		{DocName: "a", Score: 0.90},
-		{DocName: "b", Score: 0.85},
+	// (a) No-swamp: a high-relevance hit with 0 confirmations must stay ahead of a
+	// mid-relevance hit maxed out at 10 confirmations (0.5*1.05 = 0.525 < 1.0).
+	noSwamp := rerankByConfirmation(
+		[]core.Result{{DocName: "high", Score: 1.0}, {DocName: "mid", Score: 0.5}},
+		map[string]int{"mid": 10})
+	if noSwamp[0].DocName != "high" {
+		t.Errorf("confirmation must not overturn a 2× relevance gap, got %q first", noSwamp[0].DocName)
 	}
-	// b is only slightly less relevant but far more confirmed → should lead.
-	out := rerankByConfirmation(in, map[string]int{"a": 0, "b": 5})
-	if out[0].DocName != "b" {
-		t.Errorf("confirmed lesson should rank first, got %q", out[0].DocName)
-	}
-	// A single confirmation is not enough to overturn a large relevance gap.
-	out2 := rerankByConfirmation(
-		[]core.Result{{DocName: "x", Score: 0.90}, {DocName: "y", Score: 0.30}},
-		map[string]int{"y": 1})
-	if out2[0].DocName != "x" {
-		t.Errorf("weak boost must not swamp a strong lexical match, got %q", out2[0].DocName)
+
+	// (b) Tiebreak fires: on a near-tie, 10 confirmations wins
+	// (0.79*1.05 = 0.8295 > 0.80*1.0 = 0.80).
+	tie := rerankByConfirmation(
+		[]core.Result{{DocName: "fresh", Score: 0.80}, {DocName: "confirmed", Score: 0.79}},
+		map[string]int{"confirmed": 10})
+	if tie[0].DocName != "confirmed" {
+		t.Errorf("among near-equal hits the confirmed one should lead, got %q first", tie[0].DocName)
 	}
 }
 

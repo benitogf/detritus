@@ -164,9 +164,14 @@ func classifyRef(u *code.SymbolUniverse, r codeRef) (known, alive bool) {
 //     and is path-shaped is a FILE ref; otherwise, stripped of a trailing "()",
 //     a token that is a Go identifier or dotted qualified name is a SYMBOL ref
 //     ONLY when it (a) had trailing "()" (clearly a call), (b) is a dotted name
-//     (clearly qualified), or (c) is a bare name starting with an uppercase
-//     letter (the exported-name convention). Bare lowercase words (err, ctx, ok,
-//     nil, id) are ignored — they are almost always locals/builtins/prose.
+//     (clearly qualified), or (c) is a bare CamelCase name (has an internal
+//     lower→upper transition, e.g. BuildIndex, DocMetadata). Bare single-word
+//     tokens with no internal case transition — acronyms/all-caps/single-cap
+//     words like JSON, API, TLS, README, SIGTERM, Makefile, Config, Engine — are
+//     ignored, since a capitalised word in prose is common and would produce
+//     false positives; the resulting false-negative on a single-word symbol is
+//     the intended safe direction for an advisory tool. Bare lowercase words
+//     (err, ctx, ok, nil, id) are ignored — they are locals/builtins/prose.
 //   - Bare (non-backticked) tokens are considered ONLY as FILE refs: a
 //     whitespace token, trimmed of surrounding punctuation, that is path-shaped
 //     and ends in a source extension. Bare symbols are never extracted, since a
@@ -234,11 +239,25 @@ func classifyBacktick(tok string) (string, bool) {
 		return "symbol", true
 	case strings.Contains(base, "."): // pkg.Foo, T.Method
 		return "symbol", true
-	case base[0] >= 'A' && base[0] <= 'Z': // exported bare name: Config, BuildIndex
+	case hasInternalCaps(base): // bare CamelCase: BuildIndex, DocMetadata (NOT JSON/API/README/Config)
 		return "symbol", true
-	default: // bare lowercase word — ignore (err, ctx, ok, nil, …)
+	default: // acronym / single-cap word / bare lowercase — ignore (JSON, API, Config, err, ctx, …)
 		return "", false
 	}
+}
+
+// hasInternalCaps reports whether s has an internal lower→upper transition — the
+// CamelCase signal (some i>0 where s[i-1] is lowercase and s[i] is uppercase). It
+// is true for BuildIndex/DocMetadata/resolveDocName and false for all-caps
+// acronyms (JSON, API, TLS), single-cap words (Config, Makefile, README), and
+// bare lowercase words — the conservative test that keeps prose acronyms out.
+func hasInternalCaps(s string) bool {
+	for i := 1; i < len(s); i++ {
+		if s[i-1] >= 'a' && s[i-1] <= 'z' && s[i] >= 'A' && s[i] <= 'Z' {
+			return true
+		}
+	}
+	return false
 }
 
 // bareFileToken extracts a file reference from a bare (non-backticked) word: it

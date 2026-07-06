@@ -137,14 +137,28 @@ func TestCodeGraphImpactedBy(t *testing.T) {
 		t.Error("structured result should report Truncated=true")
 	}
 
+	// TestCompute (defined in core_test.go) calls Compute, but a test func is NOT
+	// a production caller/dependent — it must be filtered out of who-calls and
+	// impacted-by (text + structured), and instead surface as an affected test.
+	if strings.Contains(out, "TestCompute") {
+		t.Errorf("TestCompute is a _test.go func and must not appear in who-calls/impacted-by\n---\n%s", out)
+	}
 	names := refNames(res.ImpactedBy)
-	for _, dep := range []string{"chain.UseA", "chain.UseB", "chain.UseC", "chain.TestCompute"} {
+	for _, dep := range []string{"chain.UseA", "chain.UseB", "chain.UseC"} {
 		if !names[dep] {
 			t.Errorf("structured impacted_by missing %s; got %v", dep, names)
 		}
 	}
+	if names["chain.TestCompute"] {
+		t.Errorf("structured impacted_by must not include the test func chain.TestCompute; got %v", names)
+	}
 	if names["chain.UseD"] {
 		t.Errorf("structured impacted_by should not include the out-of-depth chain.UseD; got %v", names)
+	}
+
+	// The test that exercises Compute is instead reported as an affected test.
+	if len(res.AffectedTests) != 1 || !strings.HasSuffix(res.AffectedTests[0], "core_test.go") {
+		t.Errorf("affected_tests should be [.../core_test.go]; got %v", res.AffectedTests)
 	}
 }
 

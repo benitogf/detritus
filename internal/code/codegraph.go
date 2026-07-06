@@ -228,23 +228,30 @@ func renderFunctionGraph(e *callEdges, symbol string, targets []*types.Func) (st
 	var b strings.Builder
 	res := newGraphResult(symbol)
 
+	// who-calls / reachable / impacted-by describe the PRODUCTION call graph, so
+	// funcs defined in _test.go are filtered out of these lists (a test calling a
+	// function is not a caller a change-impact analysis reasons about). The tests
+	// that exercise the symbol are surfaced separately below as affected tests,
+	// which is why the UNFILTERED impacted set is passed to affectedTests.
 	callerSet := map[*types.Func]bool{}
 	for _, t := range targets {
 		for _, c := range e.callers[t] {
 			callerSet[c] = true
 		}
 	}
+	callers := filterOutTests(e, sortFuncs(callerSet))
 	fmt.Fprintf(&b, "who-calls %s:\n", symbol)
-	if len(callerSet) == 0 {
+	if len(callers) == 0 {
 		b.WriteString("  (no callers in scope)\n")
 	} else {
-		for _, fn := range sortFuncs(callerSet) {
+		for _, fn := range callers {
 			fmt.Fprintf(&b, "  %s  (%s)\n", qualified(fn), shortPos(e.pos[fn]))
 			res.Callers = append(res.Callers, graphRef(e, fn))
 		}
 	}
 
-	reach, reachTrunc := reachableFrom(e, targets)
+	reachAll, reachTrunc := reachableFrom(e, targets)
+	reach := filterOutTests(e, reachAll)
 	fmt.Fprintf(&b, "\nreachable from %s (≤%d):\n", symbol, reachableCap)
 	if len(reach) == 0 {
 		b.WriteString("  (calls nothing in scope)\n")
@@ -260,7 +267,8 @@ func renderFunctionGraph(e *callEdges, symbol string, targets []*types.Func) (st
 
 	// impacted-by: who transitively REACHES the symbol — the "what breaks if I
 	// change this" (blast radius) direction, walking e.callers up to impactDepth.
-	impacted, impactTrunc := impactedBy(e, targets)
+	impactedAll, impactTrunc := impactedBy(e, targets)
+	impacted := filterOutTests(e, impactedAll)
 	fmt.Fprintf(&b, "\nimpacted-by %s (≤%d):\n", symbol, impactDepth)
 	if len(impacted) == 0 {
 		b.WriteString("  (nothing depends on it in scope)\n")
@@ -275,8 +283,9 @@ func renderFunctionGraph(e *callEdges, symbol string, targets []*types.Func) (st
 	}
 
 	// affected tests: _test.go files that define the target or any dependent, so a
-	// change to the symbol may break them.
-	tests := affectedTests(e, targets, impacted)
+	// change to the symbol may break them. Uses the UNFILTERED impacted set — test
+	// funcs are exactly how affected tests are discovered.
+	tests := affectedTests(e, targets, impactedAll)
 	res.AffectedTests = tests
 	b.WriteString("\naffected tests:\n")
 	if len(tests) == 0 {
@@ -294,6 +303,27 @@ func renderFunctionGraph(e *callEdges, symbol string, targets []*types.Func) (st
 // graphRef renders a func into a structured reference (qualified name + short pos).
 func graphRef(e *callEdges, fn *types.Func) GraphRef {
 	return GraphRef{Name: qualified(fn), Pos: shortPos(e.pos[fn])}
+}
+
+// isTestFunc reports whether fn is defined in a _test.go file (using the position
+// already recorded in e.pos) — such funcs are kept out of the production
+// who-calls/reachable/impacted-by lists but still drive affected-test discovery.
+func isTestFunc(e *callEdges, fn *types.Func) bool {
+	return strings.HasSuffix(filepathToSlash(e.pos[fn].Filename), "_test.go")
+}
+
+// filterOutTests returns fns with every _test.go-defined func removed, preserving
+// order. Used to keep test functions out of the rendered + structured
+// who-calls/reachable/impacted-by lists.
+func filterOutTests(e *callEdges, fns []*types.Func) []*types.Func {
+	out := make([]*types.Func, 0, len(fns))
+	for _, fn := range fns {
+		if isTestFunc(e, fn) {
+			continue
+		}
+		out = append(out, fn)
+	}
+	return out
 }
 
 func reachableFrom(e *callEdges, targets []*types.Func) ([]*types.Func, bool) {

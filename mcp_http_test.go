@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/benitogf/detritus/internal/memory"
 	"github.com/benitogf/detritus/internal/search"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -230,6 +231,90 @@ func TestKBDocResourceResolves(t *testing.T) {
 	if res.Contents[0].MIMEType != "text/markdown" {
 		t.Errorf("resource MIME = %q, want text/markdown", res.Contents[0].MIMEType)
 	}
+}
+
+// TestNextHopToolsAreRegistered guards against a dead `next` hop: it collects
+// every tool name emitted in a `next` hop by kb_search and skill_search and
+// asserts each is a tool the server actually registers, so a future tool rename
+// can't leave a hop pointing at a nonexistent tool. It seeds a verified lesson so
+// skill_search returns a result (and thus emits its skill_get hop), and uses an
+// identifier-like kb_search query so kb_search emits its code_graph hop too.
+func TestNextHopToolsAreRegistered(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	if _, err := memory.Put("waitgroup-leak-lesson", "procedure",
+		[]string{"always Wait on the WaitGroup before returning to avoid a goroutine leak"},
+		memory.Source{Outcome: "green", TS: time.Now().UTC().Format(time.RFC3339)}); err != nil {
+		t.Fatalf("seed lesson: %v", err)
+	}
+
+	ctx, cs := connectTestClient(t)
+
+	tools, err := cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("list tools: %v", err)
+	}
+	registered := map[string]bool{}
+	for _, tl := range tools.Tools {
+		registered[tl.Name] = true
+	}
+
+	// nextTools returns the tool names in the `next` hops of a tool call result.
+	nextTools := func(name string, args map[string]any) []string {
+		res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if res.IsError {
+			t.Fatalf("%s returned error: %v", name, res.Content)
+		}
+		sc, ok := res.StructuredContent.(map[string]any)
+		if !ok {
+			t.Fatalf("%s: structuredContent not an object: %T", name, res.StructuredContent)
+		}
+		next, _ := sc["next"].([]any)
+		var out []string
+		for _, h := range next {
+			if tool, ok := h.(map[string]any)["tool"].(string); ok {
+				out = append(out, tool)
+			}
+		}
+		return out
+	}
+
+	// "WaitGroup" is identifier-like, so kb_search emits kb_sections + kb_get +
+	// code_graph; the seeded lesson makes skill_search emit skill_get.
+	kbHops := nextTools("kb_search", map[string]any{"query": "WaitGroup"})
+	skillHops := nextTools("skill_search", map[string]any{"query": "goroutine leak WaitGroup"})
+
+	if len(kbHops) == 0 {
+		t.Fatal("kb_search emitted no next hops to validate")
+	}
+	if len(skillHops) == 0 {
+		t.Fatal("skill_search emitted no next hops to validate (lesson not retrieved?)")
+	}
+	// Assert we actually reached the code_graph hop (the identifier-like branch)
+	// and the skill_get hop, so both hardcoded names are genuinely exercised.
+	if !containsStr(kbHops, "code_graph") {
+		t.Errorf("expected kb_search to emit a code_graph hop for an identifier query; got %v", kbHops)
+	}
+	if !containsStr(skillHops, "skill_get") {
+		t.Errorf("expected skill_search to emit a skill_get hop; got %v", skillHops)
+	}
+
+	for _, hop := range append(append([]string{}, kbHops...), skillHops...) {
+		if !registered[hop] {
+			t.Errorf("next hop names unregistered tool %q (registered: %v)", hop, toolNames(tools.Tools))
+		}
+	}
+}
+
+func containsStr(xs []string, want string) bool {
+	for _, x := range xs {
+		if x == want {
+			return true
+		}
+	}
+	return false
 }
 
 func hasTool(tools []*mcp.Tool, name string) bool {

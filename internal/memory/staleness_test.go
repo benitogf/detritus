@@ -238,9 +238,10 @@ func TestExtractRefsHeuristic(t *testing.T) {
 		Title: "notes",
 		Bullets: []string{
 			"call `BuildIndex()` and `pkg.Foo` and `T.Method`",    // symbols
-			"the exported `Config` type",                          // exported bare → symbol
+			"CamelCase `DocMetadata` and `resolveDocName` names",  // bare CamelCase → symbol
 			"backticked lowercase `err` `ctx` `ok` `nil` ignored", // NOT symbols
 			"builtins `make()` `len()` are calls",                 // symbols (parens)
+			"acronyms `JSON` `API` `Config` are not symbols",      // NOT symbols (no internal caps)
 			"version `v3.33.0` and ip `10.0.1.44` are not refs",   // NOT refs
 			"file `internal/code/store.go` and bare main.go here", // files (backticked + bare)
 			"pure prose with no code references at all",           // nothing
@@ -251,7 +252,7 @@ func TestExtractRefsHeuristic(t *testing.T) {
 		got[r.Ref] = r.Kind
 	}
 
-	wantSymbol := []string{"BuildIndex()", "pkg.Foo", "T.Method", "Config", "make()", "len()"}
+	wantSymbol := []string{"BuildIndex()", "pkg.Foo", "T.Method", "DocMetadata", "resolveDocName", "make()", "len()"}
 	for _, s := range wantSymbol {
 		if got[s] != "symbol" {
 			t.Errorf("want %q extracted as symbol; got kind %q", s, got[s])
@@ -263,10 +264,61 @@ func TestExtractRefsHeuristic(t *testing.T) {
 			t.Errorf("want %q extracted as file; got kind %q", f, got[f])
 		}
 	}
-	for _, no := range []string{"err", "ctx", "ok", "nil", "v3.33.0", "10.0.1.44"} {
+	// Acronyms / single-cap words with no internal lower→upper transition are the
+	// intended false-negative: never extracted as symbols (the FP guard for prose
+	// acronyms), alongside bare lowercase words, versions, and IPs.
+	for _, no := range []string{"err", "ctx", "ok", "nil", "v3.33.0", "10.0.1.44", "JSON", "API", "Config"} {
 		if _, ok := got[no]; ok {
-			t.Errorf("%q must NOT be extracted as a code ref (false-positive guard)", no)
+			t.Errorf("%q must NOT be extracted as a code ref (false-positive guard); got kind %q", no, got[no])
 		}
+	}
+}
+
+// TestStalenessAcronymsNotFlagged proves the CamelCase-only bare-symbol rule: a
+// lesson whose bullets contain backticked acronyms / all-caps / single-cap words
+// (JSON, API, TLS, README, SIGTERM, Makefile) yields ZERO symbol dead-refs — they
+// are not even extracted as symbol refs — while a backticked real CamelCase symbol
+// that does not exist in the tree IS still flagged dead.
+func TestStalenessAcronymsNotFlagged(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	tree := fixtureTree(t)
+
+	seedLesson(t, "acronym-lesson", "config notes", []string{
+		"emit `JSON` over the `API` guarded by `TLS`",
+		"see the `README` and the `Makefile`; handle `SIGTERM`",
+	})
+	seedLesson(t, "camel-lesson", "vanished camel symbol", []string{
+		"call `LoadSymbolUniverse` which is not defined in this tree",
+	})
+
+	res := CheckStaleness(tree)
+
+	stale := staleByID(res)
+	if sl, ok := stale["acronym-lesson"]; ok {
+		for _, r := range sl.DeadRefs {
+			if r.Kind == "symbol" {
+				t.Errorf("acronym %q must not be extracted/flagged as a symbol; got %+v", r.Ref, r)
+			}
+		}
+	}
+	// And they must not surface as unknown symbol refs either (never extracted).
+	for _, l := range res.Unknown {
+		if l.ID != "acronym-lesson" {
+			continue
+		}
+		for _, r := range l.UnknownRefs {
+			if r.Kind == "symbol" {
+				t.Errorf("acronym %q must not be extracted as a symbol ref at all; got %+v", r.Ref, r)
+			}
+		}
+	}
+
+	sl, ok := stale["camel-lesson"]
+	if !ok {
+		t.Fatalf("a real CamelCase symbol absent from the tree must be flagged dead; stale=%+v", stale)
+	}
+	if !hasRef(sl.DeadRefs, "LoadSymbolUniverse") {
+		t.Errorf("expected dead symbol LoadSymbolUniverse; got %+v", sl.DeadRefs)
 	}
 }
 

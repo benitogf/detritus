@@ -191,18 +191,21 @@ type searchHit struct {
 }
 
 // confirmationBoostPerHit lifts a lesson's effective rank by this fraction per
-// re-confirmation, capped at confirmationBoostCap confirmations, so corroborated
-// lessons win ties among comparably-relevant hits without letting a heavily
-// re-confirmed but weakly-relevant lesson swamp a strong lexical match.
+// re-confirmation, capped at confirmationBoostCap confirmations. At 0.005 with a
+// cap of 10 the maximum multiplier is 1.05 (≤5%), so confirmation is a true
+// tiebreak: it only reorders comparably-relevant hits and can never flip a
+// meaningful relevance gap in favour of a heavily-confirmed but weakly-relevant
+// lesson.
 const (
-	confirmationBoostPerHit = 0.1
+	confirmationBoostPerHit = 0.005
 	confirmationBoostCap    = 10
 )
 
 // rerankByConfirmation stable-sorts hits by relevance score scaled by a bounded
-// confirmation boost. It reorders only the already-retrieved set (relevance
-// gating/MMR upstream is untouched); the displayed Score stays the normalized
-// relevance so the boost is a ranking-only tiebreak.
+// confirmation boost (≤5% at the cap). It reorders only the already-retrieved set
+// (relevance gating/MMR upstream is untouched); the displayed Score stays the
+// normalized relevance so the boost is a ranking-only tiebreak that nudges, never
+// swamps, relevance.
 func rerankByConfirmation(results []core.Result, confirmed map[string]int) []core.Result {
 	weight := func(r core.Result) float64 {
 		c := confirmed[r.DocName]
