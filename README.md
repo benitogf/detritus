@@ -1,8 +1,8 @@
 # detritus
 
 Detritus is an MCP server for AI coding assistants. It exposes a curated
-knowledge base of engineering doctrine (`kb_*` tools), live codebase exploration
-(`code_*`), and verified cross-project learned memory (`skill_*`) — and layers
+knowledge base of engineering doctrine (`kb_*` tools) and live codebase
+exploration (`code_*`) — and layers
 on slash commands that share one delivery pipeline: plan, build,
 review-with-rework, deliver. Those commands run either in your session (`/plan`,
 `/smith`, `/forge`, `/janitor`, `/gh-*`, `/todo`, …) or hand off to the
