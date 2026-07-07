@@ -113,14 +113,35 @@ func BuildCodeGraph(q GraphQuery) (string, *GraphResult, error) {
 	return text, res, nil
 }
 
+// pkgErrors reports whether any PRODUCTION package failed to load or type-check.
+// Test-variant packages are deliberately excluded: with Tests:true a single
+// non-compiling _test.go produces a broken test variant, and gating the whole
+// graph on that would degrade who-calls/reachable/impacted-by to the structural
+// fallback exactly during mid-edit scoping (plan/forge/smith), when a broken
+// test file is common. affectedTests is computed best-effort from whatever test
+// packages did load. The fallback fires only when production code is broken.
 func pkgErrors(pkgs []*packages.Package) bool {
 	bad := false
 	packages.Visit(pkgs, nil, func(p *packages.Package) {
+		if isTestVariant(p) {
+			return
+		}
 		if len(p.Errors) > 0 || p.Types == nil || p.TypesInfo == nil {
 			bad = true
 		}
 	})
 	return bad
+}
+
+// isTestVariant reports whether p is a test-build variant produced by
+// packages.Load(Tests:true) rather than the production package. Load tags every
+// variant with a ".test" FileSet in its ID: the in-package test build
+// (`foo [foo.test]`), the external test package (`foo_test [foo.test]`), and the
+// synthetic test main (`foo.test`). The production package's ID is its bare
+// PkgPath, so ".test]" (bracketed variants) and a ".test" suffix (synthetic
+// main) uniquely mark the variants.
+func isTestVariant(p *packages.Package) bool {
+	return strings.HasSuffix(p.ID, ".test") || strings.Contains(p.ID, ".test]")
 }
 
 // callEdges is the type-resolved direct-call graph over the loaded packages.

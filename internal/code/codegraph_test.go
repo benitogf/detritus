@@ -98,6 +98,36 @@ func TestCodeGraphFallbackOnNonCompiling(t *testing.T) {
 	}
 }
 
+// TestCodeGraphBrokenTestFileDoesNotDegrade locks the fix for the review blocker:
+// a module whose production code compiles but which has one non-compiling
+// _test.go must still return the precise type-resolved graph, NOT the structural
+// fallback. With Tests:true the broken test file produces a broken test-variant
+// package; gating the fallback on production packages only keeps who-calls /
+// reachable / impacted-by working mid-edit (exactly when plan/forge/smith call
+// impacted_by/affected_tests), computing affected tests best-effort from whatever
+// test packages loaded.
+func TestCodeGraphBrokenTestFileDoesNotDegrade(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	root := t.TempDir()
+	writeGo(t, root, "go.mod", "module reprox\n\ngo 1.25\n")
+	// Production code compiles: Prod calls Helper.
+	writeGo(t, root, "prod.go", "package reprox\n\nfunc Helper() int { return 1 }\n\nfunc Prod() int { return Helper() }\n")
+	// One broken test file: references an undefined symbol, so the test-variant
+	// package fails to compile — but production is untouched.
+	writeGo(t, root, "prod_test.go", "package reprox\n\nimport \"testing\"\n\nfunc TestBroken(t *testing.T) { _ = doesNotExist() }\n")
+
+	out, res, err := BuildCodeGraph(GraphQuery{Symbol: "Helper", Scope: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "falling back to the structural map") {
+		t.Fatalf("a broken _test.go must not degrade the graph to the structural fallback\n---\n%s", out)
+	}
+	if !refNames(res.Callers)["reprox.Prod"] {
+		t.Errorf("who-calls Helper should list reprox.Prod despite the broken test file; got %v\n---\n%s", refNames(res.Callers), out)
+	}
+}
+
 func TestCodeGraphRequiresSymbol(t *testing.T) {
 	if _, _, err := BuildCodeGraph(GraphQuery{Scope: t.TempDir()}); err == nil {
 		t.Error("expected error when symbol is empty")
