@@ -50,7 +50,19 @@ API on **:8888**, UI on **:8080** — the UI loads from :8080 but reads its data
 
 ## Control — observe + stop only
 
-No per-agent control, no resume. The dashboard's Stop kills the whole spawned process tree. Watch live state in the dashboard rather than polling.
+No per-agent control, no *manual* resume. The dashboard's Stop kills the whole spawned process tree. Watch live state in the dashboard rather than polling. (The conductor's automatic pause/resume on a usage limit or connection loss — below — is a runtime behavior, not a control surface: the user never resumes an agent by hand.)
+
+## Auto-pause and resume — usage limits and connection loss
+
+A spawned agent that dies because the Claude seat hit its **usage limit** or the API became **unreachable** is not a fault of the agent's work, so the conductor does not fail it. Both classes are caught at the single spawn choke point every coordinator and run spawn routes through, classified from the terminal death signal (the process's stderr/exit, or a non-success result subtype — never a successful spawn's own result text, so an agent that merely mentions a limit or a network error is not misread), and handled by pausing rather than blocking:
+
+- **Truthful non-terminal status.** The affected run/quest/campaign goes to `paused` with a `PauseReason` that names the cause — `usage limit — auto-resume at <t>` or `connection lost — retrying` — and no postmortem. A limit/connection pause is distinct from a user Stop (also `paused`, but no auto-resume) and from `blocked` (a real capability failure, postmortem-backed).
+- **Conductor-wide gate.** A usage limit is account-global, so on detection every subsequent spawn waits until the window resets. A connection loss arms the same fleet-wide gate only after **consecutive** deaths (a sustained outage); a single blip pauses just its own run.
+- **Auto-resume in place, losing minimal work.** When the window reopens (the parsed reset time for a limit; an escalating backoff — minutes to an hour — for a connection loss), each interrupted agent is resumed in its own session (`--resume`, cold-boot fallback if the session is gone) and continues where it was; persisted stage/gate/branch state is untouched. Resume is always on and unbounded (a limit or outage can recur); Stop during a pause still cancels cleanly.
+- **Durable across restarts.** `resumeAt` is persisted on the paused entity, and a conductor restart during the wait re-arms the gate from storage, so the pause survives a sidecar bounce and resumes on schedule.
+- **Concurrency is preserved.** The gate pauses and resumes *all* concurrent fleets together on a shared-seat or outage event — running many campaigns/quests at once stays safe under exhaustion; it is never a reason to serialize them.
+
+The dashboard and the run/quest/campaign workspaces show the paused indicator with its cause and, when known, the resume time.
 
 ## Worktree hygiene
 
