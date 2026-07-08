@@ -514,6 +514,7 @@ func setupClaudeCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 		fmt.Printf("[dry-run] Would remove stale candyland MCP entry from %s\n", cfgFile)
 		fmt.Printf("[dry-run] Would write %d skill files to %s\n", len(docs), filepath.Join(home, ".claude", "skills"))
 		fmt.Printf("[dry-run] Would write %s\n", filepath.Join(home, ".claude", "agents", "detritus-coder.md"))
+		fmt.Printf("[dry-run] Would write %s\n", filepath.Join(home, ".claude", "agents", "detritus-reviewer.md"))
 		setupClaudeTodoGuard(home, binaryPath, hasTodoDoc(docs), true)
 		return
 	}
@@ -523,6 +524,7 @@ func setupClaudeCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 
 	generateClaudeSkills(home, docs)
 	generateClaudeCoderAgent(home)
+	generateClaudeReviewerAgent(home)
 
 	// Enforce the flows/project/todo convention #13 when the /todo family ships: install the
 	// PreToolUse write-guard hook (idempotent). If a future build drops /todo,
@@ -606,6 +608,43 @@ You are a coder in the ` + "`/forge`" + ` parallel implementation loop, spawned 
 `
 	_ = os.WriteFile(agentFile, []byte(content), 0o644)
 	fmt.Printf("Claude Code coder agent: %s\n", agentFile)
+}
+
+// generateClaudeReviewerAgent installs the subagent definition the review flows
+// spawn (/gh-self-review Phase 3, and /forge delivery through it). Model and
+// effort are pinned per ROLE here — never per command: review runs on
+// claude-fable-5 at high effort regardless of the session model, the reviewing
+// counterpart of the coder's effort:low pin. An unrecognized model value makes
+// Claude Code fall back to inherit, so old CLIs degrade to the session model
+// rather than erroring.
+func generateClaudeReviewerAgent(home string) {
+	agentsDir := filepath.Join(home, ".claude", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: claude agents dir: %v\n", err)
+		return
+	}
+	agentFile := filepath.Join(agentsDir, "detritus-reviewer.md")
+	// No `tools:` key — same rationale as detritus-coder: a restricted list
+	// strips the built-in tools; omitting it inherits the session's full
+	// toolset, detritus MCP included (the reviewer needs kb_get + Read/Bash/
+	// Grep to verify, though it never edits).
+	content := `---
+name: detritus-reviewer
+description: Delivery-loop reviewer spawned by /gh-self-review and /forge delivery — hard-reviews a diff against the driving intent under the shared review doctrine. Review-only. Do not invoke directly.
+model: claude-fable-5
+effort: high
+---
+
+# Detritus Reviewer
+
+You are the reviewer in a delivery loop, spawned to hard-review a diff before it ships. You run on a pinned model at **high effort** deliberately — independent review is the last gate before a PR.
+
+1. Load your role doc with ` + "`kb_get name=\"roles/reviewer\"`" + ` and follow it. It composes ` + "`core/review-rigor`" + ` and ` + "`flows/principles/truthseeker`" + ` — load those too and apply the rubric end-to-end; never paraphrase it.
+2. Your brief carries the diff and the **driving intent** (what the user asked for). Verify the diff satisfies the intent: a missing, partial, or contradicted intent commitment is a blocker. If no intent was provided, say so in your output and review mechanics only.
+3. Never edit files, stage, commit, push, or post. Your output is the verdict/triage the wrapping flow asked for — nothing else.
+`
+	_ = os.WriteFile(agentFile, []byte(content), 0o644)
+	fmt.Printf("Claude Code reviewer agent: %s\n", agentFile)
 }
 
 // ---- Codex ------------------------------------------------------------------

@@ -19,6 +19,7 @@ related:
   - roles/coder-backend
   - roles/coder-frontend
   - roles/coder-fullstack
+  - roles/reviewer
   - flows/build/forge
   - flows/plan/plan
   - core/dream
@@ -75,7 +76,7 @@ The tech-lead reads `.plan/<slug>.md`, the settled plan-contract artifact writte
 4. **Integrate sequentially.** Merge completed tasks one at a time, re-running the canonical verification after each. **On a dirty merge or a red suite, loop the work back to the owning coder** — the tech-lead never hand-fixes a coder's task silently, because a silent fix erases the test-defined contract and hides the regression.
    - ✅ Merge task A, run verification green; merge task B, suite goes red → loop B back to its coder with the failing assertion.
    - ❌ Merge task B, suite goes red, tech-lead edits B's files itself to make it pass (TL-F5) — the regression is now invisible to B's test.
-5. **Deliver.** Once all acceptance items are green on the integrated branch, run delivery per `core/build`: loop `/gh-self-review` to a clean read on the unchanged diff, then open **one PR per impacted repo** via `gh-issue-work` Phase 9 (`core/build` → *Multi-repo delivery* — a feature spanning N repos delivers N coordinated PRs, N≥1, no cap; the cross-repo half is in-scope disposition 1, never a feature-split). Do not reimplement PR creation.
+5. **Deliver.** Once all acceptance items are green on the integrated branch, run delivery per `core/build`: loop `/gh-self-review` to a clean read on the unchanged diff — passing the `.plan/<slug>.md` contract as the driving intent of every review pass (`flows/github/gh-self-review` → Phase 2), so the reviewer judges intent fidelity, not just mechanics — then open **one PR per impacted repo** via `gh-issue-work` Phase 9 (`core/build` → *Multi-repo delivery* — a feature spanning N repos delivers N coordinated PRs, N≥1, no cap; the cross-repo half is in-scope disposition 1, never a feature-split). Do not reimplement PR creation.
 
 ## Partition emission format (out-of-process driver)
 

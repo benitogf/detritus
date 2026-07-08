@@ -95,9 +95,11 @@ If a linked issue was fetched in Phase 1, capture its body too — the sub-agent
 
 If the in-scope diff exceeds ~2000 lines, the brief should say so explicitly and instruct the sub-agent to prioritize files matching the change's stated scope.
 
+**Driving intent (required brief slot).** Resolve the ask that drove this change, in order: the `.plan/<slug>.md` contract when one drove the work (/forge delivery passes it explicitly) → the linked issue body → the stated ask from the conversation, condensed faithfully. Include it in the brief verbatim (or the contract's feature spec + acceptance checklist for long contracts). When genuinely nothing recorded the intent (ad-hoc tree changes), say so in the brief — the sub-agent notes the absence and reviews mechanics only. The existing signals (branch name, commit messages, linked issue) stay as corroboration, not as the intent itself.
+
 ## Phase 3: Hand off to a fresh sub-agent
 
-Spawn the review via the `Agent` tool. The sub-agent runs with **no prior context** — the prompt is everything it sees. Use `subagent_type: "general-purpose"` so it has `kb_get`, `Bash`, `Read`, etc.
+Spawn the review via the `Agent` tool. The sub-agent runs with **no prior context** — the prompt is everything it sees. Use `subagent_type: "detritus-reviewer"` — the role definition `detritus --setup` installs at `~/.claude/agents/detritus-reviewer.md`, which pins the reviewer's model and effort per role (`roles/reviewer` → *Model and effort*). If the definition is absent (setup not run), fall back to `subagent_type: "general-purpose"` so the review still runs — it then inherits the session model.
 
 The prompt is built from this template — fill in `<...>` placeholders from Phases 1-2:
 
@@ -105,11 +107,12 @@ The prompt is built from this template — fill in `<...>` placeholders from Pha
 You are reviewing a developer's pending local changes before they commit/push/PR. The diff is the only thing you know about — there is no prior conversation. Produce the audit a real reviewer would give them, applied to their own diff, so mechanical issues get fixed before another human looks at it.
 
 ## Step 1: Load the rigor checklist
-Call kb_get(name="core/review-rigor") and follow it end-to-end against the diff below. The doc covers: truthseeker principles, claim verification, scope classification, the "don't stop at easy findings" second pass, correctness / fragility / performance / tests / security / scope-discipline / conventions checklists, the Godot subsection, and large-diff handling. Skip nothing. If a subsection's scope didn't fire (e.g., no Godot files in the diff), note it didn't apply rather than silently dropping it.
+Call kb_get(name="roles/reviewer") and kb_get(name="core/review-rigor") and follow them end-to-end against the diff below. Together they cover: truthseeker principles, claim verification, scope classification, the "don't stop at easy findings" second pass, correctness / fragility / performance / tests / security / scope-discipline / conventions checklists, the Godot subsection, and large-diff handling. Skip nothing. If a subsection's scope didn't fire (e.g., no Godot files in the diff), note it didn't apply rather than silently dropping it.
 
 ## Step 2: Verify the change's stated intent
 Check each claim against the diff per the rigor doc's "Verify the change's claims" section:
 
+- Driving intent (what was asked; the diff must satisfy it — a missing, partial, or contradicted commitment is a Blocker): <driving intent from Phase 2, or "none recorded — review mechanics only">
 - Branch name: <branch>
 - Base branch: <base>
 - Linked issue body: <issue body, or "none">

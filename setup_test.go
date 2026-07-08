@@ -491,6 +491,44 @@ func TestGenerateClaudeCoderAgentUsesEffortKey(t *testing.T) {
 	}
 }
 
+// TestGenerateClaudeReviewerAgentPinsModelAndEffort verifies the review-loop
+// reviewer subagent definition pins its model and effort per ROLE: it runs on
+// claude-fable-5 at high effort, independent of the session model, and never
+// restricts tools (it needs kb_get + Read/Bash/Grep to verify).
+func TestGenerateClaudeReviewerAgentPinsModelAndEffort(t *testing.T) {
+	home := t.TempDir()
+
+	generateClaudeReviewerAgent(home)
+
+	agentFile := filepath.Join(home, ".claude", "agents", "detritus-reviewer.md")
+	raw, err := os.ReadFile(agentFile)
+	if err != nil {
+		t.Fatalf("reviewer agent definition not written: %v", err)
+	}
+	got := string(raw)
+
+	fm, _, ok := strings.Cut(strings.TrimPrefix(got, "---\n"), "\n---")
+	if !ok {
+		t.Fatalf("agent definition missing YAML frontmatter:\n%s", got)
+	}
+	if !strings.Contains(fm, "name: detritus-reviewer") {
+		t.Errorf("agent must be named detritus-reviewer; got:\n%s", fm)
+	}
+	if !strings.Contains(fm, "\nmodel: claude-fable-5") {
+		t.Errorf("reviewer must pin model to claude-fable-5; got:\n%s", fm)
+	}
+	if !strings.Contains(fm, "\neffort: high") {
+		t.Errorf("reviewer must set the effort key to high; got:\n%s", fm)
+	}
+	// A `tools:` restriction strips the built-in tools the reviewer needs to verify.
+	if strings.Contains(fm, "tools:") {
+		t.Errorf("frontmatter must not restrict tools; got:\n%s", fm)
+	}
+	if !strings.Contains(got, "roles/reviewer") {
+		t.Errorf("body must direct the reviewer to load roles/reviewer; got:\n%s", got)
+	}
+}
+
 // The Copilot agent has the same contract: its frontmatter `tools` is a strict
 // allowlist (omitted = all tools), so a coding agent must not be pinned to the
 // detritus MCP server alone.
