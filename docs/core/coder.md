@@ -92,7 +92,12 @@ A `green` return carries these mandatory fields — **missing field = incomplete
 
 ### Self-acknowledged incident — report as plain text
 
-A coder that catches itself in a self-acknowledged mistake or doctrine violation (`core/ego` trigger ①: "you are right, I …", "I didn't follow …", "I ignored /…") **REPORTS** it to the tech-lead as **plain report text** in `notes` — a one-line admission of what it did wrong. This is ordinary prose, **not** a new fenced protocol: do NOT invent a `BLOCKED`-style line for it. The tech-lead records it (`roles/tech-lead` → escalation/decisions) so the user's session can route it post-delivery per `core/ego`. Capture is always in-session; the coder never routes it itself.
+A coder that catches itself in a self-acknowledged mistake or doctrine violation (`core/ego` trigger ①: "you are right, I …", "I didn't follow …", "I ignored /…") **REPORTS** it to the tech-lead as **plain report text** — a one-line admission of what it did wrong. It is ordinary prose in **both** realizations, **not** a new fenced protocol: do NOT invent a `BLOCKED`-style line for it. Only the carrier differs by mode (`core/coordination`'s two realizations):
+
+- **In-session (Realization A — `/forge` sub-agent).** The prose rides the `notes` field of the coder's status return value — the same channel `blocked`/`green` already use. There is no bus and no separate message.
+- **Sidecar (Realization B — candyland process).** The prose rides the equivalent `notes` field of the coder's status **event** over the bus, not a return value (the process has none). Still plain prose, still no fenced line.
+
+Either way the tech-lead records it (`roles/tech-lead` → escalation/decisions) so the user's session can route it post-delivery per `core/ego`. Capture is always in-session; the coder never routes it itself.
 
 ## Out-of-scope work
 
