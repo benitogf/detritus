@@ -104,8 +104,8 @@ For each failed run/quest/campaign, extract a **failure signature**:
 **Self-acknowledged incidents are a first-class signature source — including in SUCCESSFUL units.**
 When an agent catches itself (`core/ego` trigger ①: "you are right, I …", "I didn't follow …",
 "I ignored /…") it records an `INCIDENT` line, which candyland persists **structurally** on the unit
-record as an **`incidents[]`** array (each entry: the acknowledged mechanism + the phase/role it occurred
-in). Mine `incidents[]` **directly** — it is a first-class field alongside terminal status, read over the
+record as an **`incidents[]`** array (each entry carries `agent`, `summary`, `detail`, `severity`, `at` —
+the conductor stamps `agent`+`at`, the emitting agent supplies the rest). Mine `incidents[]` **directly** — it is a first-class field alongside terminal status, read over the
 same data-access path above (`GET /runs/*` · `/quests/*` · `/campaigns/*`). Each entry is a direct,
 agent-attributed *mechanism*; mine it even when the unit terminated green, because an admitted mistake in
 a passing run is still a mechanism worth patching (the symptom-free case the terminal-status scan alone
@@ -160,9 +160,9 @@ Before proposing any edit, filter clusters:
 
 Maintain a **learnings ledger** with three states (dedup across invocations so `/learn` doesn't re-propose):
 
-- **adopted** — an edit shipped.
+- **candidate** — proposed and/or shipped (PR open), awaiting **merge**.
+- **adopted** — the PR **merged** (carries the merged PR ref); merge is the single adoption event.
 - **rejected** — a cluster reviewed and declined (incl. addressability-filtered), with reason.
-- **candidate** — proposed, awaiting confirm/ship.
 
 ### Prospective validation (future runs are the held-out split)
 
@@ -205,8 +205,8 @@ Do not paraphrase those steps here — read them from `flows/maintainer/grow`.
 `/learn` does not end at "PR opened". The learning loop is closed by **merge**, not by shipping:
 
 - A shipped learning-loop PR is watched by `flows/github/babysit`; **merge is the terminal event**, and
-  merge alone flips the adopted delta's ledger entry from **candidate** to **adopted** (with the merged
-  PR ref).
+  merge is the single adoption event — it alone flips the delta's ledger entry from **candidate** to
+  **adopted** (stamping the merged PR ref). Shipping a PR does not adopt; only its merge does.
 - On a 🍬-footered PR merging, `flows/github/babysit` reads the producing unit's `incidents[]` and feeds
   them back to `/learn` — the **standing trigger** that turns each merge into the next round's mining
   input. babysit does not gate the merge on `/learn`; the feed is post-merge.

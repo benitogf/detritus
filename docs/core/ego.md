@@ -36,7 +36,7 @@ missed something. This doc owns **detection and routing** only; the distill→sh
 | ① | **self-acknowledged error / doctrine violation** | Keys off the *agent's own output* conceding a mistake or a doctrine/flow violation. Admission phrase-class (e.g. "you are right", "sorry, I…", "my mistake", "I was wrong", "I should have…") or violation phrase-class (e.g. "I didn't follow {doctrine}", "I ignored /{flow}", "that was against {rule}", "I skipped {step}"). **Rule: acknowledgment ≡ detection** — the moment the agent concedes, the trigger has fired; no user escalation is required. | → `/grow` |
 | ② | **PR blocker despite the self-review gate** | A live blocker on a detritus-authored PR (reviewer `CHANGES_REQUESTED`, a `/gh-pr` finding, or babysit-detected feedback). Every detritus PR ships through the `/gh-self-review` loop-until-clean gate, so a surviving blocker is by definition a **gate miss** — itself an incident. Fires **immediately** (does not wait for merge). | → `/absorb` |
 | ③ | **user correction** | An in-session correction from the user. Detection cues live in `flows/maintainer/grow` Step 1. | → `/grow` |
-| ④ | **telemetry failure signature** | A failure signature mined from candyland telemetry across units. Detection cues live in `flows/maintainer/learn` Step 1. | → `/learn` |
+| ④ | **telemetry failure signature** | A failure signature mined from candyland telemetry across units — e.g. a merged candyland PR whose producing unit carries `incidents[]`. Detection cues live in `flows/maintainer/learn` Step 1. | → `/learn` |
 
 Samples above are illustrative `e.g.` only — generalize to the whole phrase-class, never to the
 literal string.
