@@ -36,7 +36,7 @@ missed something. This doc owns **detection and routing** only; the distill→sh
 | ① | **self-acknowledged error / doctrine violation** | Keys off the *agent's own output* conceding a mistake or a doctrine/flow violation. Admission phrase-class (e.g. "you are right", "sorry, I…", "my mistake", "I was wrong", "I should have…") or violation phrase-class (e.g. "I didn't follow {doctrine}", "I ignored /{flow}", "that was against {rule}", "I skipped {step}"). **Rule: acknowledgment ≡ detection** — the moment the agent concedes, the trigger has fired; no user escalation is required. | → `/grow` |
 | ② | **PR blocker despite the self-review gate** | A live blocker on a detritus-authored PR (reviewer `CHANGES_REQUESTED`, a `/gh-pr` finding, or babysit-detected feedback). Every detritus PR ships through the `/gh-self-review` loop-until-clean gate, so a surviving blocker is by definition a **gate miss** — itself an incident. Fires **immediately** (does not wait for merge). | → `/absorb` |
 | ③ | **user correction** | An in-session correction from the user. Detection cues live in `flows/maintainer/grow` Step 1. | → `/grow` |
-| ④ | **telemetry failure signature** | A failure signature mined from candyland telemetry across units. | → `/learn` |
+| ④ | **telemetry failure signature** | A failure signature mined from candyland telemetry across units — e.g. a merged candyland PR whose producing unit carries `incidents[]`. Detection cues live in `flows/maintainer/learn` Step 1. | → `/learn` |
 
 Samples above are illustrative `e.g.` only — generalize to the whole phrase-class, never to the
 literal string.
@@ -52,8 +52,10 @@ distill/ship machinery — only when an incident fires and where it goes.
   "immediate" never means dropping the deliverable. ① never interrupts.
 - **Every route ends in a KB PR** (or an honest ledger no-op when nothing is addressable).
 - **In-session vs sidecar.** In-session flows route directly. Sidecar (candyland) agents *record*
-  the incident in their unit record/report; the user's session routes it post-delivery — lesson
-  capture is in-session, never in the sidecar.
+  each incident by appending to an `incidents[]` collection on their unit record/report; the user's
+  session drains that collection and routes every entry post-delivery — lesson capture is
+  in-session, never in the sidecar. Appending (never overwriting) means a unit that trips multiple
+  incidents surfaces all of them, not just the last.
 - **No local clone required.** Detection fires anywhere; shipping does too — the ship-leg flows
   (`/grow` / `/absorb` / `/learn`) resolve or provision a writable KB checkout on demand per
   `core/kb-writeback` (forking when the user lacks write access), so an incident routes to a KB PR

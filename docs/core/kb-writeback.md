@@ -74,7 +74,15 @@ lessons never collide.
 5. Open the PR against upstream (`--repo benitogf/detritus --base main`), choosing the `--head` shape
    by write access. **`flows/github/gh-issue-work` Phase 9 owns the exact `--head` syntax** (same-repo
    `<branch>` vs cross-fork `<login>:<branch>`) and the body/conventions — follow it; do not restate it
-   here. The fork case here maps to Phase 9's no-write-access shape.
+   here. The fork case here maps to Phase 9's no-write-access shape. **Mint the learning-loop footer.**
+   Because this is a KB-writeback PR, append the 📚 provenance footer to the PR body below the
+   attribution footer (#1 in `flows/github/gh`):
+   ```
+   📚 Learned by detritus — <flow> `<ref>`
+   ```
+   (`<flow>` ∈ `grow` / `learn` / `absorb` / `optimize`; `<ref>` is the source signal — a candyland unit
+   id, a PR URL, or a session tag). This is the sole minting site for the footer; `flows/github/gh`
+   convention #12 only preserves it on later body rewrites.
 6. `git -C <base> worktree remove <base>-wt-<slug>` when the PR is open. The base stays on a clean
    default branch.
 

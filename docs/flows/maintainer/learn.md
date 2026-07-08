@@ -64,8 +64,8 @@ Embed this verbatim; do not stumble on ports/keys. Mining reads structured recor
 
 The records carry the telemetry fields `/learn` mines (effective model + thinking, token/tool-call
 counts, phase durations, review-round counts, verdict outcomes, terminal status + summary,
-escalation/decision events, blocker postmortems) — this IS the metrics ledger. Each record also carries
-a **`prs[]`** list of the GitHub PR URLs it opened.
+escalation/decision events, blocker postmortems, self-acknowledged **`incidents[]`**) — this IS the
+metrics ledger. Each record also carries a **`prs[]`** list of the GitHub PR URLs it opened.
 
 ### Canonical: resolve a PR → its producing unit
 
@@ -101,13 +101,15 @@ For each failed run/quest/campaign, extract a **failure signature**:
 - **mechanism** — the underlying *why*. **Symptom ≠ mechanism.** "Test failed" is a symptom;
   "coder claimed done without running the failing path" is a mechanism. Only mechanisms get patched.
 
-**Self-acknowledged incident notes are a first-class signature source — including in SUCCESSFUL units.**
-A note an agent recorded when it caught itself (`core/ego` trigger ①: "you are right, I …", "I didn't
-follow …", "I ignored /…") is a direct, agent-attributed *mechanism* — mine it even when the unit
-terminated green, because an admitted mistake in a passing run is still a mechanism worth patching (the
-symptom-free case the terminal-status scan alone would miss). *Caveat:* this depends on candyland unit
-records persisting the free-text report notes; if they do not, the signal is lost and record persistence
-must be added first (flag in the PR body).
+**Self-acknowledged incidents are a first-class signature source — including in SUCCESSFUL units.**
+When an agent catches itself (`core/ego` trigger ①: "you are right, I …", "I didn't follow …",
+"I ignored /…") it records an `INCIDENT` line, which candyland persists **structurally** on the unit
+record as an **`incidents[]`** array (each entry carries `agent`, `summary`, `detail`, `severity`, `at` —
+the conductor stamps `agent`+`at`, the emitting agent supplies the rest). Mine `incidents[]` **directly** — it is a first-class field alongside terminal status, read over the
+same data-access path above (`GET /runs/*` · `/quests/*` · `/campaigns/*`). Each entry is a direct,
+agent-attributed *mechanism*; mine it even when the unit terminated green, because an admitted mistake in
+a passing run is still a mechanism worth patching (the symptom-free case the terminal-status scan alone
+would miss). No free-text scraping — the structural `incidents[]` field is the signal.
 
 ### Deterministic clustering
 
@@ -158,9 +160,9 @@ Before proposing any edit, filter clusters:
 
 Maintain a **learnings ledger** with three states (dedup across invocations so `/learn` doesn't re-propose):
 
-- **adopted** — an edit shipped.
+- **candidate** — proposed and/or shipped (PR open), awaiting **merge**.
+- **adopted** — the PR **merged** (carries the merged PR ref); merge is the single adoption event.
 - **rejected** — a cluster reviewed and declined (incl. addressability-filtered), with reason.
-- **candidate** — proposed, awaiting confirm/ship.
 
 ### Prospective validation (future runs are the held-out split)
 
@@ -188,5 +190,27 @@ the ledger updates, run **`/grow` Steps 3–6 unchanged** (`kb_get flows/maintai
   single unambiguous doc-in-scope delta; confirm for ambiguity / >1 doc / rule conflict).
 - **Step 6 — Ship via `/gh`:** route delivery through `/gh` (issue → branch → PR); never commit to the
   default branch; scrub private org/customer/product names (public `benitogf/detritus`).
+  - **Learning-loop footer.** The shipped PR carries the 📚 learning-loop footer. It is *minted* at the
+    open-PR step by `core/kb-writeback` "Ship a lesson" item 5 (reached transitively via `/grow`); its
+    form and preservation-on-rewrite are owned by `flows/github/gh` convention #12. Do not restate the
+    footer here. It marks the PR as a KB-writeback so downstream tooling and the ledger can trace an
+    adopted delta back to its shipping PR.
 
 Do not paraphrase those steps here — read them from `flows/maintainer/grow`.
+
+---
+
+## Closing the loop — babysit-merge is the standing trigger
+
+`/learn` does not end at "PR opened". The learning loop is closed by **merge**, not by shipping:
+
+- A shipped learning-loop PR is watched by `flows/github/babysit`; **merge is the terminal event**, and
+  merge is the single adoption event — it alone flips the delta's ledger entry from **candidate** to
+  **adopted** (stamping the merged PR ref). Shipping a PR does not adopt; only its merge does.
+- On a 🍬-footered PR merging, `flows/github/babysit` reads the producing unit's `incidents[]` and feeds
+  them back to `/learn` — the **standing trigger** that turns each merge into the next round's mining
+  input. babysit does not gate the merge on `/learn`; the feed is post-merge.
+- Prospective validation (above) then reads the **future** runs' telemetry on the next `/learn`
+  invocation to confirm or refute the delta. Merge → mine `incidents[]` → validate on future runs is the
+  full self-improving cycle; `/learn` owns the mine+validate legs, `flows/github/babysit` owns the merge
+  trigger. Do not restate babysit's watch mechanics here — read them from `flows/github/babysit`.

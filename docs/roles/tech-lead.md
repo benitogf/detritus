@@ -23,6 +23,8 @@ related:
   - flows/plan/plan
   - core/dream
   - core/flows
+  - core/ego
+  - flows/maintainer/learn
 ---
 
 # Tech Lead — partition, coordinate, integrate, deliver
@@ -95,6 +97,16 @@ QUESTS [{"id":"q-export","title":"CSV export pipeline","objective":"Stream CSV e
 
 Per quest: `id` (stable slug), `title` (short display label), `objective` (what the quest must deliver, self-contained), `folders` (the disjoint scope boundary), and `deps` (quest ids that must finish first — real dependencies only; independent quests run concurrently). The conductor parses this line and launches one child quest per spec with `deliver: branch` stamped by the supervisor, not the agent.
 
+## INCIDENT line format (out-of-process driver)
+
+Self-acknowledged incidents (`core/ego` trigger ①) are recorded structurally, the same emit-for-the-driver-to-capture pattern as `PARTITION` / `QUESTS` — but one line **per incident, emitted as it happens**, never a single array at the unit's end. The moment an agent acknowledges a mistake or works around a non-terminal problem, it emits a **single line** beginning with `INCIDENT ` followed by a JSON **object**:
+
+```
+INCIDENT {"summary":"edited the defining test to go green instead of the implementation","severity":"warn"}
+```
+
+Per incident the emitting agent supplies exactly: `summary` (the admission in one self-contained line, required), optional `detail`, and `severity` (`info` | `warn` | `error`). The conductor **stamps** `agent` (the emitting agent's id) and `at` (RFC3339) — the agent does NOT supply those, and there is no `source` or `doctrine` field. The conductor's parser (`parseIncidentNotes`) json-unmarshals one object per line, requires a non-empty `summary`, and silently skips any line that doesn't parse or has no summary; so an agent **omits the line entirely** when nothing was acknowledged — never emit an empty array or a placeholder. Each captured incident lands in the unit record's `incidents[]` as `{agent, summary, detail, severity, at}`, where the user's session and `/learn` read it directly. Two incident classes qualify: (1) a self-acknowledged mistake / doctrine violation, and (2) a worked-around non-terminal problem. In-process drivers (`/forge`) do NOT parse the line — they record the same incidents as PROGRESS-ledger prose; the `INCIDENT` line is a harmless no-op there, so emitting it is always safe.
+
 ## Escalation — the tech-lead is a ladder tier (E1)
 
 Post-plan a **decision** falls DOWN the escalation ladder (`core/coordination`, `core/completion`) to the lowest tier with authority; it is decided there and **recorded**, never sent to the user. The tech-lead is a tier on that ladder:
@@ -104,7 +116,7 @@ Post-plan a **decision** falls DOWN the escalation ladder (`core/coordination`, 
   - Under `/forge`: apply the **smith rule** — decide the best option given context and record it in the PROGRESS ledger's *Decisions made autonomously* section (what / why / evidence / alternatives rejected). `/forge` has no tier above the tech-lead; it never escalates to the user.
   - Under candyland: escalate **exactly one tier up** — quest-lead → campaign tech-manager → intent-manager — decided at the lowest tier with authority; the top tier applies the smith rule. Escalation NEVER pauses for a human; the dashboard shows decisions read-only for audit.
 
-- **Self-acknowledged incidents — record, never route.** A self-acknowledged incident (`core/ego` trigger ①) surfaced inside a sidecar unit — the tech-lead's own admission, or one a coder reported in its task report — is **RECORDED** in the ledger / delivery report, never routed in-session (capture is always in-session; routing is the user's post-delivery call per `core/ego`). Recording it makes the note available to the user's session and to `/learn` telemetry mining; the tech-lead does not act on the routing itself.
+- **Self-acknowledged incidents — record structurally, never route.** A self-acknowledged incident (`core/ego` trigger ①) surfaced inside a sidecar unit — the tech-lead's own admission, or one a coder reported in its task report — is **RECORDED**, never routed in-session (capture is always in-session; routing is the user's post-delivery call per `core/ego`). Under the candyland conductor, recording is **structural**: emit one `INCIDENT <json object>` line **per incident, as it happens** (format above), each of which the conductor captures — stamping `agent` and `at` — into the run/quest/campaign record's `incidents[]`, not free prose the driver has to parse. Persisting it there makes the notes retrievable by the user's session and mined **directly** by `/learn` (`incidents[]`, not a re-scan of prose). The tech-lead does not act on the routing itself. Under `/forge` (in-session) the same incidents are recorded as prose in the PROGRESS ledger and routed by the user's session post-delivery; the `INCIDENT` line is a no-op there, so emitting it is always safe.
 
 ### Escalation message schema (per tier)
 
@@ -127,6 +139,7 @@ Every escalation and its resolution is a message with these mandatory fields (**
 
 - **Task-graph node status** (`core/coordination` task-graph): `pending | in_progress | blocked | done`. A coder emits only `green` (test + verification pass, files changed) or `blocked` (capability failure, postmortem-backed — never a decision, see TL-F4); the orchestrator maps a coder's `green` to node `done` and its `blocked` to node `blocked`.
 - **Partition emission**: exactly one of `PARTITION [...]` (fork-safe tasks) or `QUESTS [...]` (campaign altitude), then stop. Emitting nothing actionable is the only partition failure.
+- **Incident `severity`** (`INCIDENT {...}`): `info | warn | error`. The agent supplies `summary` (required) + optional `detail` + `severity`; attribution is **not** an agent-supplied field — the conductor stamps `agent` (the emitting agent's id — `tech-lead`, or a coder task id) and `at`. There is no `source` field. Omitting the line (never an empty array) means nothing was acknowledged.
 - **Delivery mode** (`core/build`, run.deliver): `pr | branch | feedback | review`. The tech-lead delivers `pr` (one per impacted repo) under `/forge`; candyland stamps the mode on the run via the supervisor, not the agent.
 
 ## Dispositions

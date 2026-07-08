@@ -16,6 +16,8 @@ related:
   - flows/github/gh
   - flows/github/gh-feedback-work
   - flows/github/gh-self-review
+  - flows/maintainer/learn
+  - core/ego
   - core/loop
   - core/janitor-platforms
 ---
@@ -142,6 +144,16 @@ gh api -X PUT repos/<owner>/<repo>/pulls/<n>/merge -f merge_method=<merge|squash
 
 Any review feedback this loop detects on the watched PR (step 3) is, on a detritus-authored PR, a blocker that survived the `/gh-self-review` gate — i.e. a **gate miss**, which per `core/ego` trigger ② is an incident. Babysit already routes the *fix* via `/gh-feedback-work`; the incident itself is captured per `core/ego` (→ `/absorb`) **after the fix lands**, so the merge-on-approval loop below is unaffected — the incident distillation rides alongside it, it does not gate the merge.
 
+## Post-merge: route the producing unit's incidents to `/learn` (non-gating)
+
+When the loop reaches its **Merged** terminal outcome (step 4), and only then, run one **post-merge companion read** on a 🍬-footered PR — the merge has already landed, so this **never gates, delays, or re-opens the merge**. It rides alongside the terminal, exactly like *Detected feedback is a gate miss* above: the merge is the deliverable; the learning capture is a companion.
+
+- **Footered PRs only.** If the merged PR body carries the candyland unit-ref footer `🍬 Opened by candyland — <kind> \`<id>\``, resolve the producing unit from it; **compose the canonical PR→unit recipe in `flows/maintainer/learn`** (footer fast-path, reverse-telemetry-lookup fallback) — do not restate it here. No footer and no reverse-lookup match → the PR was not candyland-produced; there are no unit incidents to read, so skip silently.
+- **Read the unit's `incidents[]`.** The producing unit records its self-acknowledged incident notes (`core/ego` trigger ①) in its candyland record — the tech-lead **records, never routes** them in the sidecar (`roles/tech-lead`), precisely so a user-session flow like `/babysit` can surface them afterward.
+- **Route → `/learn`, never `/grow`/`/absorb`.** These are telemetry-borne, agent-attributed mechanisms across the merged unit — `/learn`'s source, not a live session correction (`/grow`) nor this PR's review outcome (`/absorb`). Surface the incidents and offer `/learn <pr-url>` (a PR argument works standalone — `flows/maintainer/learn` → *resolve a PR → its producing unit*); routing is the user's post-delivery call per `core/ego`, so **offer it, don't auto-run it**. An empty `incidents[]` is the normal case — report the clean merge and stop.
+
+This is strictly downstream of the merge: it cannot change the merge gate, cannot keep the loop alive, and cannot turn a merged-success into a hand-back.
+
 ## Stuck = pause & hand back
 
 Two conditions stop the loop and return control to the human — leave the PR untouched, report exactly what is blocking, never expand scope, never force-merge:
@@ -189,7 +201,7 @@ This cap **replaces** `core/loop`'s wall-clock skip-streak nag for this loop: a 
 
 The loop ends on exactly one of:
 
-- **Merged** — the merge gate fired and the PR merged (success).
+- **Merged** — the merge gate fired and the PR merged (success). On a 🍬-footered PR, a non-gating post-merge read then routes the producing unit's `incidents[]` to `/learn` (see *Post-merge: route the producing unit's incidents to `/learn`*); this rides alongside the terminal and never changes the outcome.
 - **PR closed without merge** — someone closed it; report and stop.
 - **Pause & hand back** — out-of-scope review ask, or a non-clean merge: `mergeable_state` `dirty` (conflict) or persistently `blocked` (failing required check / unmet protection) (see *Stuck = pause & hand back*). The PR is left untouched.
 - **Tick cap reached** — 20 ticks elapsed; pause and hand back with a re-invoke instruction (see *Tick cap*). A fresh `/babysit <pr>` resumes with a new count.
@@ -203,6 +215,7 @@ The loop ends on exactly one of:
 - **An approval is a merge signal, not feedback.** Key review bodies on `state`: only `CHANGES_REQUESTED`/`COMMENTED` bodies (plus inline + issue comments) count as feedback; an `APPROVED` body never trips the feedback gate — otherwise every approve-with-a-comment blocks the very merge it grants and the PR never lands. A feedback pass that pushes nothing is read-and-acknowledged **only** when `/gh-feedback-work` classifies it in-body / informational (no-progress guard case ii); an **out-of-scope** ask always pauses via *Stuck = pause & hand back* (case iii) and is never acknowledged-and-merged-past. Key the guard on the reported disposition, not on "no commit appeared."
 - **Never post comments.** Inherited from `/gh-feedback-work` — this skill writes only the PR body (via that skill) and performs the merge. No `POST .../comments`, ever.
 - **The merge is the only outward action this skill adds.** Everything else is fixes + body rewrites, all owned by `/gh-feedback-work`.
+- **Post-merge incident routing never gates the merge.** On merged-success for a 🍬-footered PR, the producing unit's `incidents[]` are surfaced and offered to `/learn` as a downstream companion — it runs only after the merge lands, offers (never auto-runs) `/learn`, and can never delay, block, or re-open the merge (*Post-merge: route the producing unit's incidents to `/learn`*).
 - **Never merge on a stale approval.** The merge gate's `commit_id == HEAD SHA` precondition is non-negotiable — a push invalidates every prior approval.
 - **Only the owned PR.** Act on the single target PR; never touch others.
 - **Never force-merge, never admin-override, never expand scope.** A blocker is a hand-back, not something to power through.
