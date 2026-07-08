@@ -1,5 +1,7 @@
 # detritus
 
+> 📎 **[Field survey of detritus](https://benitogf.github.io/detritus/)** — an honest, code-grounded tour of the knowledge base, code intelligence, candyland, doctrine, and known fault lines.
+
 Detritus is an MCP server for AI coding assistants. It exposes a curated
 knowledge base of engineering doctrine (`kb_*` tools) and live codebase
 exploration (`code_*`) — and layers
