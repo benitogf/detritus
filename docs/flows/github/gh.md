@@ -55,6 +55,11 @@ These apply to every sub-skill this router dispatches to. The sub-skill docs als
     🍬 Opened by candyland — <kind> `<id>`
     ```
     (`<kind>` ∈ `run` / `quest` / `campaign`). This is the provenance link `/absorb` (`flows/maintainer/absorb`) reads to resolve the PR's producing candyland unit; dropping it during a rewrite breaks the fast-path unit resolution. Never mint one where it's absent — candyland owns stamping it.
+12. **Preserve the learning-loop footer on every PR-body rewrite.** The same re-append discipline as #11 applies to KB PRs opened by the ship-leg learning flows (`/grow`, `/learn`, `/optimize` directly; `/absorb` transitively via `/grow`). Such a PR carries a learning-loop provenance footer:
+    ```
+    📚 Learned by detritus — <flow> `<ref>`
+    ```
+    (`<flow>` ∈ `grow` / `learn` / `absorb` / `optimize`; `<ref>` is the source signal — a candyland unit id, a PR URL, or a session tag). Any in-place `PATCH` that rewrites the body must re-append it alongside the attribution footer (#1). `core/kb-writeback` → "Ship a lesson" item 5 (the open-PR step) is the canonical stamping point that owns minting it; a rewrite here only preserves an existing footer and never mints one where it's absent.
 
 ## Inputs
 
