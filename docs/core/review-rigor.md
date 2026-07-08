@@ -7,6 +7,7 @@ related:
   - flows/github/gh-pr
   - flows/github/gh-self-review
   - flows/principles/truthseeker
+  - roles/reviewer
 ---
 
 # Shared review rigor
@@ -51,6 +52,10 @@ The body of a PR, an issue, a branch name, or a commit message is **a claim**, n
 - **Performance claims** ("p99 1s → 200µs", "removes N dials") — benchmark, repro, telemetry link, or at minimum a plausible code-level explanation visible in the diff? Unverified perf claims are blockers until substantiated — even if the change looks reasonable, "trust me it's faster" is not evidence.
 - **Bug-fix claims without a regression test** — "this fixes the crash" with no test means the next regression is invisible. Default position: blocker.
 - **"Works on all supported platforms"** — unless the diff or CI shows it, this is a claim, not a fact.
+
+## Intent fidelity
+
+> When the review brief carries the **driving intent** — the ask that produced this change (a plan contract, an issue body, a feedback spec, the stated request) — the intent is part of the review subject. Verify the diff **satisfies it**: walk each commitment the intent makes and locate where the diff delivers it. A commitment that is missing, only partially delivered, or contradicted by the diff is a **blocker** (`intent unmet: <commitment>`), exactly like a correctness defect. Do not substitute "the code is sound" for "the code is what was asked for" — a defect-free diff that quietly delivers less than, or something adjacent to, the intent is the false-clean this section exists to catch. When no intent is supplied, note its absence in the output and review mechanics only — never invent one.
 
 ## Classify scope
 
