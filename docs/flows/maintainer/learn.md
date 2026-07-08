@@ -190,10 +190,11 @@ the ledger updates, run **`/grow` Steps 3–6 unchanged** (`kb_get flows/maintai
   single unambiguous doc-in-scope delta; confirm for ambiguity / >1 doc / rule conflict).
 - **Step 6 — Ship via `/gh`:** route delivery through `/gh` (issue → branch → PR); never commit to the
   default branch; scrub private org/customer/product names (public `benitogf/detritus`).
-  - **Learning-loop footer.** The shipped PR carries the 📚 learning-loop footer — its form,
-    preservation-on-rewrite, and placement are owned by `flows/github/gh` convention #12; do not restate
-    the footer here, `/gh` writes it. It marks the PR as a KB-writeback so downstream tooling and the
-    ledger can trace an adopted delta back to its shipping PR.
+  - **Learning-loop footer.** The shipped PR carries the 📚 learning-loop footer. It is *minted* at the
+    open-PR step by `core/kb-writeback` "Ship a lesson" item 5 (reached transitively via `/grow`); its
+    form and preservation-on-rewrite are owned by `flows/github/gh` convention #12. Do not restate the
+    footer here. It marks the PR as a KB-writeback so downstream tooling and the ledger can trace an
+    adopted delta back to its shipping PR.
 
 Do not paraphrase those steps here — read them from `flows/maintainer/grow`.
 
