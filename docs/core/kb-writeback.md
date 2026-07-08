@@ -13,6 +13,8 @@ related:
   - flows/github/gh
   - flows/github/gh-issue-work
   - flows/maintainer/grow
+  - flows/maintainer/learn
+  - flows/maintainer/optimize
   - core/completion
 ---
 
