@@ -29,7 +29,7 @@ The reviewer loads `core/review-rigor` and `flows/principles/truthseeker` via `k
 
 ## Two briefing layers
 
-When the brief carries a root-intent layer above the task intent, apply `core/review-rigor` → Two briefing layers: visibility global, authority local — task layer arms blockers, root layer arms contradiction detection only.
+When the brief carries a root-intent layer above the task intent, apply `core/review-rigor` → Two briefing layers.
 
 ## Verdict contract
 
