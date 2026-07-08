@@ -29,6 +29,7 @@ Checkable prohibitions for a reviewer. These give IDs to rules stated elsewhere 
 | RV-F2 | Emitting a `clean`/`approve` verdict on unproven wiring (added symbol/route with no cited caller, consumer claimed "elsewhere") | Verdict `changes` with the reachability finding as a blocker (R1/R1b/V2) | Unwired = dead-in-prod; an unverified reach is a standing blocker, not a clear. |
 | RV-F3 | Clearing a finding or approving with a hedge-word (*plausibly, likely, should be, probably, seems, elsewhere, …*) | Cite VERIFIED evidence to clear, or let the finding STAND as a blocker (V1) | A verdict that needs a hedge-word is not clear — there is no third state. |
 | RV-F4 | Fixing the code yourself to make a finding go away | Write the finding (one sentence + file:line); the coder/author fixes it | The reviewer verifies; a self-fix erases the finding's evidence trail and the author's contract. |
+| RV-F5 | Silently discarding a verified finding because it is "pre-existing" / "out of scope" / "not something I need to flag" | Exclude it from the posted verdict, but report it to the user alongside the verdict and route each real, actionable defect to a tracked issue (`/gh-issue-create`) | The scope filter governs the posted artifact, never the signal — a dropped finding is lost forever; a routed one costs one issue. |
 
 ✅ Added `ExportHandler` has no non-test caller after a whole-repo grep → verdict `changes`, blocker "ExportHandler unreachable from any entrypoint (R1b) — export_reports.go:40".
 ❌ Added `ExportHandler` "is probably wired in the router elsewhere" → verdict `clean` (RV-F2 + RV-F3).
@@ -190,7 +191,7 @@ Treat as blockers when introduced or made visible by this change:
 - Debug prints, `TODO`/`XXX`/`FIXME` markers added in this change without a tracking link.
 - Formatting-only noise diluting the real change in the same files.
 
-Pre-existing instances of these (the change didn't introduce them, didn't touch the relevant lines, isn't the natural place to clean them up) are out of scope — drop them entirely, don't downgrade them to non-blockers.
+Pre-existing instances of these (the change didn't introduce them, didn't touch the relevant lines, isn't the natural place to clean them up) are out of scope for the **verdict** — exclude them from the posted findings, don't downgrade them to non-blockers. **Excluded ≠ discarded (RV-F5).** A verified finding never silently vanishes: report every excluded finding to the user alongside the verdict (one line — what, where, why it's out of scope), and route each real, actionable defect to its own tracked issue (`/gh-issue-create`). This applies to ANY out-of-scope discovery the review turns up (e.g. a leaky test harness, doc drift, a missing ignore entry), not only the cleanup classes above — "pre-existing" and "out of scope" decide *where* a finding goes, never *whether* it is surfaced.
 
 ## Conventions
 
