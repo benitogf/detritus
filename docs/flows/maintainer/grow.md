@@ -35,21 +35,7 @@ related:
 
 ## Step 0: Workspace Precheck
 
-Search workspace roots for a local detritus clone:
-- Look for path containing `github.com/benitogf/detritus` with a `docs/` directory
-- If found: proceed to Step 1
-- If NOT found:
-  - Output warning:
-    ```
-    ⚠️ /grow requires a local clone of the detritus MCP knowledge base to propose changes.
-    
-    This command analyzes conversation corrections and rule violations to improve
-    the KB docs that guide agent behavior. Without a local clone, changes cannot
-    be drafted.
-    
-    Repository: https://github.com/benitogf/detritus
-    ```
-  - STOP. Do not proceed.
+Resolve a writable KB checkout per `core/kb-writeback` — it finds a local detritus clone if one is present, else provisions a cached clone (forking when the user lacks write access), so `/grow` ships from any machine with no pre-existing clone required. The only hard stop is a true capability blocker (no `gh` auth), owned by `core/kb-writeback` → Preconditions.
 
 ---
 

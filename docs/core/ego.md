@@ -54,4 +54,8 @@ distill/ship machinery — only when an incident fires and where it goes.
 - **In-session vs sidecar.** In-session flows route directly. Sidecar (candyland) agents *record*
   the incident in their unit record/report; the user's session routes it post-delivery — lesson
   capture is in-session, never in the sidecar.
+- **No local clone required.** Detection fires anywhere; shipping does too — the ship-leg flows
+  (`/grow` / `/absorb` / `/learn`) resolve or provision a writable KB checkout on demand per
+  `core/kb-writeback` (forking when the user lacks write access), so an incident routes to a KB PR
+  from any machine, not only inside a detritus clone.
 - **Public `benitogf/detritus`:** scrub private names from any resulting issue/PR/branch/commit.

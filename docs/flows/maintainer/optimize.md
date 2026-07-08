@@ -26,16 +26,7 @@ related:
 
 ## Step 0: Workspace Precheck
 
-Search workspace roots for a local detritus clone:
-- Look for path containing `github.com/benitogf/detritus` with a `docs/` directory
-- If found: proceed to Step 1
-- If NOT found:
-  - Output warning:
-    ```
-    /optimize requires a local clone of the detritus MCP knowledge base.
-    Repository: https://github.com/benitogf/detritus
-    ```
-  - STOP. Do not proceed.
+Resolve a writable KB checkout per `core/kb-writeback` — it finds a local detritus clone if one is present, else provisions a cached clone (forking when the user lacks write access), so `/optimize` runs from any machine with no pre-existing clone required. The only hard stop is a true capability blocker (no `gh` auth), owned by `core/kb-writeback` → Preconditions.
 
 ---
 

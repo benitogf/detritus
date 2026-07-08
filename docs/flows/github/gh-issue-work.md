@@ -200,6 +200,21 @@ Body — product-focused, no file paths / line numbers / function names / symbol
 
 **Cross-repo refs** in the body default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `idnerdidx/bulk#311` smears into nested autolinks via the `idx` substring). Write `[bulk PR #311](https://github.com/idnerdidx/bulk/pull/311)`, keeping the `<owner>/<repo>` pattern out of the label. Same-repo `Closes #<n>` lines stay bare. See the cross-repo-refs convention in `flows/github/gh`.
 
+**Pick the `--head` shape first — it depends on write access to the target repo.** The branch was pushed in Phase 7 to whichever remote is pushable; a fork contributor has no write access to the target and their branch lives on their fork, so the PR is cross-fork and `--head` must be owner-prefixed. Probe once:
+
+```
+gh api repos/<owner>/<repo> --jq .permissions.push
+```
+
+| `.permissions.push` | Access | `--head` value | Precondition |
+| --- | --- | --- | --- |
+| `true` | Write to target repo | `<branch>` | branch pushed to the target repo |
+| `false` | Fork contributor | `<forkOwner>:<branch>` | branch pushed to the fork's `origin`; `gh repo fork <owner>/<repo>` (idempotent) ensures the fork exists |
+
+Both forms still target the same repo and base: `--repo <owner>/<repo> --base <default_branch>`.
+
+Same-repo (write access):
+
 ```
 gh pr create \
   --repo <owner>/<repo> \
@@ -220,6 +235,18 @@ Closes #<n> — <one-sentence product description of what now works>.
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
 )"
+```
+
+Fork contributor (no write access) — identical except the owner-prefixed head:
+
+```
+gh repo fork <owner>/<repo> --remote=false   # idempotent; ensures the fork exists
+gh pr create \
+  --repo <owner>/<repo> \
+  --base <default_branch> \
+  --head <forkOwner>:<branch> \
+  --title "<title>" \
+  --body "<same body as above>"
 ```
 
 `gh pr create` may print a Projects-classic GraphQL warning on some repos but the PR still gets created; capture the returned URL from stdout.

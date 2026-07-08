@@ -22,6 +22,15 @@ related:
 
 One entry point for the five `gh-*` skills. Reads the conversation + any arguments, decides which sub-skill fits, and hands off. The sub-skills stay focused; this file is the dispatcher and the home for cross-skill conventions so they live in one place. The sidecar launchers (`/candyland`, `/quest`, `/adventure`, `/campaign`) mirror this router's Phase 1 classification outcome in Go, mapping routes to delivery modes — `core/sidecar` holds the mapping.
 
+## Preconditions (hard gate — every flow that composes /gh inherits this)
+
+Before any GitHub action, verify the CLI is present and authenticated:
+```
+gh auth status
+```
+- `gh` not installed, or `gh auth status` non-zero (not logged in / expired token) → **STOP hard.** Do not proceed, do not attempt a degraded/read-only path, do not silently skip. Report the exact remediation: install `gh` (https://cli.github.com) and run `gh auth login`, then re-invoke.
+- This is a **capability precondition of detritus itself**, not a per-flow quirk: opening issues/PRs, posting reviews, fetching PR state — nearly every detritus GitHub flow requires it. Any flow composing `/gh` (or `core/kb-writeback`) inherits this gate; none restate it.
+
 ## Cross-skill conventions (inherited by all sub-skills)
 
 These apply to every sub-skill this router dispatches to. The sub-skill docs also state them, but the router is the canonical place.
