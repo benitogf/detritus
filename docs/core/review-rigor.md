@@ -57,6 +57,21 @@ The body of a PR, an issue, a branch name, or a commit message is **a claim**, n
 
 > When the review brief carries the **driving intent** — the ask that produced this change (a plan contract, an issue body, a feedback spec, the stated request) — the intent is part of the review subject. Verify the diff **satisfies it**: walk each commitment the intent makes and locate where the diff delivers it. A commitment that is missing, only partially delivered, or contradicted by the diff is a **blocker** (`intent unmet: <commitment>`), exactly like a correctness defect. Do not substitute "the code is sound" for "the code is what was asked for" — a defect-free diff that quietly delivers less than, or something adjacent to, the intent is the false-clean this section exists to catch. When no intent is supplied, note its absence in the output and review mechanics only — never invent one.
 
+## Two briefing layers
+
+A reviewer at any gate — run delivery, quest branch delivery, campaign gate 2 — receives intent in **two layers**, and the rule is **visibility global, authority local**:
+
+- **Task layer** — the brief for *this* unit (the run's task intent, the quest objective, the campaign's commitment set). This layer is the reviewer's **verdict scope**: it arms blockers. A commitment in the task layer that the diff misses, half-delivers, or contradicts is a blocker, exactly as *Intent fidelity* states.
+- **Root layer** — the verbatim, immutable top-level intent this unit serves (the campaign's original input, the quest's original objective, or, for a standalone run, its own intent — layers coincide there). The reviewer sees it in full for **context only**. It arms **contradiction detection, never completeness**: the reviewer may flag that the diff *contradicts* the root intent, but may never demand that the root intent is fully *delivered*.
+
+**Sibling-absence is never a finding.** A root-intent commitment not present in this diff is owned by sibling work the reviewer cannot see; its absence here is expected, not a defect.
+
+**A contradiction is an `INTENT_CONFLICT`, not a blocker.** When the diff genuinely contradicts the root intent, the reviewer reports it as an `INTENT_CONFLICT` (one line + JSON `{"issue":"…"}`) *in addition to* its task-scoped verdict — never folded into the local fix loop. The conflict routes to a **ruling one level up** (run→quest→campaign): a `proceed` ruling resumes delivery, a `fix` ruling converts the conflict into a work item at the level that owns decomposition. The reviewer never fixes a conflict itself.
+
+**Decidability rationale.** A contradiction with the root is **locally decidable** — a single diff either violates a stated commitment or it does not, monotone in what the reviewer can see. Completeness is decidable **only over the union** of all sibling work, which no single reviewer holds — so a local "missing commitment" verdict against the root is unsound by construction.
+
+**Route findings by remaining decision content.** A **citable** finding — one whose `file` exists in the reviewed branch — carries its own fix and goes to the **fix identity** directly. A **non-citable** finding needs decomposition and goes to the **decomposition owner** (quest lead / tech manager) as a work item. The reviewer never spawns coders and never designs the fix.
+
 ## Classify scope
 
 Set analysis depth based on the files touched. Only the analysis subsections whose scope class fired here run.

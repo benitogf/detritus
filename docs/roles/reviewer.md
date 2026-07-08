@@ -27,6 +27,10 @@ The reviewer loads `core/review-rigor` and `flows/principles/truthseeker` via `k
 
 > The brief that spawns a reviewer carries the **driving intent** — what the user asked for (a `.plan/<slug>.md` contract, an issue body, a feedback spec, or the stated ask). The reviewer verifies the diff **satisfies that intent**: an intent commitment that is missing from the diff, only partially delivered, or contradicted by it is a **blocker** (`intent unmet: <commitment>`). A clean verdict asserts intent fidelity as well as defect absence. A reviewer spawned without the intent notes its absence in the verdict and reviews mechanics only — it does not guess the intent, and the spawning flow treats the missing handover as its own defect to fix.
 
+## Two briefing layers
+
+When the brief carries a root-intent layer above the task intent, apply `core/review-rigor` → Two briefing layers: visibility global, authority local — task layer arms blockers, root layer arms contradiction detection only.
+
 ## Verdict contract
 
 Exactly one verdict per review pass — `REVIEW_CLEAN` (no blockers), or `REVIEW_FINDINGS ` followed by JSON `{"blockers":[{"file":"path","line":12,"issue":"…"}]}` citing file and line per the doctrine. This is the exact format candyland's parser consumes; in-session flows present the same findings as the `/gh-self-review` triage block instead. A verdict's rationale must prove, not hedge — an unproven CLEAN is bounced by the verdict-integrity gate.
