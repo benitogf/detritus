@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>detritus — a field survey</title>
+<title>detritus — memory & conscience for your AI coding assistant</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   /* ============ tokens ============ */
@@ -202,6 +202,12 @@
   .verdict blockquote p{font-family:var(--serif);font-size:clamp(24px,4vw,38px);line-height:1.28;color:var(--ink);margin:0}
   .verdict blockquote p em{color:var(--verd);font-style:italic}
   .verdict .after{margin-top:26px;max-width:var(--measure);color:var(--ink-2);font-size:16px}
+  .install{margin:26px 0 22px;font-family:var(--mono);font-size:14.5px;color:var(--verd);background:var(--panel);border:1px solid var(--hair);border-left:2px solid var(--verd);border-radius:8px;padding:16px 18px;max-width:var(--measure);overflow-x:auto;white-space:nowrap}
+  .cta-row{display:flex;flex-wrap:wrap;gap:12px}
+  .btn{display:inline-block;font-family:var(--mono);font-size:14px;text-decoration:none;padding:11px 20px;border-radius:8px;background:var(--verd);color:var(--ground);border:1px solid var(--verd);transition:transform .15s,opacity .15s}
+  .btn:hover{text-decoration:none;transform:translateY(-1px);opacity:.92}
+  .btn.ghost{background:transparent;color:var(--verd)}
+  .btn.ghost:hover{background:var(--verd-glow)}
 
   footer{border-top:1px solid var(--hair);padding:34px 0 60px;color:var(--slate);font-family:var(--mono);font-size:12.5px}
   footer .row{display:flex;flex-wrap:wrap;justify-content:space-between;gap:14px;align-items:center}
@@ -221,7 +227,7 @@
 <header class="hero">
   <canvas id="strata" aria-hidden="true"></canvas>
   <div class="wrap hero-inner">
-    <span class="hero-badge"><span class="dot"></span> field survey · benitogf/detritus · v3.37.0</span>
+    <span class="hero-badge"><span class="dot"></span> benitogf/detritus · MCP server · v3.37.0</span>
     <h1 class="title">detri<span class="frag">tus</span></h1>
     <p class="subtitle">The sediment a codebase leaves behind — doctrine, code sense, and delivery — compacted into one Go binary an AI can read.</p>
     <div class="hero-meta">
@@ -247,7 +253,7 @@
   <!-- overview -->
   <section class="strata reveal">
     <div class="spine">
-      <div class="depth"><span class="mark">00</span><span class="lyr">Core sample</span></div>
+      <div class="depth"><span class="mark">00</span><span class="lyr">Overview</span></div>
       <div class="body">
         <h2>One binary. Three seams of value.</h2>
         <p>Detritus is a single, embeddable Go server that speaks the Model Context Protocol. It carries a curated knowledge base of engineering <b>doctrine</b>, a set of zero-setup tools for reading a <b>codebase</b>, and a layer of slash commands that move real work through one pipeline — <b>plan → build → review → deliver</b> — either inside your session or handed off to a separate multi-agent sidecar.</p>
@@ -355,54 +361,16 @@
   <hr class="rule">
 </main>
 
-<!-- fault lines -->
-<section class="faults">
-  <div class="wrap">
-    <div class="head reveal">
-      <p class="eyebrow" style="color:var(--rust)">Fault lines</p>
-      <h2>Where the strata fracture</h2>
-      <p>An honest survey names the faults — the project's own doctrine demands it. None of these are sloppiness; the sharpest are architectural residue and the cost of an ambitious design. Each one is tracked as a GitHub issue, not left on this page — <a href="https://github.com/benitogf/detritus/issues?q=is%3Aissue+label%3Asurvey-fault-line">see all fault lines →</a></p>
-    </div>
-    <div class="fault-grid">
-      <a class="fault s-struct reveal" href="https://github.com/benitogf/detritus/issues/146">
-        <div class="sev">Structural · #146</div>
-        <h3>The intelligence is Go-only</h3>
-        <p>code_map / code_graph skip every non-Go file; polyglot repos get only the regex outline.</p>
-      </a>
-      <a class="fault s-struct reveal" href="https://github.com/benitogf/detritus/issues/147">
-        <div class="sev">Structural · #147</div>
-        <h3>Retrieval carries a ghost</h3>
-        <p>Package doc + Trust/Source fields describe the deleted memory store; the build-time index is discarded and rebuilt in-memory each start.</p>
-      </a>
-      <a class="fault s-scale reveal" href="https://github.com/benitogf/detritus/issues/148">
-        <div class="sev">Scaling · #148</div>
-        <h3>code_graph is uncached</h3>
-        <p>A full packages.Load with deps + types runs on every call — multi-second type-checking per query on a large module.</p>
-      </a>
-      <a class="fault s-scale reveal" href="https://github.com/benitogf/detritus/issues/149">
-        <div class="sev">Coupling · #149</div>
-        <h3>The sidecar is a singleton</h3>
-        <p>Hard-coded ports, health taken as identity, and a fixed temp file for the inherited-MCP handshake that races across runs.</p>
-      </a>
-      <a class="fault s-scale reveal" href="https://github.com/benitogf/detritus/issues/150">
-        <div class="sev">Fragility · #150</div>
-        <h3>A hand-rolled TOML editor</h3>
-        <p>~240 lines reimplement TOML upsert to edit Codex's config without a library — a standing correctness liability.</p>
-      </a>
-      <a class="fault s-struct reveal" href="https://github.com/benitogf/detritus/issues/151">
-        <div class="sev">Supply chain · #151</div>
-        <h3>Self-update doesn't verify</h3>
-        <p>checksums.txt is published but unused — --update execs the release binary with no checksum or signature check.</p>
-      </a>
-    </div>
-  </div>
-</section>
-
-<!-- verdict -->
+<!-- get started -->
 <section class="verdict wrap reveal">
-  <p class="eyebrow">The reading</p>
-  <blockquote><p>A serious, opinionated attempt to give an AI a <em>codebase's memory and a craftsman's conscience</em> — and mostly, it lands.</p></blockquote>
-  <p class="after">The novel ideas are real: doctrine as the single source of truth with drift tests to keep it honest, a delivery classifier that reasons about intent from live state, learned memory collapsed into a reviewed PR, and a code-graph that treats "what breaks if I change this" as a first-class question. The faults are the honest cost of that ambition, not carelessness. For a project this young, the ratio of considered design to accidental complexity is unusually good.</p>
+  <p class="eyebrow">Get started</p>
+  <blockquote><p>Give your assistant a <em>codebase's memory and a craftsman's conscience</em> — in one Go binary that installs itself.</p></blockquote>
+  <p class="after">Ask your AI coding tool to install it. The knowledge base, the zero-setup code intelligence, and the delivery commands register themselves across Claude Code, VS Code, Cursor, Windsurf, and Codex — no config to write.</p>
+  <div class="install">please install detritus mcp https://github.com/benitogf/detritus</div>
+  <div class="cta-row">
+    <a class="btn" href="https://github.com/benitogf/detritus">View on GitHub →</a>
+    <a class="btn ghost" href="https://github.com/benitogf/detritus/issues">Roadmap &amp; issues</a>
+  </div>
 </section>
 
 <footer class="wrap">
@@ -410,7 +378,7 @@
     <span>benitogf/detritus · v3.37.0 · go 1.25 · bleve · pagerank · go/packages</span>
     <span><a href="https://github.com/benitogf/detritus">github.com/benitogf/detritus →</a></span>
   </div>
-  <p class="disc">A field survey read from the source at HEAD — grounded in the code, not the README. Line-level findings on request. Built in the spirit of truthseeker: praise where earned, faults where found.</p>
+  <p class="disc">An MCP server for AI coding assistants — a curated knowledge base of engineering doctrine, live codebase exploration, and slash commands that carry work from plan to open PR through one pipeline.</p>
 </footer>
 
 <script>
