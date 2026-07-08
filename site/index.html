@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>detritus — a field survey</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* ============ tokens ============ */
+  :root{
+    --ground:#0d1316;
+    --ground-2:#111a1e;
+    --panel:#141f24;
+    --panel-2:#182831;
+    --hair:#243740;
+    --hair-soft:#1c2b32;
+    --ink:#e7eef0;
+    --ink-2:#aebcc2;
+    --slate:#7c8d96;
+    --slate-dim:#556169;
+    --verd:#4fc4b0;         /* oxidized copper — the mineral signature */
+    --verd-deep:#2f9d8b;
+    --brass:#d29e56;        /* warm mineral — the quest/candyland layer */
+    --rust:#d67561;         /* fault / fracture */
+    --verd-glow:rgba(79,196,176,.14);
+    --measure:66ch;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","Cascadia Code","JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --ground:#e9ecee;
+      --ground-2:#e1e6e8;
+      --panel:#f3f5f6;
+      --panel-2:#eaeef0;
+      --hair:#cdd6da;
+      --hair-soft:#dbe2e5;
+      --ink:#141e23;
+      --ink-2:#3f4d54;
+      --slate:#5c6b73;
+      --slate-dim:#7f8d94;
+      --verd:#1f8a78;
+      --verd-deep:#15705f;
+      --brass:#a9762c;
+      --rust:#b8503a;
+      --verd-glow:rgba(31,138,120,.10);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0d1316; --ground-2:#111a1e; --panel:#141f24; --panel-2:#182831;
+    --hair:#243740; --hair-soft:#1c2b32; --ink:#e7eef0; --ink-2:#aebcc2;
+    --slate:#7c8d96; --slate-dim:#556169; --verd:#4fc4b0; --verd-deep:#2f9d8b;
+    --brass:#d29e56; --rust:#d67561; --verd-glow:rgba(79,196,176,.14);
+  }
+  :root[data-theme="light"]{
+    --ground:#e9ecee; --ground-2:#e1e6e8; --panel:#f3f5f6; --panel-2:#eaeef0;
+    --hair:#cdd6da; --hair-soft:#dbe2e5; --ink:#141e23; --ink-2:#3f4d54;
+    --slate:#5c6b73; --slate-dim:#7f8d94; --verd:#1f8a78; --verd-deep:#15705f;
+    --brass:#a9762c; --rust:#b8503a; --verd-glow:rgba(31,138,120,.10);
+  }
+
+  /* ============ base ============ */
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;background:var(--ground);color:var(--ink);
+    font-family:var(--sans);font-size:17px;line-height:1.65;
+    -webkit-font-smoothing:antialiased;overflow-x:hidden;
+  }
+  ::selection{background:var(--verd);color:var(--ground)}
+  a{color:var(--verd);text-decoration:none}
+  a:hover{text-decoration:underline;text-underline-offset:3px}
+  :focus-visible{outline:2px solid var(--verd);outline-offset:3px;border-radius:2px}
+
+  .wrap{max-width:1120px;margin:0 auto;padding:0 28px}
+  .lede{max-width:var(--measure)}
+
+  h1,h2,h3{font-family:var(--serif);font-weight:600;text-wrap:balance;letter-spacing:-.01em;line-height:1.1}
+  .mono{font-family:var(--mono)}
+  .eyebrow{
+    font-family:var(--mono);font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+    color:var(--verd);margin:0 0 14px;font-weight:500;
+  }
+  .num{font-variant-numeric:tabular-nums}
+
+  /* ============ hero ============ */
+  header.hero{position:relative;border-bottom:1px solid var(--hair);overflow:hidden}
+  #strata{position:absolute;inset:0;width:100%;height:100%;display:block;opacity:.9}
+  .hero-inner{position:relative;z-index:2;padding:104px 0 76px}
+  .hero-badge{
+    display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12.5px;
+    letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2);
+    border:1px solid var(--hair);background:color-mix(in srgb,var(--panel) 72%,transparent);
+    padding:6px 13px;border-radius:100px;margin-bottom:26px;backdrop-filter:blur(3px);
+  }
+  .hero-badge .dot{width:7px;height:7px;border-radius:50%;background:var(--verd);box-shadow:0 0 0 3px var(--verd-glow)}
+  h1.title{font-size:clamp(52px,10vw,116px);margin:0;letter-spacing:-.035em;line-height:.92}
+  h1.title .frag{color:var(--verd)}
+  .subtitle{
+    font-family:var(--serif);font-style:italic;font-size:clamp(20px,3.2vw,30px);
+    color:var(--ink-2);margin:22px 0 0;max-width:30ch;line-height:1.25;
+  }
+  .hero-meta{
+    margin-top:34px;display:flex;flex-wrap:wrap;gap:10px 26px;font-family:var(--mono);
+    font-size:13px;color:var(--slate);letter-spacing:.02em;
+  }
+  .hero-meta b{color:var(--ink);font-weight:600}
+
+  /* ============ readout strip ============ */
+  .readout{
+    display:grid;grid-template-columns:repeat(6,1fr);gap:0;
+    border-bottom:1px solid var(--hair);background:var(--ground-2);
+  }
+  .readout .cell{padding:26px 20px;border-right:1px solid var(--hair-soft)}
+  .readout .cell:last-child{border-right:0}
+  .readout .k{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--slate);margin-bottom:8px}
+  .readout .v{font-family:var(--serif);font-size:34px;line-height:1;color:var(--ink)}
+  .readout .v small{font-size:15px;color:var(--slate);font-family:var(--mono);margin-left:3px}
+  @media(max-width:860px){.readout{grid-template-columns:repeat(3,1fr)}
+    .readout .cell:nth-child(3){border-right:0}
+    .readout .cell:nth-child(1),.readout .cell:nth-child(2),.readout .cell:nth-child(3){border-bottom:1px solid var(--hair-soft)}}
+  @media(max-width:460px){.readout{grid-template-columns:repeat(2,1fr)}
+    .readout .cell{border-bottom:1px solid var(--hair-soft)}
+    .readout .cell:nth-child(2n){border-right:0}}
+
+  /* ============ strata layout ============ */
+  main{padding:8px 0 0}
+  .strata{position:relative;padding:74px 0 8px}
+  /* stratigraphic spine */
+  .spine{display:grid;grid-template-columns:118px 1fr;gap:0}
+  @media(max-width:820px){.spine{grid-template-columns:1fr}}
+  .depth{
+    position:relative;font-family:var(--mono);font-size:12px;color:var(--slate);
+    padding-top:6px;border-right:1px solid var(--hair);
+  }
+  @media(max-width:820px){.depth{border-right:0;border-bottom:1px solid var(--hair-soft);padding-bottom:16px;margin-bottom:26px;display:flex;gap:16px;align-items:baseline}}
+  .depth .mark{font-size:22px;color:var(--verd);font-family:var(--serif)}
+  .depth .lyr{display:block;letter-spacing:.16em;text-transform:uppercase;margin-top:4px;color:var(--slate-dim)}
+  @media(max-width:820px){.depth .lyr{margin-top:0}}
+  .body{padding-left:40px}
+  @media(max-width:820px){.body{padding-left:0}}
+
+  .strata h2{font-size:clamp(30px,4.4vw,44px);margin:0 0 6px}
+  .strata .kicker{font-family:var(--mono);color:var(--brass);font-size:13px;letter-spacing:.04em;margin:0 0 22px}
+  .strata p{color:var(--ink-2);margin:0 0 18px;max-width:var(--measure)}
+  .strata p b,.strata li b{color:var(--ink);font-weight:600}
+  .strata .plus{color:var(--verd);font-weight:700}
+
+  /* specimen cards */
+  .specimens{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1px;background:var(--hair-soft);border:1px solid var(--hair-soft);margin:26px 0 6px;border-radius:10px;overflow:hidden}
+  .spec{background:var(--panel);padding:22px 22px 24px;transition:background .25s}
+  .spec:hover{background:var(--panel-2)}
+  .spec .tool{font-family:var(--mono);font-size:14.5px;color:var(--verd);font-weight:600;margin-bottom:9px;display:flex;align-items:center;gap:8px}
+  .spec .tool::before{content:"";width:6px;height:6px;background:var(--verd);border-radius:1px;transform:rotate(45deg);flex:none}
+  .spec .desc{font-size:14.5px;color:var(--ink-2);line-height:1.55}
+
+  /* callout panel */
+  .panel{
+    background:var(--panel);border:1px solid var(--hair);border-left:2px solid var(--verd);
+    border-radius:8px;padding:22px 24px;margin:24px 0;
+  }
+  .panel.brass{border-left-color:var(--brass)}
+  .panel .ptitle{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--slate);margin-bottom:10px}
+  .panel p{margin:0;font-size:15.5px}
+  .panel p+p{margin-top:12px}
+
+  ul.tight{margin:16px 0;padding:0;list-style:none;max-width:var(--measure)}
+  ul.tight li{position:relative;padding-left:26px;margin:0 0 12px;color:var(--ink-2);font-size:15.5px;line-height:1.55}
+  ul.tight li::before{content:"▸";position:absolute;left:4px;top:0;color:var(--verd)}
+
+  code{font-family:var(--mono);font-size:.88em;background:color-mix(in srgb,var(--verd) 13%,transparent);color:var(--verd);padding:1.5px 6px;border-radius:4px;white-space:nowrap}
+
+  .flow-row{display:flex;flex-wrap:wrap;gap:9px;margin:22px 0 6px}
+  .chip{font-family:var(--mono);font-size:13px;color:var(--ink-2);border:1px solid var(--hair);background:var(--panel);padding:6px 12px;border-radius:6px}
+  .chip .s{color:var(--brass)}
+  .arrow{color:var(--slate-dim);align-self:center;font-family:var(--mono)}
+
+  hr.rule{border:0;border-top:1px solid var(--hair);margin:64px 0 0}
+
+  /* ============ fault lines ============ */
+  .faults{border-top:1px solid var(--hair);background:var(--ground-2);margin-top:70px;padding:78px 0 84px}
+  .faults .head{max-width:var(--measure);margin-bottom:8px}
+  .faults h2{font-size:clamp(30px,4.6vw,46px);margin:0 0 14px}
+  .faults .head p{color:var(--ink-2);margin:0}
+  .fault-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:38px}
+  .fault{display:block;text-decoration:none;color:inherit;background:var(--panel);border:1px solid var(--hair);border-radius:9px;padding:22px 22px 24px;position:relative;transition:border-color .2s,transform .2s}
+  a.fault:hover{text-decoration:none;border-color:var(--sev,var(--verd));transform:translateY(-2px)}
+  .fault::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:2px;border-radius:2px;background:var(--sev,var(--slate))}
+  .fault{padding-left:26px}
+  .fault .sev{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--sev,var(--slate));margin-bottom:9px;font-weight:600}
+  .fault h3{font-family:var(--sans);font-weight:650;font-size:16.5px;letter-spacing:0;margin:0 0 8px;color:var(--ink);line-height:1.3}
+  .fault p{margin:0;font-size:14px;color:var(--ink-2);line-height:1.55}
+  .fault p code{font-size:.86em;white-space:normal}
+  .s-struct{--sev:var(--rust)}
+  .s-scale{--sev:var(--brass)}
+  .s-minor{--sev:var(--verd)}
+
+  /* ============ verdict / footer ============ */
+  .verdict{padding:80px 0}
+  .verdict .eyebrow{color:var(--brass)}
+  .verdict blockquote{margin:0;max-width:34ch}
+  .verdict blockquote p{font-family:var(--serif);font-size:clamp(24px,4vw,38px);line-height:1.28;color:var(--ink);margin:0}
+  .verdict blockquote p em{color:var(--verd);font-style:italic}
+  .verdict .after{margin-top:26px;max-width:var(--measure);color:var(--ink-2);font-size:16px}
+
+  footer{border-top:1px solid var(--hair);padding:34px 0 60px;color:var(--slate);font-family:var(--mono);font-size:12.5px}
+  footer .row{display:flex;flex-wrap:wrap;justify-content:space-between;gap:14px;align-items:center}
+  footer a{color:var(--slate)}
+  footer .disc{max-width:60ch;margin-top:18px;line-height:1.6;color:var(--slate-dim)}
+
+  /* reveal */
+  .reveal{opacity:0;transform:translateY(16px)}
+  .reveal.in{opacity:1;transform:none;transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1)}
+  @media(prefers-reduced-motion:reduce){
+    .reveal{opacity:1;transform:none;transition:none}
+    #strata{opacity:.5}
+  }
+</style>
+</head>
+<body>
+<header class="hero">
+  <canvas id="strata" aria-hidden="true"></canvas>
+  <div class="wrap hero-inner">
+    <span class="hero-badge"><span class="dot"></span> field survey · benitogf/detritus · v3.37.0</span>
+    <h1 class="title">detri<span class="frag">tus</span></h1>
+    <p class="subtitle">The sediment a codebase leaves behind — doctrine, code sense, and delivery — compacted into one Go binary an AI can read.</p>
+    <div class="hero-meta">
+      <span><b>MCP server</b> for AI coding assistants</span>
+      <span>go <b>1.25</b></span>
+      <span><b>zero</b> cloud calls</span>
+      <span>stdio · read-only</span>
+    </div>
+  </div>
+</header>
+
+<section class="readout" aria-label="specimen readings">
+  <div class="cell"><div class="k">MCP tools</div><div class="v num">7</div></div>
+  <div class="cell"><div class="k">Slash commands</div><div class="v num">39</div></div>
+  <div class="cell"><div class="k">Tests</div><div class="v num">130</div></div>
+  <div class="cell"><div class="k">Releases</div><div class="v num">66</div></div>
+  <div class="cell"><div class="k">Go source</div><div class="v num">7k<small>loc</small></div></div>
+  <div class="cell"><div class="k">Host tools</div><div class="v num">6</div></div>
+</section>
+
+<main class="wrap">
+
+  <!-- overview -->
+  <section class="strata reveal">
+    <div class="spine">
+      <div class="depth"><span class="mark">00</span><span class="lyr">Core sample</span></div>
+      <div class="body">
+        <h2>One binary. Three seams of value.</h2>
+        <p>Detritus is a single, embeddable Go server that speaks the Model Context Protocol. It carries a curated knowledge base of engineering <b>doctrine</b>, a set of zero-setup tools for reading a <b>codebase</b>, and a layer of slash commands that move real work through one pipeline — <b>plan → build → review → deliver</b> — either inside your session or handed off to a separate multi-agent sidecar.</p>
+        <p>The genuinely unusual bet: <b>the docs are the product, and the Go is the delivery mechanism.</b> Everything a human touches installs itself into whatever coding tool you already use — and no flow ever merges on its own. The human merge stays the gate.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- knowledge -->
+  <section class="strata reveal">
+    <div class="spine">
+      <div class="depth"><span class="mark">01</span><span class="lyr">Knowledge</span></div>
+      <div class="body">
+        <p class="kicker">// the kb_* seam</p>
+        <h2>A knowledge base tuned for a machine reader</h2>
+        <p>The corpus is markdown, split one chunk per <code>##</code> section, enriched at build time with TF-IDF keyword triggers, and frozen into a <b>deterministic</b> <code>data.gob</code> — sorted and tie-broken so the same docs compile to the same bytes on any machine. At runtime it's a title-weighted <b>bleve</b> index reranked with MMR.</p>
+        <div class="specimens">
+          <div class="spec"><div class="tool">kb_search</div><div class="desc">Ranked cross-doc section search — returns snippets, machine-actionable "next hop" hints, and <code>kb://</code> resource links instead of dumping whole files.</div></div>
+          <div class="spec"><div class="tool">kb_get</div><div class="desc">Fetch a whole doc, or a single <code>##</code> section — the token-economy path an agent uses after it knows what it wants.</div></div>
+          <div class="spec"><div class="tool">kb_sections</div><div class="desc">List a doc's headings from metadata with no file read, so the agent can aim <code>kb_get</code> before spending context.</div></div>
+          <div class="spec"><div class="tool">kb_list</div><div class="desc">Enumerate the corpus with descriptions — the map before the drill.</div></div>
+        </div>
+        <p style="margin-top:22px">Every response is shaped for the consumer that reads it: an AI, not a person. Search punts identifier-shaped queries straight to <code>code_graph</code> rather than answering them badly. That restraint is the design.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- code intelligence -->
+  <section class="strata reveal">
+    <div class="spine">
+      <div class="depth"><span class="mark">02</span><span class="lyr">Code sense</span></div>
+      <div class="body">
+        <p class="kicker">// the code_* seam · zero-setup</p>
+        <h2>Live code intelligence, no index to build</h2>
+        <p>No pack, no config, no stored index — the tools read the repo live and auto-discover the project root (go.mod &gt; .git &gt; language marker). <code>.gitignore</code> honoured, binaries sniffed, and a per-file, mtime-keyed, atomically-written parse cache means the first pass pays and the rest is fast.</p>
+        <div class="specimens">
+          <div class="spec"><div class="tool">code_map</div><div class="desc"><b>PageRank</b> (damping 0.85) over the file→symbol-reference graph, token-budgeted and focus-biased — the important files first, within a budget.</div></div>
+          <div class="spec"><div class="tool">code_graph</div><div class="desc">Real <code>go/types</code> + <code>go/packages</code>: who-calls, reachable-from, <b>impacted-by</b> (blast radius) and the tests that break — or interface implementers.</div></div>
+          <div class="spec"><div class="tool">code_outline</div><div class="desc"><code>go/ast</code> signatures for Go; a fast regex pass for JS/TS, Python, Rust, Java, C# and C/C++.</div></div>
+        </div>
+        <div class="panel">
+          <div class="ptitle">The standout</div>
+          <p><code>code_graph</code> is the best-engineered code in the tree. It canonicalizes the package/test-variant duplicates that <code>Tests:true</code> produces, gates its fallback on <b>production</b> packages only (a broken <code>_test.go</code> won't degrade your impact analysis mid-edit), keeps test funcs from crowding real dependents out of the cap, and <b>never truncates silently</b> — it even looks one hop past the depth bound to tell you a caller is out there. Each of those is a subtle bug a naive version gets wrong, and each is pinned by a named regression test.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- learned memory -->
+  <section class="strata reveal">
+    <div class="spine">
+      <div class="depth"><span class="mark">03</span><span class="lyr">Memory</span></div>
+      <div class="body">
+        <p class="kicker">// learned long-term memory</p>
+        <h2>A lesson is a pull request</h2>
+        <p>The learned-memory subsystem was <b>deleted and redesigned into nothing</b> — and that's the clever part. There is no local store, no agent-write API, no LRU, no dedup pass, no recall-miss counter. A lesson is just a markdown doc under <code>docs/lessons/</code>, shipped by a reviewed PR, distributed by <code>detritus --update</code>, and retrieved by the same <code>kb_search</code> as everything else.</p>
+        <div class="panel">
+          <div class="ptitle">Why it's right</div>
+          <p>"The trust boundary is the review, not a runtime firewall." A shared agent-written store is a shared attack surface; here the surface is a code review. An entire category of runtime complexity was replaced by a workflow that already existed — the exact "if removing it doesn't break anything, it shouldn't exist" move the project's own doctrine preaches.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- candyland -->
+  <section class="strata reveal">
+    <div class="spine">
+      <div class="depth"><span class="mark">04</span><span class="lyr">Sidecar</span></div>
+      <div class="body">
+        <p class="kicker">// candyland · out-of-process delivery</p>
+        <h2>When one session isn't enough: candyland</h2>
+        <p>For work too big for a single agent, detritus hands off to <b>candyland</b> — a long-running REST sidecar it launches and correctly detaches (new session on Unix, new process group on Windows) so it outlives the session that started it. A tech-lead partitions the work, coders build concurrently in git worktrees, a reviewer loops fix→re-review until clean, then it delivers. <em style="color:var(--slate)">(That engine lives in its own repo — what ships here is the launcher and the classifier.)</em></p>
+        <div class="flow-row">
+          <span class="chip"><span class="s">run</span> one unit</span><span class="arrow">⊂</span>
+          <span class="chip"><span class="s">quest</span> converge → 1 PR/repo</span><span class="arrow">⊂</span>
+          <span class="chip"><span class="s">campaign</span> two gates, child quests</span>
+          <span class="chip" style="margin-left:auto"><span class="s">adventure</span> 1 PR / finding</span>
+        </div>
+        <div class="panel brass">
+          <div class="ptitle">The quiet genius: the delivery classifier</div>
+          <p>Before launching, detritus reads live <code>gh</code> state and decides whether your input means <b>open a PR</b>, <b>address feedback</b>, or <b>review</b> — and which PR. Its sharpest idea is telling a <em>hand-off</em> ("act on #97") from a <em>citation</em> (a plan that merely mentions #97 in prose), so a URL buried in a spec can't hijack delivery. Unaddressed change-requests beat review-intent; a later approval supersedes an older change-request; <code>gh</code> being down degrades honestly and says so. An ~18-row truth table locks all of it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- flows / doctrine -->
+  <section class="strata reveal">
+    <div class="spine">
+      <div class="depth"><span class="mark">05</span><span class="lyr">Doctrine</span></div>
+      <div class="body">
+        <p class="kicker">// docs/flows · one source, many surfaces</p>
+        <h2>Doctrine that installs itself</h2>
+        <p>A doc is a command <b>if and only if</b> it lives under <code>docs/flows/</code>. From that single rule, one binary generates skills, prompt files, sub-agents, router instructions, the README table and marketplace shims — then registers itself as an MCP server across <b>Claude Code, VS Code/Copilot, Cursor, Windsurf, Codex and Verdent</b>. The generated shim is a stable <code>kb_get</code> indirection, so editing a doc ships new behaviour with nothing to regenerate client-side. Drift tests fail the build if the surface and the docs ever disagree.</p>
+        <ul class="tight">
+          <li><b>truthseeker</b> — always active. Prove before acting; reject fragility; make the invisible visible; push back on the user when the evidence demands it.</li>
+          <li><b>review-rigor</b> — forbidden-action tables with IDs, mandatory checks R1–R8, closed-enum verdicts (<code>approve|changes</code>), and hedge-words <b>banned</b> outright. No "approve with reservations."</li>
+          <li><b>the universal pipeline</b> — every flow runs plan → build → review-with-rework → deliver, and <span class="plus">no flow may skip a stage</span>. <code>/babysit</code> merges only when an approval's commit matches HEAD — a push invalidates it.</li>
+          <li><b>todoguard</b> — a PreToolUse hook that trusts Claude's <code>agent_id</code>, deliberately distrusts the spoofable <code>agent_type</code>, and fails open. A small, honest threat model.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule">
+</main>
+
+<!-- fault lines -->
+<section class="faults">
+  <div class="wrap">
+    <div class="head reveal">
+      <p class="eyebrow" style="color:var(--rust)">Fault lines</p>
+      <h2>Where the strata fracture</h2>
+      <p>An honest survey names the faults — the project's own doctrine demands it. None of these are sloppiness; the sharpest are architectural residue and the cost of an ambitious design. Each one is tracked as a GitHub issue, not left on this page — <a href="https://github.com/benitogf/detritus/issues?q=is%3Aissue+label%3Asurvey-fault-line">see all fault lines →</a></p>
+    </div>
+    <div class="fault-grid">
+      <a class="fault s-struct reveal" href="https://github.com/benitogf/detritus/issues/146">
+        <div class="sev">Structural · #146</div>
+        <h3>The intelligence is Go-only</h3>
+        <p>code_map / code_graph skip every non-Go file; polyglot repos get only the regex outline.</p>
+      </a>
+      <a class="fault s-struct reveal" href="https://github.com/benitogf/detritus/issues/147">
+        <div class="sev">Structural · #147</div>
+        <h3>Retrieval carries a ghost</h3>
+        <p>Package doc + Trust/Source fields describe the deleted memory store; the build-time index is discarded and rebuilt in-memory each start.</p>
+      </a>
+      <a class="fault s-scale reveal" href="https://github.com/benitogf/detritus/issues/148">
+        <div class="sev">Scaling · #148</div>
+        <h3>code_graph is uncached</h3>
+        <p>A full packages.Load with deps + types runs on every call — multi-second type-checking per query on a large module.</p>
+      </a>
+      <a class="fault s-scale reveal" href="https://github.com/benitogf/detritus/issues/149">
+        <div class="sev">Coupling · #149</div>
+        <h3>The sidecar is a singleton</h3>
+        <p>Hard-coded ports, health taken as identity, and a fixed temp file for the inherited-MCP handshake that races across runs.</p>
+      </a>
+      <a class="fault s-scale reveal" href="https://github.com/benitogf/detritus/issues/150">
+        <div class="sev">Fragility · #150</div>
+        <h3>A hand-rolled TOML editor</h3>
+        <p>~240 lines reimplement TOML upsert to edit Codex's config without a library — a standing correctness liability.</p>
+      </a>
+      <a class="fault s-struct reveal" href="https://github.com/benitogf/detritus/issues/151">
+        <div class="sev">Supply chain · #151</div>
+        <h3>Self-update doesn't verify</h3>
+        <p>checksums.txt is published but unused — --update execs the release binary with no checksum or signature check.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- verdict -->
+<section class="verdict wrap reveal">
+  <p class="eyebrow">The reading</p>
+  <blockquote><p>A serious, opinionated attempt to give an AI a <em>codebase's memory and a craftsman's conscience</em> — and mostly, it lands.</p></blockquote>
+  <p class="after">The novel ideas are real: doctrine as the single source of truth with drift tests to keep it honest, a delivery classifier that reasons about intent from live state, learned memory collapsed into a reviewed PR, and a code-graph that treats "what breaks if I change this" as a first-class question. The faults are the honest cost of that ambition, not carelessness. For a project this young, the ratio of considered design to accidental complexity is unusually good.</p>
+</section>
+
+<footer class="wrap">
+  <div class="row">
+    <span>benitogf/detritus · v3.37.0 · go 1.25 · bleve · pagerank · go/packages</span>
+    <span><a href="https://github.com/benitogf/detritus">github.com/benitogf/detritus →</a></span>
+  </div>
+  <p class="disc">A field survey read from the source at HEAD — grounded in the code, not the README. Line-level findings on request. Built in the spirit of truthseeker: praise where earned, faults where found.</p>
+</footer>
+
+<script>
+(function(){
+  // stratigraphic sediment settle — ambient, subtle, reduced-motion aware
+  var c=document.getElementById('strata'),x=c.getContext('2d'),W,H,dpr,grains=[],bands=[],raf,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  function tone(){var d=getComputedStyle(document.documentElement);return{
+    verd:d.getPropertyValue('--verd').trim(),brass:d.getPropertyValue('--brass').trim(),
+    slate:d.getPropertyValue('--slate').trim(),hair:d.getPropertyValue('--hair').trim()};}
+  var T=tone();
+  function size(){dpr=Math.min(devicePixelRatio||1,2);W=c.clientWidth;H=c.clientHeight;c.width=W*dpr;c.height=H*dpr;x.setTransform(dpr,0,0,dpr,0,0);build();}
+  function hexA(h,a){h=h.replace('#','');if(h.length===3)h=h.split('').map(function(s){return s+s;}).join('');var n=parseInt(h,16);return'rgba('+(n>>16&255)+','+(n>>8&255)+','+(n&255)+','+a+')';}
+  function build(){
+    bands=[];var cols=[T.verd,T.brass,T.slate,T.verd],n=5,base=H*0.30;
+    for(var i=0;i<n;i++){var y=base+(H-base)*(i/n)+Math.random()*10;bands.push({y:y,h:(H-base)/n,c:cols[i%cols.length]});}
+    grains=[];var count=reduce?0:Math.min(150,Math.floor(W/9));
+    for(var g=0;g<count;g++)grains.push(newGrain(true));
+  }
+  function newGrain(init){
+    var b=bands[Math.floor(Math.random()*bands.length)];
+    return{x:Math.random()*W,y:init?b.y+Math.random()*b.h:-8,ty:b.y+Math.random()*b.h,
+      c:b.c,r:0.6+Math.random()*1.6,v:0.25+Math.random()*0.9,a:0.25+Math.random()*0.5,rest:init};
+  }
+  function frame(){
+    x.clearRect(0,0,W,H);
+    // faint strata bands
+    for(var i=0;i<bands.length;i++){var b=bands[i];x.fillStyle=hexA(b.c,0.045);x.fillRect(0,b.y,W,b.h+1);
+      x.strokeStyle=hexA(b.c,0.10);x.beginPath();x.moveTo(0,b.y);x.lineTo(W,b.y);x.stroke();}
+    for(var g=0;g<grains.length;g++){var p=grains[g];
+      if(!p.rest){p.y+=p.v;if(p.y>=p.ty){p.y=p.ty;p.rest=true;}}
+      x.fillStyle=hexA(p.c,p.a);x.beginPath();x.arc(p.x,p.y,p.r,0,6.2832);x.fill();
+      if(p.rest&&Math.random()<0.004){p.rest=false;p.y=-8;p.x=Math.random()*W;var b2=bands[Math.floor(Math.random()*bands.length)];p.ty=b2.y+Math.random()*b2.h;p.c=b2.c;}
+    }
+    if(!reduce)raf=requestAnimationFrame(frame);
+  }
+  function draw(){cancelAnimationFrame(raf);frame();}   // one static pass when reduced, else starts the loop
+  size();addEventListener('resize',function(){size();draw();});
+  draw();
+  // re-read palette when theme toggles
+  new MutationObserver(function(){T=tone();build();draw();}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+  // scroll reveal
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{threshold:0.12});
+  document.querySelectorAll('.reveal').forEach(function(el){io.observe(el);});
+})();
+</script>
+
+</body>
+</html>
