@@ -90,6 +90,10 @@ A `green` return carries these mandatory fields — **missing field = incomplete
 | `files` | every file changed, all inside the assigned boundary |
 | `notes` | out-of-scope needs / risky adjacent code observed (tech-lead triages per `core/completion`) — empty if none, never omitted |
 
+### Self-acknowledged incident — report as plain text
+
+A coder that catches itself in a self-acknowledged mistake or doctrine violation (`core/ego` trigger ①: "you are right, I …", "I didn't follow …", "I ignored /…") **REPORTS** it to the tech-lead as **plain report text** in `notes` — a one-line admission of what it did wrong. This is ordinary prose, **not** a new fenced protocol: do NOT invent a `BLOCKED`-style line for it. The tech-lead records it (`roles/tech-lead` → escalation/decisions) so the user's session can route it post-delivery per `core/ego`. Capture is always in-session; the coder never routes it itself.
+
 ## Out-of-scope work
 
 A coder reports out-of-scope needs or risky adjacent code to the tech-lead as part of its `blocked`/status output — it never acts on them or folds them in. Disposition is the tech-lead's call per `core/completion`'s three dispositions (`roles/tech-lead` → *Dispositions*): in-scope work is done now, a genuinely separate feature becomes a feature-split, a capability blocker is surfaced. A coder never converts an in-scope need into a deferral.

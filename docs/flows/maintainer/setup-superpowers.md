@@ -144,3 +144,5 @@ Concise summary:
 - NEVER overwrite or reorder user-defined settings entries — only fill in missing ones
 - NEVER touch `~/.claude/rules/`, `~/.claude/hooks/`, or other skills — those belong to `setup-extra-rules`
 - NEVER include credentials, IPs, or hostnames in `autoMode.environment` without explicit user approval
+
+**Incident hook.** Any mistake surfaced while running this flow — a self-acknowledged doctrine violation ("you are right, I …", "I didn't follow …") or a blocker on a PR it authored — is an incident: detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

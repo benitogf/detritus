@@ -137,3 +137,7 @@ Typing `/<command>` is the user's choice of *how* to do the work, not just *what
 ### When Evaluating a Trade-Off
 ❌ "This is the best approach"
 ✅ "This is better than X because Y, but it costs Z."
+
+---
+
+**Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

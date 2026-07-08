@@ -49,11 +49,7 @@ A run is bounded and converges: **one PR per impacted repo** (`core/flows` → *
 
 ## Incident hook — capture the lesson after delivery
 
-A failure, misalignment, or correction surfaced during a run is a learning signal, but it never preempts delivery: **finish the run's PR(s) first — never trade the deliverable for the lesson PR.** Lesson capture is **in-session, never in the sidecar** (like watch-to-merge above): once delivered, route the signal in the user's session to the matching intake, which owns the distill→ship machinery (composed by reference, not restated here):
-
-- an in-session **user correction** → `/grow` (`flows/maintainer/grow`)
-- **candyland telemetry** across runs → `/learn` (`flows/maintainer/learn`)
-- **a PR carrying review outcomes** → `/absorb` (`flows/maintainer/absorb`)
+A detected failure, misalignment, **self-acknowledged mistake/doctrine violation**, or user correction during a run is a learning signal, but it never preempts the primary deliverable: **finish the run's PR(s) first, and capture is in-session, never in the sidecar (like watch-to-merge above) — never trade the deliverable for the lesson.** Detection (including the agent's own acknowledgment: "you are right, I …", "I didn't follow …", "I ignored /…") and routing are canonical in `core/ego`: user correction/self-acknowledgment → `/grow`, a PR blocker (a gate miss) → `/absorb`, telemetry → `/learn`. Route in the user's session post-delivery — never in the sidecar.
 
 ## Control
 

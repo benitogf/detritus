@@ -187,6 +187,10 @@ gh api --method PATCH repos/<owner>/<repo>/pulls/<pr> \
   --jq .html_url
 ```
 
+## A blocker on a detritus PR is a gate miss (incident)
+
+Working a blocker on a detritus-authored PR means the blocker survived the `/gh-self-review` gate every detritus PR ships through — so you are standing inside `core/ego` trigger ② (a **gate miss**). Address and push the fix as usual (Phases 3–6); once the fix is pushed, the incident routes to `/absorb` per `core/ego`. The fix leg lands first, so the deliverable is never dropped.
+
 ## Phase 7: Report back
 
 Print, in the terminal (not to GitHub):

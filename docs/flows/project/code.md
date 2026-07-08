@@ -41,3 +41,4 @@ Steps are optional and reorderable — a one-symbol localization may be just Gre
 - **No setup step.** Never tell the user to "build" or "refresh" anything first — there is no pack. If `code_map`/`code_graph` returns nothing useful, fall back to Grep/Read and say so.
 - **One task per invocation** keeps scope tight.
 - `code_graph` is never auto-run by `code_map`; reach for it only when you need exact call/implementation relationships.
+- **Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

@@ -90,3 +90,5 @@ MCP client" if detritus changed).
 - Don't hand-build or hand-upload assets — the tagged CI workflow does it.
 - Don't skip watching candyland's build just because it's slow — confirm it went green and published assets before updating the local install.
 - Don't run `detritus --setup` as a *substitute* for `--update` when detritus itself has a new release; `--update` chains it. Run `--setup` alone only to pull a candyland-only release onto an already-current detritus.
+
+**Incident hook.** Any mistake surfaced while running this flow — a self-acknowledged doctrine violation ("you are right, I …", "I didn't follow …") or a blocker on a PR it authored — is an incident: detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

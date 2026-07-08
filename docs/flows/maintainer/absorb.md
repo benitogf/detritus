@@ -32,6 +32,16 @@ related:
 > If you find yourself restating a phase of `/gh`, `/learn`, or `/grow` here, stop — reference it.
 > `/absorb` only decides *which* flow runs, *in what order*, and *scoped to what*.
 
+> ## A LIVE BLOCKER IS AN IMMEDIATE INCIDENT, NOT "EVENTUAL" WORK
+>
+> A standing blocker on a detritus-authored PR is not merely a review outcome to absorb whenever
+> the loop gets around to it — it is an **immediate incident** per `core/ego` trigger ②. Every
+> detritus PR passes the `/gh-self-review` loop-until-clean gate before it opens, so a surviving
+> blocker is by definition a **gate miss**: something the gate should have caught escaped it.
+> `/absorb` is that incident's immediate route. Immediacy never costs the deliverable — the fix
+> leg (Phase 3a) fixes first, before any learning runs. (See `core/ego` for the trigger taxonomy;
+> do not restate it here.)
+
 ---
 
 ## Scope boundary with /learn and /grow (read first)
@@ -126,6 +136,14 @@ Invoke **`/learn` scoped to the resolved unit + its children**, not the whole co
 The blocker names a **mechanism** (per `/learn` Step 1: symptom ≠ mechanism — "test failed" is a symptom; "coder
 claimed done without running the failing path" is a mechanism). Only mechanisms get patched.
 
+- **The mechanism to distill may be the gate gap itself, not only the code defect.** The reviewer's blocker gives
+  the code-defect mechanism ("coder claimed done without running the failing path"). But because a surviving blocker
+  is a `/gh-self-review` **gate miss** (see the immediate-incident note above), Phase 5 also asks: *why did
+  `/gh-self-review` miss this blocker before the PR opened?* That gate-gap mechanism is a first-class distillation
+  target — patching only the code defect leaves the gate that let it through unchanged.
+- **When the code-defect mechanism and the gate-gap mechanism converge on one root cause, ship ONE delta** (the
+  "one mechanism, one delta" guardrail). Often the reason the code was wrong *is* the reason the gate didn't catch
+  it — a single KB change closes both. Only split when they are genuinely distinct roots.
 - **When the fix leg and the learn leg converge on the same mechanism, ship it once.** The reviewer's blocker (fixed
   in Phase 3a) and the telemetry cluster (Phase 4) are two views of one underlying gap — do not open two KB deltas
   for it. One delta, one issue, one PR.

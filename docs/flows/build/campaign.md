@@ -57,3 +57,5 @@ Child quests carry `deliver: branch`: their runs commit onto the **campaign bran
 ## Control
 
 Observe + stop only, per `core/sidecar` — Stop kills the whole campaign process tree, child quests included.
+
+**Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker on a delivered PR is an incident per `core/ego`. This is a **sidecar** flow: the agent **records** the incident in its unit report — it never routes in the sidecar; the user's session routes it post-delivery (→ `/grow` / `/absorb`), never in the sidecar.

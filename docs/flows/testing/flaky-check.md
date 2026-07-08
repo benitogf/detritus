@@ -185,3 +185,5 @@ Green CI on a flake-prone suite is necessary but not sufficient — CI runs each
 test once. This sweep is the supplementary high-iteration confidence. When a CI
 run flakes, reproduce it here with CI's exact flags; when this sweep flakes, the
 fix still has to land and go green in CI.
+
+**Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

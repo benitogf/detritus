@@ -340,3 +340,7 @@ func TestFeature(t *testing.T) {
 | `context.WithCancelCause` | Go 1.20 |
 | `context.AfterFunc` | Go 1.21 |
 | `errors.Join` | Go 1.20 |
+
+---
+
+**Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

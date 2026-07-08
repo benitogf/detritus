@@ -292,3 +292,7 @@ If any answer is "no", you haven't proven the behavior yet - add the logs.
 - `/testing` - Testing workflow index
 - `/testing-go-backend-mock` (`flows/testing/testing-go-backend-mock`) - What and how to mock
 - `/testing-go-backend-e2e` (`flows/testing/testing-go-backend-e2e`) - Consolidated E2E test patterns
+
+---
+
+**Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

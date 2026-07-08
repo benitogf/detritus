@@ -101,6 +101,14 @@ For each failed run/quest/campaign, extract a **failure signature**:
 - **mechanism** — the underlying *why*. **Symptom ≠ mechanism.** "Test failed" is a symptom;
   "coder claimed done without running the failing path" is a mechanism. Only mechanisms get patched.
 
+**Self-acknowledged incident notes are a first-class signature source — including in SUCCESSFUL units.**
+A note an agent recorded when it caught itself (`core/ego` trigger ①: "you are right, I …", "I didn't
+follow …", "I ignored /…") is a direct, agent-attributed *mechanism* — mine it even when the unit
+terminated green, because an admitted mistake in a passing run is still a mechanism worth patching (the
+symptom-free case the terminal-status scan alone would miss). *Caveat:* this depends on candyland unit
+records persisting the free-text report notes; if they do not, the signal is lost and record persistence
+must be added first (flag in the PR body).
+
 ### Deterministic clustering
 
 - Cluster the structured records **deterministically** over their fields (terminal status, phase,

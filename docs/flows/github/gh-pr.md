@@ -279,3 +279,4 @@ Then return the working tree to the repo's default branch so the user is left on
 - Never ask the user something researchable. The repo, the KB, and the GitHub API are all reachable.
 - Never leave the user on the PR's branch when the skill ends if a plain `git checkout <default_branch>` would succeed. Don't stash, don't force — if git refuses, leave them put and report.
 - If `gh auth status` fails, surface the error and stop.
+- **Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

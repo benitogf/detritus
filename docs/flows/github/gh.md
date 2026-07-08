@@ -127,3 +127,4 @@ No summary of the routing decision itself — the result is what matters, not th
 - Don't bypass a sub-skill's confirmation gates without authorization — but a gate is not bypassed when the user already authorized the action. `gh-issue-create` gates on "post as-is" only when the post was *not* directed; an explicit instruction routed through `/gh` authorizes it and the router propagates that (Phase 2). Don't re-raise a gate the user waived, and don't strip one they didn't.
 - Don't accumulate state across sub-skill calls. Each sub-skill is a unit; the router hands off and reports, nothing more.
 - Don't change repos mid-flow. If the user pivots, re-enter `/gh` from the top.
+- **Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

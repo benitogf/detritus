@@ -109,6 +109,10 @@ gh api -X PUT repos/<owner>/<repo>/pulls/<n>/merge -f merge_method=<merge|squash
 - **Delete the head branch** after a successful merge **only if** the repo deletes merged branches (`delete_branch_on_merge == true`); otherwise leave it.
 - **Respect branch protection.** Never use admin-override to merge past failing required checks or unmet required reviews — if protection blocks the merge, that is a hand-back, not a force. The merge gate already requires `mergeable_state` `clean`/`has_hooks` + an approval on HEAD, so a protection block here means state shifted under the tick; idle or hand back rather than override.
 
+## Detected feedback is a gate miss (incident)
+
+Any review feedback this loop detects on the watched PR (step 3) is, on a detritus-authored PR, a blocker that survived the `/gh-self-review` gate — i.e. a **gate miss**, which per `core/ego` trigger ② is an incident. Babysit already routes the *fix* via `/gh-feedback-work`; the incident itself is captured per `core/ego` (→ `/absorb`) **after the fix lands**, so the merge-on-approval loop below is unaffected — the incident distillation rides alongside it, it does not gate the merge.
+
 ## Stuck = pause & hand back
 
 Two conditions stop the loop and return control to the human — leave the PR untouched, report exactly what is blocking, never expand scope, never force-merge:

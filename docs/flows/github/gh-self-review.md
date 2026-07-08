@@ -171,6 +171,10 @@ Each iteration spawns a NEW `Agent` invocation — never reuse the prior sub-age
 
 **The verdict is bound to the tree it ran against.** A clean exit certifies *that exact tree* — nothing more. ANY mutation of the tree after the review reopens it, even when the loop had already exited clean: a refactor the review itself prompted (extracting a shared helper, a rename), a follow-up fix, `commit --amend`, a squash, a rebase/merge, conflict resolution. Each produces a tree no sub-agent has seen. The rule: **the tree that ships is the tree the last review ran on.** If you change anything between the clean review and the push/PR, run one more fresh-sub-agent pass against the final tree before shipping — the 3-iteration cap counts review rounds, not a budget that excuses skipping the audit of what actually lands. A "no blockers" result from before a squash/refactor is stale the moment the tree moves.
 
+## A blocker that survives this gate is a gate miss (incident)
+
+Every detritus PR ships through this loop-until-clean gate. So a blocker that later surfaces on a PR this self-review passed *clean* — a reviewer `CHANGES_REQUESTED`, a `/gh-pr` finding, babysit-detected feedback — is by definition a **gate miss**: this audit was supposed to catch it and didn't. Per `core/ego` trigger ② it is an incident and fires immediately (routing to `/absorb`, whose fix leg closes the blocker first, so "immediate" never drops the deliverable). The lesson to distill is **"why did self-review miss this?"** — feed it back so the next pass catches the class.
+
 ## Why hand off to a fresh agent
 
 Self-review by the author who wrote the change shares the author's blind spots — the same mental model that produced the bug fails to catch it. The conversation that led to the diff also carries justifications ("we agreed this was fine") that bias the audit toward acceptance. Delegating to a fresh sub-agent:

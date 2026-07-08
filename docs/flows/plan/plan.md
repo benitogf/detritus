@@ -161,9 +161,5 @@ If the build will be driven by an implementation loop rather than implemented in
 
 ## Incident hook — capture the lesson after the plan is settled
 
-A detected failure, misalignment, or user correction during planning is a learning signal, but it never preempts the primary deliverable: **finish settling the plan first — never trade the plan for a lesson PR.** Once the analysis, questions, and (where a loop will consume it) the `.plan/<slug>.md` contract are delivered, route the signal to the matching intake, which owns the distill→ship machinery (composed by reference, not restated here):
-
-- an in-session **user correction** → `/grow` (`flows/maintainer/grow`)
-- **candyland telemetry** across runs → `/learn` (`flows/maintainer/learn`)
-- **a PR carrying review outcomes** → `/absorb` (`flows/maintainer/absorb`)
+A detected failure, misalignment, **self-acknowledged mistake/doctrine violation**, or user correction during planning is a learning signal, but it never preempts the primary deliverable: **finish settling the plan first — never trade the deliverable for the lesson.** Detection (including the agent's own acknowledgment: "you are right, I …", "I didn't follow …", "I ignored /…") and routing are canonical in `core/ego`: user correction/self-acknowledgment → `/grow`, a PR blocker (a gate miss) → `/absorb`, telemetry → `/learn`.
 

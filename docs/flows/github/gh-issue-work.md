@@ -250,3 +250,4 @@ GitHub-review-comment feedback (posted on the PR itself) is handled by `/gh-feed
 - Don't branch from the current working branch. Always branch from the fetched default (`origin/<default_branch>`). Carrying unrelated WIP into the PR is a silent failure mode.
 - The issue body is the single source of truth. Chat follow-ups edit the body in place; don't leave a trail of PR comments or issue comments that duplicate what the body already says.
 - If anything blocks (tests fail, scope unclear, repo not found), STOP and surface the blocker to the user. Don't paper over it.
+- **Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

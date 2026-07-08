@@ -248,8 +248,4 @@ When the build completes and the PR(s) open, surface each PR URL on its own line
 
 ## Incident hook — capture the lesson after delivery
 
-A detected failure, misalignment, or user correction during the loop is a learning signal, but it never preempts the primary deliverable: **finish the PR(s) first — never trade the feature PR for the lesson PR.** A decision the loop can make is still resolved-and-recorded per *The loop must never stall*, not surfaced. Once delivery lands (one PR per impacted repo), route the signal to the matching intake, which owns the distill→ship machinery (composed by reference, not restated here):
-
-- an in-session **user correction** → `/grow` (`flows/maintainer/grow`)
-- **candyland telemetry** across runs → `/learn` (`flows/maintainer/learn`)
-- **a PR carrying review outcomes** → `/absorb` (`flows/maintainer/absorb`)
+A detected failure, misalignment, **self-acknowledged mistake/doctrine violation**, or user correction during the loop is a learning signal, but it never preempts the primary deliverable: **finish the PR(s) first — never trade the deliverable for the lesson.** Detection (including the agent's own acknowledgment: "you are right, I …", "I didn't follow …", "I ignored /…") and routing are canonical in `core/ego`: user correction/self-acknowledgment → `/grow`, a PR blocker (a gate miss) → `/absorb`, telemetry → `/learn`.
