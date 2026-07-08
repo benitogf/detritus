@@ -44,9 +44,9 @@ related:
 
 ## Step 0: Workspace Precheck
 
-Same as `/grow` Step 0 — search workspace roots for a local detritus clone (path containing
-`github.com/benitogf/detritus` with a `docs/` directory). If not found, warn and STOP; changes cannot be
-drafted without the local KB clone.
+Same as `/grow` Step 0 — resolve a writable KB checkout per `core/kb-writeback` (local clone if present,
+else a provisioned cached clone, forking when the user lacks write access). No pre-existing clone required;
+the only hard stop is a true capability blocker (no `gh` auth), owned by `core/kb-writeback` → Preconditions.
 
 ---
 
