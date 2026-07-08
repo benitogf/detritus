@@ -170,6 +170,13 @@ Rewrite, don't append. The PR body should read as if it always described the PR'
   ---
   🤖 Generated with [Claude Code](https://claude.com/claude-code)
   ```
+- **Preserve the candyland unit-ref footer if the body already has one.** A candyland-opened PR carries
+  ```
+  🍬 Opened by candyland — <kind> `<id>`
+  ```
+  (`<kind>` ∈ `run` / `quest` / `campaign`). This is the provenance link `/absorb` (`flows/maintainer/absorb`) uses to
+  resolve the producing unit — a body rewrite must keep it verbatim, never drop or edit it. If it's absent, do not add
+  one (candyland stamps it; this skill doesn't mint provenance).
 - **Cross-repo refs** in the rewritten body default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `idnerdidx/bulk#311` smears into nested autolinks via the `idx` substring). If the existing body still has bare cross-repo shortcuts, rewrite them to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)` form during this pass, keeping the `<owner>/<repo>` pattern out of the label. Same-repo `#<n>` references stay valid bare. See the cross-repo-refs convention in `flows/github/gh`.
 
 Write via the REST API — `gh pr edit` can surface the Projects-classic GraphQL deprecation as a failure on some repos even when the PATCH succeeds:
@@ -179,6 +186,10 @@ gh api --method PATCH repos/<owner>/<repo>/pulls/<pr> \
   -f body="$(cat /tmp/pr-body-new.md)" \
   --jq .html_url
 ```
+
+## A blocker on a detritus PR is a gate miss (incident)
+
+Working a blocker on a detritus-authored PR means the blocker survived the `/gh-self-review` gate every detritus PR ships through — so you are standing inside `core/ego` trigger ② (a **gate miss**). Address and push the fix as usual (Phases 3–6); once the fix is pushed, the incident routes to `/absorb` per `core/ego`. The fix leg lands first, so the deliverable is never dropped.
 
 ## Phase 7: Report back
 

@@ -127,3 +127,5 @@ Or if updating a released version, commit, push, and tag a new release.
 - **Triggers are the index**: the frontmatter `triggers` list and the auto-generated TF-IDF keywords are the primary ways docs get discovered. Manual triggers should cover domain terms that content analysis misses.
 - **Anti-patterns prevent recurrence**: every time /grow identifies a failure mode, /optimize should ensure the relevant doc's anti-patterns section covers it.
 - **Minimal prose**: prefer tables, bullet lists, "if X then Y" rules. Reduce paragraphs to single-line rules where possible.
+
+**Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

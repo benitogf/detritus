@@ -8,7 +8,37 @@ import (
 
 	"github.com/benitogf/detritus/internal/core"
 	"github.com/blevesearch/bleve/v2"
+	"github.com/blevesearch/bleve/v2/search/query"
 )
+
+// fieldBoosts weight a term match by WHERE it lands: a hit in a doc's name or
+// section heading (its "title") outranks one that only appears in body content,
+// a classic title-weighting scheme. Curated + TF-IDF triggers sit in between.
+// content stays the 1.0 baseline; a title/section match sums with any body
+// match, so a doc matching in both always outscores a body-only mention.
+var fieldBoosts = []struct {
+	field string
+	boost float64
+}{
+	{"doc_name", 5.0},
+	{"section", 3.0},
+	{"triggers", 2.0},
+	{"content", 1.0},
+}
+
+// multiFieldQuery builds a disjunction of per-field match queries so relevance
+// is weighted by field, replacing a single bare match over _all (which treats a
+// title token and a body token identically).
+func multiFieldQuery(text string) query.Query {
+	disjuncts := make([]query.Query, 0, len(fieldBoosts))
+	for _, fb := range fieldBoosts {
+		mq := bleve.NewMatchQuery(text)
+		mq.SetField(fb.field)
+		mq.SetBoost(fb.boost)
+		disjuncts = append(disjuncts, mq)
+	}
+	return bleve.NewDisjunctionQuery(disjuncts...)
+}
 
 type ChunkMeta struct {
 	DocName  string
@@ -147,7 +177,7 @@ func (e *Engine) GetSections(name string) ([]string, error) {
 }
 
 func (e *Engine) bleveSearch(query string, topN int) ([]Result, error) {
-	q := bleve.NewMatchQuery(query)
+	q := multiFieldQuery(query)
 	req := bleve.NewSearchRequestOptions(q, topN, 0, false)
 	req.Fields = []string{"doc_name", "section", "content"}
 	searchResult, err := e.index.Search(req)

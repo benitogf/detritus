@@ -181,3 +181,4 @@ https://github.com/<owner>/<repo>/issues/<n>
 - The attribution footer goes on the body, never the title.
 - The `plane` label is mandatory on every posted issue — without it the Plane management app won't sync the issue. Verify the POST response includes it.
 - The issue body is the single source of truth for this ask. If the user refines scope in later turns, edit the body in place (`gh api --method PATCH .../issues/<n>`) — don't leave a comment trail that duplicates what the body already says.
+- **Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") surfaced while drafting the issue is an incident — detect and route per `core/ego` (→ `/grow`), after finishing the deliverable.

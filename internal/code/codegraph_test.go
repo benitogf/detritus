@@ -1,15 +1,35 @@
 package code
 
 import (
+	"context"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// chainProject writes a linear call chain Compute <- UseA <- UseB <- UseC <- UseD
+// plus an in-package test that calls Compute, so the reverse-transitive
+// impacted-by walk and affected-tests detection have a known shape. Returns root.
+func chainProject(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	writeGo(t, root, "go.mod", "module chain\n\ngo 1.25\n")
+	writeGo(t, root, "core.go", "package chain\n\nfunc Compute() int { return 42 }\n")
+	writeGo(t, root, "a.go", "package chain\n\nfunc UseA() int { return Compute() }\n")
+	writeGo(t, root, "b.go", "package chain\n\nfunc UseB() int { return UseA() }\n")
+	writeGo(t, root, "c.go", "package chain\n\nfunc UseC() int { return UseB() }\n")
+	writeGo(t, root, "d.go", "package chain\n\nfunc UseD() int { return UseC() }\n")
+	writeGo(t, root, "core_test.go", "package chain\n\nimport \"testing\"\n\nfunc TestCompute(t *testing.T) { _ = Compute() }\n")
+	return root
+}
 
 func TestCodeGraphWhoCallsAndReachable(t *testing.T) {
 	t.Setenv("DETRITUS_HOME", t.TempDir())
 	root := sampleProject(t) // core.Compute is called by UseA and UseB
 
-	out, err := BuildCodeGraph(GraphQuery{Symbol: "Compute", Scope: root})
+	out, _, err := BuildCodeGraph(GraphQuery{Symbol: "Compute", Scope: root})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +43,7 @@ func TestCodeGraphWhoCallsAndReachable(t *testing.T) {
 	}
 
 	// reachable-from a caller includes the function it calls.
-	out2, err := BuildCodeGraph(GraphQuery{Symbol: "UseA", Scope: root})
+	out2, _, err := BuildCodeGraph(GraphQuery{Symbol: "UseA", Scope: root})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +67,7 @@ func (r Robot) Greet() string { return "beep" }
 type Mute struct{}
 `)
 
-	out, err := BuildCodeGraph(GraphQuery{Symbol: "Greeter", Scope: root})
+	out, _, err := BuildCodeGraph(GraphQuery{Symbol: "Greeter", Scope: root})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +89,7 @@ func TestCodeGraphFallbackOnNonCompiling(t *testing.T) {
 	// Type error: calls an undefined function — package does not compile.
 	writeGo(t, root, "broken.go", "package broken\n\nfunc Run() { doesNotExist() }\n")
 
-	out, err := BuildCodeGraph(GraphQuery{Symbol: "Run", Scope: root})
+	out, _, err := BuildCodeGraph(GraphQuery{Symbol: "Run", Scope: root})
 	if err != nil {
 		t.Fatalf("fallback should not error: %v", err)
 	}
@@ -78,8 +98,239 @@ func TestCodeGraphFallbackOnNonCompiling(t *testing.T) {
 	}
 }
 
+// TestCodeGraphBrokenTestFileDoesNotDegrade locks the fix for the review blocker:
+// a module whose production code compiles but which has one non-compiling
+// _test.go must still return the precise type-resolved graph, NOT the structural
+// fallback. With Tests:true the broken test file produces a broken test-variant
+// package; gating the fallback on production packages only keeps who-calls /
+// reachable / impacted-by working mid-edit (exactly when plan/forge/smith call
+// impacted_by/affected_tests), computing affected tests best-effort from whatever
+// test packages loaded.
+func TestCodeGraphBrokenTestFileDoesNotDegrade(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	root := t.TempDir()
+	writeGo(t, root, "go.mod", "module reprox\n\ngo 1.25\n")
+	// Production code compiles: Prod calls Helper.
+	writeGo(t, root, "prod.go", "package reprox\n\nfunc Helper() int { return 1 }\n\nfunc Prod() int { return Helper() }\n")
+	// One broken test file: references an undefined symbol, so the test-variant
+	// package fails to compile — but production is untouched.
+	writeGo(t, root, "prod_test.go", "package reprox\n\nimport \"testing\"\n\nfunc TestBroken(t *testing.T) { _ = doesNotExist() }\n")
+
+	out, res, err := BuildCodeGraph(GraphQuery{Symbol: "Helper", Scope: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "falling back to the structural map") {
+		t.Fatalf("a broken _test.go must not degrade the graph to the structural fallback\n---\n%s", out)
+	}
+	if !refNames(res.Callers)["reprox.Prod"] {
+		t.Errorf("who-calls Helper should list reprox.Prod despite the broken test file; got %v\n---\n%s", refNames(res.Callers), out)
+	}
+}
+
 func TestCodeGraphRequiresSymbol(t *testing.T) {
-	if _, err := BuildCodeGraph(GraphQuery{Scope: t.TempDir()}); err == nil {
+	if _, _, err := BuildCodeGraph(GraphQuery{Scope: t.TempDir()}); err == nil {
 		t.Error("expected error when symbol is empty")
+	}
+}
+
+// TestCodeGraphImpactedBy proves the reverse-transitive walk reports transitive
+// dependents up to the depth bound (and only those), that overly-deep dependents
+// are reported as truncated rather than silently dropped, and that the structured
+// result mirrors the text.
+func TestCodeGraphImpactedBy(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	root := chainProject(t)
+
+	out, res, err := BuildCodeGraph(GraphQuery{Symbol: "Compute", Scope: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "impacted-by Compute") {
+		t.Fatalf("missing impacted-by header\n---\n%s", out)
+	}
+	// UseA (depth 1), UseB (depth 2), UseC (depth 3) transitively reach Compute.
+	for _, dep := range []string{"UseA", "UseB", "UseC"} {
+		if !strings.Contains(out, dep) {
+			t.Errorf("impacted-by Compute should list %s\n---\n%s", dep, out)
+		}
+	}
+	// UseD is at depth 4 — beyond the impactDepth bound — so it must NOT appear,
+	// and the walk must be flagged truncated (never silently dropped).
+	if strings.Contains(out, "UseD") {
+		t.Errorf("UseD is beyond depth %d and must not be listed\n---\n%s", impactDepth, out)
+	}
+	if !strings.Contains(out, "truncated at depth") {
+		t.Errorf("expected an explicit depth-truncation note\n---\n%s", out)
+	}
+	if !res.Truncated {
+		t.Error("structured result should report Truncated=true")
+	}
+
+	// TestCompute (defined in core_test.go) calls Compute, but a test func is NOT
+	// a production caller/dependent — it must be filtered out of who-calls and
+	// impacted-by (text + structured), and instead surface as an affected test.
+	if strings.Contains(out, "TestCompute") {
+		t.Errorf("TestCompute is a _test.go func and must not appear in who-calls/impacted-by\n---\n%s", out)
+	}
+	names := refNames(res.ImpactedBy)
+	for _, dep := range []string{"chain.UseA", "chain.UseB", "chain.UseC"} {
+		if !names[dep] {
+			t.Errorf("structured impacted_by missing %s; got %v", dep, names)
+		}
+	}
+	if names["chain.TestCompute"] {
+		t.Errorf("structured impacted_by must not include the test func chain.TestCompute; got %v", names)
+	}
+	if names["chain.UseD"] {
+		t.Errorf("structured impacted_by should not include the out-of-depth chain.UseD; got %v", names)
+	}
+
+	// The test that exercises Compute is instead reported as an affected test.
+	if len(res.AffectedTests) != 1 || !strings.HasSuffix(res.AffectedTests[0], "core_test.go") {
+		t.Errorf("affected_tests should be [.../core_test.go]; got %v", res.AffectedTests)
+	}
+}
+
+// TestCodeGraphAffectedTests proves _test.go files that transitively exercise the
+// symbol are reported, in both the text and the structured result.
+func TestCodeGraphAffectedTests(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	root := chainProject(t)
+
+	out, res, err := BuildCodeGraph(GraphQuery{Symbol: "Compute", Scope: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "affected tests:") {
+		t.Fatalf("missing affected tests header\n---\n%s", out)
+	}
+	if !strings.Contains(out, "core_test.go") {
+		t.Errorf("core_test.go exercises Compute and should be an affected test\n---\n%s", out)
+	}
+	if len(res.AffectedTests) != 1 || !strings.HasSuffix(res.AffectedTests[0], "core_test.go") {
+		t.Errorf("structured affected_tests = %v, want exactly [.../core_test.go]", res.AffectedTests)
+	}
+
+	// A leaf symbol with no test in its dependent set reports none.
+	_, res2, err := BuildCodeGraph(GraphQuery{Symbol: "UseD", Scope: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res2.AffectedTests) != 0 {
+		t.Errorf("UseD has no dependent tests, got %v", res2.AffectedTests)
+	}
+}
+
+// TestCodeGraphStructuredOutput exercises code_graph exactly as an MCP consumer
+// and asserts the SDK inferred an OutputSchema and populated structuredContent
+// with the typed shape, alongside the back-compat text block.
+func TestCodeGraphStructuredOutput(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	root := chainProject(t)
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "test", Version: "0"}, nil)
+	RegisterSeamlessTools(server)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+	clientT, serverT := mcp.NewInMemoryTransports()
+	ss, err := server.Connect(ctx, serverT, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	t.Cleanup(func() { ss.Close() })
+	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, nil)
+	cs, err := client.Connect(ctx, clientT, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { cs.Close() })
+
+	tools, err := cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("list tools: %v", err)
+	}
+	for _, tl := range tools.Tools {
+		if tl.Name == "code_graph" && tl.OutputSchema == nil {
+			t.Fatal("code_graph: OutputSchema not inferred from typed result")
+		}
+	}
+
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{
+		Name:      "code_graph",
+		Arguments: map[string]any{"symbol": "Compute", "scope": root},
+	})
+	if err != nil {
+		t.Fatalf("code_graph: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("code_graph returned error: %v", res.Content)
+	}
+	if _, ok := res.Content[0].(*mcp.TextContent); !ok {
+		t.Fatalf("code_graph: first content not text, got %T", res.Content[0])
+	}
+
+	sc, ok := res.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("structuredContent not an object: %T", res.StructuredContent)
+	}
+	if sc["symbol"] != "Compute" {
+		t.Errorf("structuredContent.symbol = %v, want Compute", sc["symbol"])
+	}
+	impacted, ok := sc["impacted_by"].([]any)
+	if !ok || len(impacted) == 0 {
+		t.Fatalf("structuredContent.impacted_by empty/wrong type: %v", sc["impacted_by"])
+	}
+	if _, ok := impacted[0].(map[string]any)["name"]; !ok {
+		t.Errorf("impacted_by entry missing name field: %v", impacted[0])
+	}
+	tests, ok := sc["affected_tests"].([]any)
+	if !ok || len(tests) == 0 {
+		t.Fatalf("structuredContent.affected_tests empty/wrong type: %v", sc["affected_tests"])
+	}
+}
+
+func refNames(refs []GraphRef) map[string]bool {
+	m := map[string]bool{}
+	for _, r := range refs {
+		m[r.Name] = true
+	}
+	return m
+}
+
+// TestImpactedByTestFuncsDoNotConsumeCap locks the round-2 fix: test-func
+// dependents must not eat the reachableCap budget and crowd a production
+// dependent out of the blast-radius list. Target has one production caller
+// (Prod) and two test callers; with the cap lowered to 1, the fix guarantees
+// Prod is still reported (tests are collected for affected_tests but don't
+// count toward the cap).
+func TestImpactedByTestFuncsDoNotConsumeCap(t *testing.T) {
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	root := t.TempDir()
+	writeGo(t, root, "go.mod", "module cap\n\ngo 1.25\n")
+	writeGo(t, root, "core.go", "package cap\n\nfunc Target() int { return 1 }\n")
+	writeGo(t, root, "prod.go", "package cap\n\nfunc Prod() int { return Target() }\n")
+	writeGo(t, root, "x_test.go", "package cap\n\nimport \"testing\"\n\nfunc TestOne(t *testing.T) { _ = Target() }\nfunc TestTwo(t *testing.T) { _ = Target() }\n")
+
+	orig := reachableCap
+	reachableCap = 1
+	defer func() { reachableCap = orig }()
+
+	out, res, err := BuildCodeGraph(GraphQuery{Symbol: "Target", Scope: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The production dependent survives the cap regardless of discovery order.
+	if !refNames(res.ImpactedBy)["cap.Prod"] {
+		t.Errorf("Prod must remain in impacted_by despite cap=1 and test callers; got %v\n---\n%s", refNames(res.ImpactedBy), out)
+	}
+	// Test funcs are still filtered from the displayed dependents...
+	if refNames(res.ImpactedBy)["cap.TestOne"] || refNames(res.ImpactedBy)["cap.TestTwo"] {
+		t.Errorf("test funcs must not appear in impacted_by; got %v", refNames(res.ImpactedBy))
+	}
+	// ...but do surface as affected tests (proving they were collected, not dropped).
+	if len(res.AffectedTests) != 1 || !strings.HasSuffix(res.AffectedTests[0], "x_test.go") {
+		t.Errorf("affected_tests should be [.../x_test.go]; got %v", res.AffectedTests)
 	}
 }

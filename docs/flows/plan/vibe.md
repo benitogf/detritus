@@ -74,3 +74,4 @@ The only things that legitimately leave `/vibe`'s scope are the human's review-a
 - **Don't reimplement** `dream`, `/smith`, `/gh`, or `/babysit` mechanics — compose them, so improvements propagate. The watch-to-merge gate (SHA-pinned human approval) lives in `/babysit`; `/vibe` chains it, never restates or relaxes it.
 - **`/vibe` is for real features.** For a trivial change (a typo, a constant bump), `/gh-issue-work` or a direct edit is cheaper — don't spin up the full autonomous loop.
 - **Record, don't narrate.** Technical decisions belong in the PR body's `## Decisions made on your behalf`, not scattered through chat the user won't read.
+- **Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

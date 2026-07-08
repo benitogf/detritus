@@ -157,3 +157,7 @@ for attempt := 1; attempt <= maxAttempts; attempt++ { ... }
 ```
 
 A comment earns its place only when deleting it would lose information not recoverable from the code: a non-obvious constraint, why a workaround exists, why *not* the obvious approach. Keep it to one short line. When the code changes, update or delete a now-stale comment in the same commit — the same discipline as names in section 1.
+
+---
+
+**Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

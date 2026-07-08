@@ -14,6 +14,7 @@ when: User invokes /grow after correcting agent behavior, or wants to check last
 related:
   - flows/principles/truthseeker
   - flows/maintainer/optimize
+  - flows/maintainer/absorb
   - flows/plan/plan
 ---
 
@@ -58,6 +59,7 @@ Scan the current conversation for these signal types:
 
 | Signal | Detection Cues |
 |--------|---------------|
+| **self_acknowledged_error** | the *agent's own output* concedes a mistake or a doctrine/flow violation — admission phrase-class (e.g. "you are right", "sorry, I…", "my mistake", "I was wrong", "I should have…") or violation phrase-class (e.g. "I didn't follow {doctrine}", "I ignored /{flow}", "that was against {rule}", "I skipped {step}"). **Acknowledgment ≡ detection** — no user escalation needed. Highest-confidence signal; usually co-occurs with `implicit_redirect`. |
 | **explicit_correction** | user says "no", "that's wrong", "don't do that", "stop", "I said", "not like that" |
 | **missed_existing** | user points to existing doc/workflow/rule that agent should have used: "already exists", "check the docs", "use /X", "kb_get" |
 | **rule_violation** | agent action contradicts established KB guidance (e.g., used sleep in tests, added backwards compat, skipped WaitGroup) |
@@ -65,6 +67,8 @@ Scan the current conversation for these signal types:
 | **implicit_redirect** | user silently fixes something agent did wrong (e.g., provides corrected code, rewrites a section) |
 | **scope_drift** | agent changed requirements without approval, added unrequested features, or deviated from the task |
 | **quality_bar** | user raises or clarifies quality expectations ("these docs are for you not humans", "optimize for retrieval") |
+
+> The full incident trigger taxonomy (self-acknowledgment, PR-blocker gate-miss, user correction, telemetry) and its routing live in `core/ego`; grow owns the in-session correction + self-acknowledgment detection cues above.
 
 For each detected signal, produce a row:
 

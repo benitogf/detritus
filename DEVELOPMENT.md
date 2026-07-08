@@ -34,12 +34,9 @@ The seamless code-context tools are registered by `code.RegisterSeamlessTools`
 - `code_outline` — go/ast signatures for a file or directory
 - `code_graph` — type-resolved who-calls / reachable / implementers
 
-The learned-memory tools are registered by `memory.RegisterTools`
-(`internal/memory/tools.go`):
-
-- `skill_put` — distil a verified lesson (the only, gated, write path)
-- `skill_search` — retrieve ranked lesson snippets
-- `skill_get` — fetch one lesson by id
+Learned memory is not a local tool surface: lessons are KB docs under
+`docs/lessons/`, served by the same `kb_*` tools and distributed by
+`detritus --update`. See `docs/core/memory.md`.
 
 These MCP tool names are implementation details. README should describe the
 capability ("Detritus guidance", "code context", "/code") rather than naming
@@ -70,7 +67,7 @@ There is therefore no hand-maintained "keep X out of the README" list:
 - The gh sub-skills invoked directly (`gh-issue-work`, `gh-feedback-work`,
   `gh-self-review`, `gh-pr`) live in `docs/flows/github/` and are documented
   commands; the `/gh` router lives beside them.
-- MCP tools (`code_map`, `code_graph`, `skill_search`, …) are not docs and never appear.
+- MCP tools (`code_map`, `code_graph`, `kb_search`, …) are not docs and never appear.
 
 To change the command surface, add or move a doc under `docs/flows/` (or out of
 it into `docs/core/`), then run `detritus --readme && detritus --plugin-commands`;

@@ -365,3 +365,4 @@ When the cwd contains a `.janitor/` scratchpad, the audit pass (`core/todo-audit
 - Don't accumulate state across operations; each is a unit.
 - Don't confuse `/todo` (cross-session, JSON-backed) with `TodoWrite` (in-session, harness-managed).
 - Don't write `todos.json` outside a todo operation, and never from the main session even inside one — the delegated sub-agent is the only writer (convention #13, code-enforced by the PreToolUse guard).
+- **Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

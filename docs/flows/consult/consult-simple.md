@@ -32,3 +32,5 @@ Assume the reader has zero knowledge of the codebase but can understand the prem
 3. Run the engine's pipeline with this register applied as the detail-level rule above. Everything else — the one-page invariant, multiple-choice options, flowchart-first gate, render to `.consult/<slug>.pdf` — is the engine's job.
 
 `/consult-tech` is the high-level technical sibling register over the same engine.
+
+**Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

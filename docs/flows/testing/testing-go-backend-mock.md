@@ -244,3 +244,7 @@ See `/testing-go-backend-async` (`flows/testing/testing-go-backend-async`) for f
 - `/testing` - Testing workflow index
 - `/testing-go-backend-async` (`flows/testing/testing-go-backend-async`) - WaitGroup patterns for async synchronization
 - `/testing-go-backend-e2e` (`flows/testing/testing-go-backend-e2e`) - Consolidated E2E test patterns
+
+---
+
+**Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

@@ -13,6 +13,7 @@ triggers:
 when: User invokes /learn to improve the KB from accumulated candyland telemetry (past runs/quests/campaigns), not from a live session correction
 related:
   - flows/maintainer/grow
+  - flows/maintainer/absorb
   - flows/principles/truthseeker
   - flows/build/candyland
 ---
@@ -63,7 +64,22 @@ Embed this verbatim; do not stumble on ports/keys. Mining reads structured recor
 
 The records carry the telemetry fields `/learn` mines (effective model + thinking, token/tool-call
 counts, phase durations, review-round counts, verdict outcomes, terminal status + summary,
-escalation/decision events, blocker postmortems) — this IS the metrics ledger.
+escalation/decision events, blocker postmortems) — this IS the metrics ledger. Each record also carries
+a **`prs[]`** list of the GitHub PR URLs it opened.
+
+### Canonical: resolve a PR → its producing unit
+
+`/learn` accepts a `<unit-id>` OR a `<pr-url>`; a PR argument works standalone exactly like a unit id.
+This is the canonical recipe (`/absorb` Phase 2 composes it by reference — don't restate it there):
+
+1. **Footer ref (fast path).** Read the PR body (`gh api repos/<owner>/<repo>/pulls/<n> --jq .body`, per the
+   `flows/github/gh` reads-via-`gh api` convention) and parse the candyland footer
+   `🍬 Opened by candyland — <kind> \`<id>\`` where `<kind>` ∈ `run` / `quest` / `campaign`. A match gives
+   `<kind>`+`<id>` directly — mine that unit (+ children) as the root.
+2. **Reverse lookup (fallback + migration path for pre-footer PRs).** No footer → glob the records
+   (`GET /runs/*` · `/quests/*` · `/campaigns/*`) and select the unit whose `prs[]` contains the PR URL.
+3. **No unit found** → the PR was not candyland-produced; there is no telemetry to mine (a `/learn <pr-url>`
+   here reports the miss and stops — `/absorb` routes such a PR to a `/grow`-only leg from the review outcome).
 
 ---
 
@@ -84,6 +100,14 @@ For each failed run/quest/campaign, extract a **failure signature**:
 - **causal agent behavior** — what the agent actually did that led there (from trace/decision events).
 - **mechanism** — the underlying *why*. **Symptom ≠ mechanism.** "Test failed" is a symptom;
   "coder claimed done without running the failing path" is a mechanism. Only mechanisms get patched.
+
+**Self-acknowledged incident notes are a first-class signature source — including in SUCCESSFUL units.**
+A note an agent recorded when it caught itself (`core/ego` trigger ①: "you are right, I …", "I didn't
+follow …", "I ignored /…") is a direct, agent-attributed *mechanism* — mine it even when the unit
+terminated green, because an admitted mistake in a passing run is still a mechanism worth patching (the
+symptom-free case the terminal-status scan alone would miss). *Caveat:* this depends on candyland unit
+records persisting the free-text report notes; if they do not, the signal is lost and record persistence
+must be added first (flag in the PR body).
 
 ### Deterministic clustering
 

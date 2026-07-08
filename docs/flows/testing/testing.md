@@ -138,3 +138,7 @@ func TestComponentE2E(t *testing.T) {
 - `/testing-go-backend-async` (`flows/testing/testing-go-backend-async`) - WaitGroup synchronization patterns
 - `/testing-go-backend-e2e` (`flows/testing/testing-go-backend-e2e`) - E2E test structure and phases
 - `/flaky-check` (`flows/testing/flaky-check`) - Reproduce and fix intermittent failures
+
+---
+
+**Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

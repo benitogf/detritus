@@ -14,6 +14,8 @@ related:
   - core/dream
   - flows/build/forge
   - flows/maintainer/grow
+  - flows/maintainer/learn
+  - flows/maintainer/absorb
   - flows/principles/truthseeker
   - core/todo-import
 ---
@@ -45,6 +47,7 @@ When the user provides requirements, feedback, or a task description, follow thi
 Code context is zero-setup (no pack, no index — see `flows/project/code`):
 
 - `code_map` for a ranked structural overview of the area (optionally `focus` on a feature/symbol); `code_outline` for a file's signatures; `code_graph` for who-calls / implementers
+- `code_graph`'s `impacted_by` sizes the blast radius of the change (what transitively depends on the symbols it will touch) and `affected_tests` names the tests that must pass — run both while scoping so the plan states the change's reach and its gating tests up front, before any review
 - native Grep for text/keyword search across files
 - Identify files/packages that will need changes; understand current patterns and conventions
 
@@ -155,4 +158,8 @@ If `/todo-import` isn't available (older detritus build, no skill installed), fa
 ## On user confirmation: write the plan contract for an implementation loop
 
 If the build will be driven by an implementation loop rather than implemented in-session — the user asks for `/forge`, hands the plan to candyland, or routes through `/vibe` — write the settled plan to `.plan/<slug>.md` per `core/planning` → *The plan contract*. That artifact is what `/forge` and the candyland conductor ingest; the `/todo` import above is the in-session resumable view. They are complementary: write the contract when a loop will consume the plan, the `/todo` items when you implement it here.
+
+## Incident hook — capture the lesson after the plan is settled
+
+A detected failure, misalignment, **self-acknowledged mistake/doctrine violation**, or user correction during planning is a learning signal, but it never preempts the primary deliverable: **finish settling the plan first — never trade the deliverable for the lesson.** Detection (including the agent's own acknowledgment: "you are right, I …", "I didn't follow …", "I ignored /…") and routing are canonical in `core/ego`: user correction/self-acknowledgment → `/grow`, a PR blocker (a gate miss) → `/absorb`, telemetry → `/learn`.
 

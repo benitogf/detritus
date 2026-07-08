@@ -104,6 +104,8 @@ Post-plan a **decision** falls DOWN the escalation ladder (`core/coordination`, 
   - Under `/forge`: apply the **smith rule** — decide the best option given context and record it in the PROGRESS ledger's *Decisions made autonomously* section (what / why / evidence / alternatives rejected). `/forge` has no tier above the tech-lead; it never escalates to the user.
   - Under candyland: escalate **exactly one tier up** — quest-lead → campaign tech-manager → intent-manager — decided at the lowest tier with authority; the top tier applies the smith rule. Escalation NEVER pauses for a human; the dashboard shows decisions read-only for audit.
 
+- **Self-acknowledged incidents — record, never route.** A self-acknowledged incident (`core/ego` trigger ①) surfaced inside a sidecar unit — the tech-lead's own admission, or one a coder reported in its task report — is **RECORDED** in the ledger / delivery report, never routed in-session (capture is always in-session; routing is the user's post-delivery call per `core/ego`). Recording it makes the note available to the user's session and to `/learn` telemetry mining; the tech-lead does not act on the routing itself.
+
 ### Escalation message schema (per tier)
 
 Every escalation and its resolution is a message with these mandatory fields (**missing field = incomplete → the message is rejected/bounced**):

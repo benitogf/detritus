@@ -17,6 +17,9 @@ related:
   - flows/build/quest
   - flows/plan/plan
   - flows/github/babysit
+  - flows/maintainer/grow
+  - flows/maintainer/learn
+  - flows/maintainer/absorb
 ---
 
 # /candyland — one run in the sidecar
@@ -43,6 +46,10 @@ related:
 A run is bounded and converges: **one PR per impacted repo** (`core/flows` → *PR policy*); a feedback/review run updates the target PR in place. A single repo's delivery failure is surfaced without failing the others.
 
 **Watch-to-merge is in-session, never in the sidecar** (`core/sidecar` → *Watch-to-merge is in-session, never in the sidecar*). The sidecar never merges — merge is gated on a human review. Once the run's PR(s) open, point the user at `/babysit <pr>` (`flows/github/babysit`) to carry each to merge in their own session, on a SHA-pinned human approval.
+
+## Incident hook — capture the lesson after delivery
+
+A detected failure, misalignment, **self-acknowledged mistake/doctrine violation**, or user correction during a run is a learning signal, but it never preempts the primary deliverable: **finish the run's PR(s) first, and capture is in-session, never in the sidecar (like watch-to-merge above) — never trade the deliverable for the lesson.** Detection (including the agent's own acknowledgment: "you are right, I …", "I didn't follow …", "I ignored /…") and routing are canonical in `core/ego`: user correction/self-acknowledgment → `/grow`, a PR blocker (a gate miss) → `/absorb`, telemetry → `/learn`. Route in the user's session post-delivery — never in the sidecar.
 
 ## Control
 

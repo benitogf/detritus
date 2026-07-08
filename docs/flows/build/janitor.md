@@ -20,6 +20,9 @@ related:
   - flows/testing/testing
   - core/flows
   - flows/build/adventure
+  - flows/maintainer/grow
+  - flows/maintainer/learn
+  - flows/maintainer/absorb
 ---
 
 # /janitor - Recurring Codebase Maintenance
@@ -200,3 +203,7 @@ First tick: <continued pending work | audited topics | opened PR | no safe chang
 Verification: <test command and result, if code changed>.
 Manage anytime at <management URL if the platform exposes one>.
 ```
+
+## Incident hook — capture the lesson after delivery
+
+A detected failure, misalignment, **self-acknowledged mistake/doctrine violation**, or user correction during the audit loop is a learning signal, but it never preempts the primary deliverable: **finish the current finding's PR first — never trade the deliverable for the lesson.** Detection (including the agent's own acknowledgment: "you are right, I …", "I didn't follow …", "I ignored /…") and routing are canonical in `core/ego`: user correction/self-acknowledgment → `/grow`, a PR blocker (a gate miss) → `/absorb`, telemetry → `/learn`.

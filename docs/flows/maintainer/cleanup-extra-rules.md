@@ -87,3 +87,5 @@ Concise summary:
 - NEVER touch `permissions`, `statusLine`, `effortLevel`, `autoMode`, or any other settings that aren't hook entries
 - NEVER delete the entire `hooks` block in settings.json — only remove `detritus-*`-referencing entries
 - Skill is **re-runnable** — running it on an already-clean system should be a no-op
+
+**Incident hook.** Any mistake surfaced while running this flow — a self-acknowledged doctrine violation ("you are right, I …", "I didn't follow …") or a blocker on a PR it authored — is an incident: detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

@@ -121,3 +121,5 @@ Concise summary:
 - NEVER generate rules or hooks for languages/tools not actually found on the system
 - NEVER touch `permissions`, `statusLine`, `effortLevel`, `autoMode`, or any non-hook settings entries — those belong to `setup-superpowers`
 - Skill must be **re-runnable**: detect existing `detritus-*` files/entries and update in place; never duplicate
+
+**Incident hook.** Any mistake surfaced while running this flow — a self-acknowledged doctrine violation ("you are right, I …", "I didn't follow …") or a blocker on a PR it authored — is an incident: detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

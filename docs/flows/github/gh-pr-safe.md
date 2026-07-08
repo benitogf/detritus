@@ -48,3 +48,4 @@ Call `kb_get` with `name="flows/github/gh-pr"` and follow it **end to end**: res
 - Inherits every guardrail from `flows/github/gh-pr` (decide APPROVE vs REQUEST_CHANGES, never approve a draft/closed/self-authored PR, evidence-or-drop, attribution footer, etc.).
 - Never mutate the clone's working tree — read via `gh api` / read-only git; isolate any build or test in a detached worktree you remove on every exit path.
 - Never leave a created worktree behind — cleanup is not optional, and runs on abort and error paths, not just the happy path.
+- **Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

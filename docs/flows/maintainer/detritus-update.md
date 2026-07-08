@@ -44,3 +44,5 @@ Cache location per platform: Linux `$DETRITUS_CACHE_DIR` or `~/.cache/detritus-c
 - Don't run `detritus --setup` separately — `--update` chains it.
 - Don't rebuild from source (`go build`) — this skill is for released binaries, not local development.
 - Don't pass `--dry-run` unless the user asks for a preview.
+
+**Incident hook.** Any mistake surfaced while running this flow — a self-acknowledged doctrine violation ("you are right, I …", "I didn't follow …") or a blocker on a PR it authored — is an incident: detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.

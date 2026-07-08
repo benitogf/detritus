@@ -25,6 +25,9 @@ related:
   - flows/github/babysit
   - core/janitor-platforms
   - flows/principles/truthseeker
+  - flows/maintainer/grow
+  - flows/maintainer/learn
+  - flows/maintainer/absorb
 ---
 
 # /smith — Feature Loop with /plan Gate
@@ -182,6 +185,7 @@ Shared audit rules in `core/loop` → *Shared Audit Agent Rules* apply. On top o
 - Code context is zero-setup (no pack/index): use `code_map`/`code_outline` for structure, `code_graph` for navigation, native Grep for text (`flows/project/code`).
 - For each unchecked acceptance item, report current state: implemented (with evidence), partially implemented (with what's missing), or not started.
 - Propose the smallest next delta toward the next unchecked item. The proposal includes: files to touch, what changes, what verification proves the item is met.
+- Size that delta with `code_graph`: `impacted_by` gives the blast radius of the symbols it touches (files the proposal must include) and `affected_tests` names the tests that must pass — surface both so the delta is sized and its gating tests known before the build tick and the *Delivery* self-review.
 - Do **not** propose work outside the spec. Out-of-spec needs (a refactor that would help, a related cleanup) get reported as feature-splits/blockers into the State block's *Blockers & feature-splits*, not as deltas to implement.
 - Do **not** propose multi-item deltas. One item at a time, in checklist order, unless two items share a single fix obviously and the agent can name both.
 
@@ -241,3 +245,7 @@ Manage anytime at <management URL if the platform exposes one>.
 ```
 
 When the build completes and the PR(s) open, surface each PR URL on its own line — the loop is done.
+
+## Incident hook — capture the lesson after delivery
+
+A detected failure, misalignment, **self-acknowledged mistake/doctrine violation**, or user correction during the loop is a learning signal, but it never preempts the primary deliverable: **finish the PR(s) first — never trade the deliverable for the lesson.** Detection (including the agent's own acknowledgment: "you are right, I …", "I didn't follow …", "I ignored /…") and routing are canonical in `core/ego`: user correction/self-acknowledgment → `/grow`, a PR blocker (a gate miss) → `/absorb`, telemetry → `/learn`.
