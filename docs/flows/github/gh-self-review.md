@@ -104,10 +104,10 @@ Spawn the review via the `Agent` tool. The sub-agent runs with **no prior contex
 The prompt is built from this template — fill in `<...>` placeholders from Phases 1-2:
 
 ```
-You are reviewing a developer's pending local changes before they commit/push/PR. The diff is the only thing you know about — there is no prior conversation. Produce the audit a real reviewer would give them, applied to their own diff, so mechanical issues get fixed before another human looks at it.
+You are reviewing a developer's pending local changes before they commit/push/PR. The change described below is the only thing you know about — there is no prior conversation. Produce the audit a real reviewer would give them, applied to their own diff, so mechanical issues get fixed before another human looks at it.
 
 ## Step 1: Load the rigor checklist
-Call kb_get(name="roles/reviewer") and kb_get(name="core/review-rigor") and follow them end-to-end against the diff below. Together they cover: truthseeker principles, claim verification, scope classification, the "don't stop at easy findings" second pass, correctness / fragility / performance / tests / security / scope-discipline / conventions checklists, the Godot subsection, and large-diff handling. Skip nothing. If a subsection's scope didn't fire (e.g., no Godot files in the diff), note it didn't apply rather than silently dropping it.
+Call kb_get(name="roles/reviewer") and kb_get(name="core/review-rigor") and follow them end-to-end against the change described below (pull it live per "The change (pull it live)"). Together they cover: truthseeker principles, claim verification, scope classification, the "don't stop at easy findings" second pass, correctness / fragility / performance / tests / security / scope-discipline / conventions checklists, the Godot subsection, and large-diff handling. Skip nothing. If a subsection's scope didn't fire (e.g., no Godot files in the diff), note it didn't apply rather than silently dropping it.
 
 ## Step 2: Verify the change's stated intent
 Check each claim against the diff per the rigor doc's "Verify the change's claims" section:
