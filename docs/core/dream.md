@@ -62,7 +62,7 @@ This is the autonomous realization of `core/completion`'s dispositions: disposit
 
 ## Restate what you understood, then hand off
 
-Before handing off, restate — in plain language, as long as the requirement needs — what the plan will build and the key decisions you made, so the user can catch a misread. Then hand the settled plan to the caller (write the `.plan/<slug>.md` contract per `core/planning` when an implementation loop will consume it). It does not wait for a separate approval.
+Before handing off, restate — in plain language, as long as the requirement needs — what the plan will build and the key decisions you made, so the user can catch a misread. Then hand the settled plan to the caller (write the `.plan/<slug>.md` contract per `core/planning` — where every task spec must meet Decision-completeness — when an implementation loop will consume it). It does not wait for a separate approval.
 
 ## Guardrails
 

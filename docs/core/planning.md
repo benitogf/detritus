@@ -50,6 +50,16 @@ Before declaring ready:
 - Any requirement that cannot be verified, contradicts another, or expands beyond the feature boundary is resolved first.
 - Helpful but out-of-scope work is handled per the intake's disposition rule (`core/completion`) — a genuinely separate feature is split out, never silently folded into the plan; in-scope work is built, never parked.
 
+## Decision-completeness
+
+A plan or task spec is **decision-complete** when the implementer makes **zero** choices. The bar is a single question: *could a low-effort agent implement this without asking anything?* Concretely:
+
+- **Every file is named** — the exact files/modules to create or edit, not "the relevant handler".
+- **Every choice is resolved** — each non-trivial technical decision is either made in the spec or explicitly delegated **with the decision rule attached** (the rule the implementer applies to decide, not a bare "your call").
+- **Acceptance checks are runnable verbatim** — the commands/tests that prove the task done are written out, not described.
+
+This applies uniformly to every artifact that hands work to an executor: `.plan/<slug>.md` contracts, tech-lead partitions, quest work items, and campaign briefs. The system runs low-effort executors precisely because the decisions are made upstream — an underspecified spec pushes a decision onto an agent chosen for cheapness, which either stalls (escalation) or guesses (drift). Decision-completeness is what makes the executor's low effort safe.
+
 ## The plan contract — `.plan/<slug>.md`
 
 When planning settles **and** the build will be driven by an implementation loop — `/forge`, the candyland conductor, or `/smith` via `/vibe` — write the settled plan to `.plan/<slug>.md` so the loop can ingest it without replaying the planning conversation. This is the **only artifact that crosses planning → implementation**.

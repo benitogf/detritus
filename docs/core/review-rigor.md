@@ -57,6 +57,21 @@ The body of a PR, an issue, a branch name, or a commit message is **a claim**, n
 
 > When the review brief carries the **driving intent** — the ask that produced this change (a plan contract, an issue body, a feedback spec, the stated request) — the intent is part of the review subject. Verify the diff **satisfies it**: walk each commitment the intent makes and locate where the diff delivers it. A commitment that is missing, only partially delivered, or contradicted by the diff is a **blocker** (`intent unmet: <commitment>`), exactly like a correctness defect. Do not substitute "the code is sound" for "the code is what was asked for" — a defect-free diff that quietly delivers less than, or something adjacent to, the intent is the false-clean this section exists to catch. When no intent is supplied, note its absence in the output and review mechanics only — never invent one.
 
+## Two briefing layers
+
+A reviewer at any gate — run delivery, quest branch delivery, campaign gate 2 — receives intent in **two layers**, and the rule is **visibility global, authority local**:
+
+- **Task layer** — the brief for *this* unit (the run's task intent, the quest objective, the campaign's commitment set). This layer is the reviewer's **verdict scope**: it arms blockers. A commitment in the task layer that the diff misses, half-delivers, or contradicts is a blocker, exactly as *Intent fidelity* states.
+- **Root layer** — the verbatim, immutable top-level intent this unit serves (the campaign's original input, the quest's original objective, or, for a standalone run, its own intent — layers coincide there). The reviewer sees it in full for **context only**. It arms **contradiction detection, never completeness**: the reviewer may flag that the diff *contradicts* the root intent, but may never demand that the root intent is fully *delivered*.
+
+**Sibling-absence is never a finding.** A root-intent commitment not present in this diff is owned by sibling work the reviewer cannot see; its absence here is expected, not a defect.
+
+**A contradiction is an `INTENT_CONFLICT`, not a blocker.** When the diff genuinely contradicts the root intent, the reviewer reports it as an `INTENT_CONFLICT` (one line + JSON `{"issue":"…"}`) *in addition to* its task-scoped verdict — never folded into the local fix loop. The conflict routes to a **ruling one level up** (run→quest→campaign): a `proceed` ruling resumes delivery, a `fix` ruling converts the conflict into a work item at the level that owns decomposition. The reviewer never fixes a conflict itself.
+
+**Decidability rationale.** A contradiction with the root is **locally decidable** — a single diff either violates a stated commitment or it does not, monotone in what the reviewer can see. Completeness is decidable **only over the union** of all sibling work, which no single reviewer holds — so a local "missing commitment" verdict against the root is unsound by construction.
+
+**Route findings by remaining decision content.** A **citable** finding — one whose `file` exists in the reviewed branch — carries its own fix and goes to the **fix identity** directly. A **non-citable** finding needs decomposition and goes to the **decomposition owner** (quest lead / tech manager) as a work item. The reviewer never spawns coders and never designs the fix.
+
 ## Classify scope
 
 Set analysis depth based on the files touched. Only the analysis subsections whose scope class fired here run.
@@ -135,6 +150,14 @@ Forbidden middle states: no `approve-with-reservations`, no `mostly-clean`, no `
   - **Detection cue:** a CLEAN verdict whose own prose admits a gap ("not yet wired…, but…"). A verdict that contradicts its own narration is not clean.
   - **Out-of-scope code is not proof.** Speculation that a consumer or caller "lives elsewhere" never clears a reachability gap; only FINDING and CITING it does.
 - **V2 — Resolve reachability across the change's FULL shipping scope.** "Unwired in this diff" is checked against the whole scope the change ships in — the integrated branch AND the sibling PRs of a coordinated multi-PR feature (one feature → one PR per repo, or a validator-PR + wiring-PR split). When a consumer is CLAIMED to live in a sibling PR or branch, LOCATE that PR/branch, confirm it wires the symbol, and CITE it; otherwise the symbol is unwired = blocker. This is the verify-don't-assume half of R1/R1b sharpened for the cross-PR clear — do not duplicate the whole-repo reachability sweep of R1, the entrypoint trace of R1b, or the test-vs-entrypoint check of R1c; this extends them to the multi-PR boundary.
+
+## Re-review continuity
+
+The **first** review pass runs in a fresh, uncontaminated context — independence from the authoring conversation is what makes it a real gate (the spawner owns that handoff). Every **re-review after a fix pass** is a different job: verifying that cited findings were resolved. It **continues the same reviewer context** — the diff understanding, the brief, and the evidence trail it already established — with a delta instruction; it never re-derives context it already holds.
+
+- **Fresh evidence, held context.** The continued reviewer re-verifies each cited finding against the live tree: diff the fix commits, re-run the checks it already established, confirm nothing regressed. Held *context* is reused; held *conclusions* are not — the verdict-integrity rules (V1–V2) apply to a re-review verdict unchanged.
+- **Fallback.** When the prior reviewer context is unavailable (session gone, agent not continuable), spawn fresh with the full brief — continuity is an optimization, never a gate bypass.
+- **Realizations.** The candyland conductor continues the reviewer by resuming its session in the next round; in-session flows (`/gh-self-review`, `/forge` convergence) continue the same review sub-agent instead of spawning a new one per iteration. One contract, two transports.
 
 ## Correctness
 
@@ -258,6 +281,16 @@ Skip this entire subsection unless the diff actually touches Godot files. If onl
 - GUT (Godot Unit Test) is the most common: tests live under `test/` or `tests/`, files match `test_*.gd`, run via `godot --headless --script res://addons/gut/gut_cmdln.gd -gdir=res://test -gexit`.
 - For a Godot bug fix, a regression test means a GUT test (or an in-engine `assert`-driven test) that fires the buggy code path and asserts the new expected behaviour.
 - Missing fixtures in tests (referenced `.tres` / `.tscn` / textures not committed) are the same `t.Skip("requires fixture")` antipattern as in Go — flag fixtures-not-in-repo as fragile.
+
+## Consume the diff from live git
+
+Applies to reviewers with a local checkout of the change (a repo, worktree, or branch on disk) — the normal case for self-review, delivery gates, and the candyland reviewer. A flow reviewing a **remote** PR with no local clone (`/gh-pr` over the API) uses its API transport instead; the no-snapshot and tree-pinning principles still apply to how it re-reads the change.
+
+The reviewer has the repo; git is the database. Pull the change on demand — never through a materialized copy:
+
+- **Map first:** `git diff --stat <base>...HEAD` (or the brief's diff command) to see shape and size. Then **per-file diffs** (`git diff <base>...HEAD -- <file>`) for the files under examination, and `Read` for surrounding source. Untracked files are read directly from the tree.
+- **Never materialize a full-diff snapshot** — no dumping the diff to a scratch file to re-read, and (for spawning flows) no pasting the full diff into the reviewer's brief. A snapshot pays the diff's tokens once per copy and goes **stale** the moment a fix commit lands — a re-review consulting it reviews history, not the branch. The brief carries *pointers* (repo path, base, head SHA, in-scope file list, the driving intent); the diff itself lives in exactly one context: the reviewer's, pulled live.
+- **Pin the tree.** The brief names the head SHA the verdict must bind to; verify `git rev-parse HEAD` matches before reviewing, and re-check after — a tree that moved mid-review invalidates the pass.
 
 ## Large diffs
 

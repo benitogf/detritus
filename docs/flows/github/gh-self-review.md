@@ -1,5 +1,5 @@
 ---
-description: Deep self-audit of pending local changes (committed + uncommitted) under truthseeker rigor before commit/push/PR. Hands the diff to a fresh sub-agent so the review is uncontaminated by the conversation that produced it. Local-only — produces a triage block of blockers and non-blockers. Does not write code, does not post anywhere.
+description: Deep self-audit of pending local changes (committed + uncommitted) under truthseeker rigor before commit/push/PR. Hands pointers to the change (repo, base, head SHA, scope) to a review sub-agent that pulls the diff live — fresh on the first pass so the audit is uncontaminated by the conversation that produced it, continued on re-review iterations. Local-only — produces a triage block of blockers and non-blockers. Does not write code, does not post anywhere.
 triggers:
   - gh-self-review
   - self-review
@@ -21,7 +21,7 @@ related:
 
 # /gh-self-review — Pre-flight self-audit (delegated to a fresh agent)
 
-The same rigor `/gh-pr` applies to a posted PR, applied to local changes that haven't been committed, pushed, or PR'd. The wrapping skill collects the scope and the diff; the actual review work is **delegated to a fresh sub-agent via the `Agent` tool** so the audit runs without the conversational context that produced the code. The author's blind spots stay with the author; the sub-agent sees only the diff and the stated intent.
+The same rigor `/gh-pr` applies to a posted PR, applied to local changes that haven't been committed, pushed, or PR'd. The wrapping skill collects the scope pointers and the intent; the actual review work is **delegated to a sub-agent via the `Agent` tool** — spawned fresh on the first pass so the audit runs without the conversational context that produced the code, and continued on later iterations per `core/review-rigor` → *Re-review continuity*. The author's blind spots stay with the author; the sub-agent pulls the diff live and sees only it and the stated intent.
 
 The analysis itself — principles, claim verification, second-pass checklist, correctness / fragility / performance / tests / security / scope / conventions / Godot subsections — lives in `core/review-rigor` and is shared verbatim with `/gh-pr`. The sub-agent loads it via `kb_get` and applies it end-to-end.
 
@@ -78,22 +78,22 @@ Default to **Pick per file** unless every file's path matches an issue / branch 
 
 The result is the **in-scope set** passed to the sub-agent in Phase 3.
 
-## Phase 2: Gather diff + intent signals
+## Phase 2: Gather scope pointers + intent signals
 
-Collect everything the sub-agent will need — it has no conversation context, so the brief must be self-contained.
+Collect what the sub-agent needs — it has no conversation context, but it DOES have the repo. The brief carries **pointers and intent, never the diff body** — the sub-agent pulls the diff live per `core/review-rigor` → *Consume the diff from live git*; do not dump it to a scratch file and do not paste it into the brief.
 
 ```
-git diff "$base"...HEAD                          # committed scope
+git diff "$base"...HEAD --stat                   # shape + size (wrapper sizes the review; body stays unread)
 git log "$base"..HEAD --pretty=format:'%h %s%n%b%n---'  # commit messages WITH bodies
-git diff HEAD -- <path>                          # per confirmed-modified file
-git rev-parse --abbrev-ref HEAD                  # branch name (intent signal)
+git status --porcelain                           # modified/untracked candidates for scope confirmation
+git rev-parse --abbrev-ref HEAD && git rev-parse HEAD   # branch name (intent signal) + head SHA (tree pin)
 ```
 
-For confirmed-untracked files: `git diff` doesn't show their content. Capture each file's contents with `cat` for inclusion in the brief. Don't `git add -N` — that mutates the index and violates the no-side-effects guardrail.
+Untracked in-scope files are listed by path — the sub-agent reads their contents from the tree itself. Don't `git add -N` — that mutates the index and violates the no-side-effects guardrail.
 
 If a linked issue was fetched in Phase 1, capture its body too — the sub-agent will check the diff against its acceptance criteria.
 
-If the in-scope diff exceeds ~2000 lines, the brief should say so explicitly and instruct the sub-agent to prioritize files matching the change's stated scope.
+If the `--stat` exceeds ~2000 changed lines, the brief should say so explicitly and instruct the sub-agent to prioritize files matching the change's stated scope.
 
 **Driving intent (required brief slot).** Resolve the ask that drove this change, in order: the `.plan/<slug>.md` contract when one drove the work (/forge delivery passes it explicitly) → the linked issue body → the stated ask from the conversation, condensed faithfully. Include it in the brief verbatim (or the contract's feature spec + acceptance checklist for long contracts). When genuinely nothing recorded the intent (ad-hoc tree changes), say so in the brief — the sub-agent notes the absence and reviews mechanics only. The existing signals (branch name, commit messages, linked issue) stay as corroboration, not as the intent itself.
 
@@ -104,10 +104,10 @@ Spawn the review via the `Agent` tool. The sub-agent runs with **no prior contex
 The prompt is built from this template — fill in `<...>` placeholders from Phases 1-2:
 
 ```
-You are reviewing a developer's pending local changes before they commit/push/PR. The diff is the only thing you know about — there is no prior conversation. Produce the audit a real reviewer would give them, applied to their own diff, so mechanical issues get fixed before another human looks at it.
+You are reviewing a developer's pending local changes before they commit/push/PR. The change described below is the only thing you know about — there is no prior conversation. Produce the audit a real reviewer would give them, applied to their own diff, so mechanical issues get fixed before another human looks at it.
 
 ## Step 1: Load the rigor checklist
-Call kb_get(name="roles/reviewer") and kb_get(name="core/review-rigor") and follow them end-to-end against the diff below. Together they cover: truthseeker principles, claim verification, scope classification, the "don't stop at easy findings" second pass, correctness / fragility / performance / tests / security / scope-discipline / conventions checklists, the Godot subsection, and large-diff handling. Skip nothing. If a subsection's scope didn't fire (e.g., no Godot files in the diff), note it didn't apply rather than silently dropping it.
+Call kb_get(name="roles/reviewer") and kb_get(name="core/review-rigor") and follow them end-to-end against the change described below (pull it live per "The change (pull it live)"). Together they cover: truthseeker principles, claim verification, scope classification, the "don't stop at easy findings" second pass, correctness / fragility / performance / tests / security / scope-discipline / conventions checklists, the Godot subsection, and large-diff handling. Skip nothing. If a subsection's scope didn't fire (e.g., no Godot files in the diff), note it didn't apply rather than silently dropping it.
 
 ## Step 2: Verify the change's stated intent
 Check each claim against the diff per the rigor doc's "Verify the change's claims" section:
@@ -135,10 +135,12 @@ Check each claim against the diff per the rigor doc's "Verify the change's claim
 
 Omit any section that's empty. Don't pad. "Nothing to flag" is a valid finding.
 
-## The diff
-Repo: <local repo path, so you can grep callers, read surrounding source, run `kb_search` against the relevant patterns docs>
+## The change (pull it live)
+Repo: <local repo path — grep callers, read surrounding source, run `kb_search` against the relevant patterns docs>
+Base: <base>   Head SHA: <git rev-parse HEAD — verify it matches before reviewing; a moved tree invalidates the pass>
+In scope: <committed file list from --stat> + uncommitted-included: <modified paths, review via `git diff HEAD -- <path>`> + untracked-included: <paths — read their contents from the tree>
 
-<paste the full unified diff here — `git diff <base>...HEAD`, plus `git diff HEAD -- <path>` for each confirmed-modified file, plus contents of each confirmed-untracked file with `=== untracked: <path> ===` headers>
+Pull the diff yourself per core/review-rigor → "Consume the diff from live git": `git diff <base>...HEAD --stat` for the map, then per-file diffs for what you examine. Do not dump the diff to a file.
 
 ## Guardrails for your review
 - Do NOT edit code, stage files, commit, push, or post anywhere. Output is text only.
@@ -148,7 +150,7 @@ Repo: <local repo path, so you can grep callers, read surrounding source, run `k
 - A green self-review is not a substitute for a real reviewer — note this once if the diff is non-trivial.
 ```
 
-The wrapping skill passes the diff inline. The sub-agent CAN `cd` into the repo path and use `Bash` / `Read` to follow up (grep callers, inspect surrounding source, read sibling files for conventions) — that's expected. What it cannot do is rely on context from this conversation.
+The wrapping skill passes pointers, not the diff — the sub-agent `cd`s into the repo path and pulls the diff live with `Bash` / `Read` (per-file diffs, callers, surrounding source, sibling conventions) — that's expected and required. What it cannot do is rely on context from this conversation.
 
 ## Phase 4: Present the sub-agent's triage to the dev
 
@@ -158,21 +160,21 @@ If the sub-agent returned with empty sections only ("nothing to flag"), report t
 
 ## Phase 5: Loop until clean
 
-A single sub-agent pass can miss regressions a fix introduces. Fixing one blocker often perturbs adjacent code in ways the first review didn't flag — the canonical failure shape this loop exists to catch. After the dev addresses items from Phase 4, **re-run Phases 1–4 against the updated tree** with a fresh sub-agent (no carry-over context — each iteration is independent).
+A single sub-agent pass can miss regressions a fix introduces. Fixing one blocker often perturbs adjacent code in ways the first review didn't flag — the canonical failure shape this loop exists to catch. After the dev addresses items from Phase 4, **re-run the review against the updated tree** by **continuing the same reviewer sub-agent** (`core/review-rigor` → *Re-review continuity*): send it a delta brief — which findings were addressed, the fix commits, the new head SHA — and it re-reviews per that section (fresh evidence, regression sweep of the fix commits). Phase 1 scope handling still re-runs in the wrapper (below).
 
 Stop conditions:
 
 - Sub-agent's triage is empty.
 - The only remaining items are **genuinely out of scope** for this change — a separate feature, a repo-wide cleanup the change didn't touch. A finding you *can* address in-scope is **not** deferrable: fix it and re-loop. Do not converge with handle-able findings unaddressed, and do not park them in a "Known non-blockers" PR section to ship around them — that is the deferral `core/completion`'s exit gate forbids (disposition 1: handle-able in-scope work is done now), applied to your own delivery. Out-of-scope items that survive get a **tracked issue** (via `/gh-issue-create`), not just a loose body line.
-- Loop has run 3 iterations. A finding that survives three independent fresh-sub-agent passes is unlikely to be phantom; surface the persistence to the dev for accept / defer / escalate.
+- Loop has run 3 iterations. A finding still standing after three review rounds — held open by the continued reviewer against three fix attempts — is not being resolved by iteration; surface the persistence to the dev for accept / defer / escalate.
 
 The test for "can I defer this?" is **not** "is it a blocker?" — it is "is it out of scope for this change?" If you could fix it with the same tools in the same diff, it is in scope, and shipping it as a known non-blocker is a punt.
 
-Each iteration spawns a NEW `Agent` invocation — never reuse the prior sub-agent. The freshness contract (Phase 3) holds per-iteration; a carried-over agent would re-inherit its own prior reasoning and the loop loses its independence.
+Iteration mechanics: the FIRST pass is a fresh `Agent` spawn (the Phase 3 freshness contract — independence from the authoring conversation). Iterations 2+ **continue that same sub-agent** with the delta brief; anchoring on its own prior conclusions is guarded by the rigor doc's verdict-integrity rules (held context is reused, held conclusions must be re-proven against the fix commits). If the sub-agent cannot be continued (context lost, agent expired), fall back to a fresh spawn with the full Phase 3 brief, per *Re-review continuity*'s fallback rule.
 
 **Iteration 2+ scope handling.** Phase 1 re-runs to pick up new commits the dev made between iterations — committed scope evolves naturally. Only re-prompt the dev about modified/untracked files if the set *changed* since the prior iteration (new untracked files appeared, or files in the prior in-scope set are no longer in the working tree). If the modified/untracked set is unchanged, carry the prior iteration's in-scope decision forward silently — don't re-ask the same question.
 
-**The verdict is bound to the tree it ran against.** A clean exit certifies *that exact tree* — nothing more. ANY mutation of the tree after the review reopens it, even when the loop had already exited clean: a refactor the review itself prompted (extracting a shared helper, a rename), a follow-up fix, `commit --amend`, a squash, a rebase/merge, conflict resolution. Each produces a tree no sub-agent has seen. The rule: **the tree that ships is the tree the last review ran on.** If you change anything between the clean review and the push/PR, run one more fresh-sub-agent pass against the final tree before shipping — the 3-iteration cap counts review rounds, not a budget that excuses skipping the audit of what actually lands. A "no blockers" result from before a squash/refactor is stale the moment the tree moves.
+**The verdict is bound to the tree it ran against.** A clean exit certifies *that exact tree* — nothing more. ANY mutation of the tree after the review reopens it, even when the loop had already exited clean: a refactor the review itself prompted (extracting a shared helper, a rename), a follow-up fix, `commit --amend`, a squash, a rebase/merge, conflict resolution. Each produces a tree no sub-agent has seen. The rule: **the tree that ships is the tree the last review ran on.** If you change anything between the clean review and the push/PR, run one more review pass against the final tree before shipping (continuing the same reviewer per Phase 5; fresh spawn if it can't be continued) — the 3-iteration cap counts review rounds, not a budget that excuses skipping the audit of what actually lands. A "no blockers" result from before a squash/refactor is stale the moment the tree moves.
 
 ## A blocker that survives this gate is a gate miss (incident)
 
@@ -187,6 +189,8 @@ Self-review by the author who wrote the change shares the author's blind spots �
 - It has no investment in any decision encoded in the diff.
 
 This doesn't eliminate the blind spot — both agents share training and reasoning patterns — but it eliminates the *conversational* bias, which is the largest source of self-review false negatives.
+
+Freshness earns its cost exactly once: at the first pass, against the *author's* context. Re-review iterations verify fixes to findings the reviewer itself cited — there is no authoring bias to escape, so they continue the same reviewer (`core/review-rigor` → *Re-review continuity*) instead of paying a full context rebuild per round.
 
 ## Guardrails (for the wrapping skill)
 

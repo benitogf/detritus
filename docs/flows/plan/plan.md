@@ -157,7 +157,7 @@ If `/todo-import` isn't available (older detritus build, no skill installed), fa
 
 ## On user confirmation: write the plan contract for an implementation loop
 
-If the build will be driven by an implementation loop rather than implemented in-session — the user asks for `/forge`, hands the plan to candyland, or routes through `/vibe` — write the settled plan to `.plan/<slug>.md` per `core/planning` → *The plan contract*. That artifact is what `/forge` and the candyland conductor ingest; the `/todo` import above is the in-session resumable view. They are complementary: write the contract when a loop will consume the plan, the `/todo` items when you implement it here.
+If the build will be driven by an implementation loop rather than implemented in-session — the user asks for `/forge`, hands the plan to candyland, or routes through `/vibe` — write the settled plan to `.plan/<slug>.md` per `core/planning` → *The plan contract*. That artifact is what `/forge` and the candyland conductor ingest; the `/todo` import above is the in-session resumable view. They are complementary: write the contract when a loop will consume the plan, the `/todo` items when you implement it here. Every task spec must meet `core/planning` → Decision-completeness.
 
 ## Incident hook — capture the lesson after the plan is settled
 
