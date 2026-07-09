@@ -284,10 +284,14 @@ Skip this entire subsection unless the diff actually touches Godot files. If onl
 
 ## Consume the diff from live git
 
+Applies to reviewers with a local checkout of the change (a repo, worktree, or branch on disk) — the normal case for self-review, delivery gates, and the candyland reviewer. A flow reviewing a **remote** PR with no local clone (`/gh-pr` over the API) uses its API transport instead; the no-snapshot and tree-pinning principles still apply to how it re-reads the change.
+
 The reviewer has the repo; git is the database. Pull the change on demand — never through a materialized copy:
 
 - **Map first:** `git diff --stat <base>...HEAD` (or the brief's diff command) to see shape and size. Then **per-file diffs** (`git diff <base>...HEAD -- <file>`) for the files under examination, and `Read` for surrounding source. Untracked files are read directly from the tree.
 - **Never materialize a full-diff snapshot** — no dumping the diff to a scratch file to re-read, and (for spawning flows) no pasting the full diff into the reviewer's brief. A snapshot pays the diff's tokens once per copy and goes **stale** the moment a fix commit lands — a re-review consulting it reviews history, not the branch. The brief carries *pointers* (repo path, base, head SHA, in-scope file list, the driving intent); the diff itself lives in exactly one context: the reviewer's, pulled live.
 - **Pin the tree.** The brief names the head SHA the verdict must bind to; verify `git rev-parse HEAD` matches before reviewing, and re-check after — a tree that moved mid-review invalidates the pass.
+
+## Large diffs
 
 For diffs >500 lines: prioritize files in the change's stated scope, then skim the rest for drift. **Say so in the report.** Pretending to have read every line of a 5000-line diff is worse than saying "I prioritized these files".

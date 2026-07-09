@@ -1,5 +1,5 @@
 ---
-description: Deep self-audit of pending local changes (committed + uncommitted) under truthseeker rigor before commit/push/PR. Hands the diff to a fresh sub-agent so the review is uncontaminated by the conversation that produced it. Local-only — produces a triage block of blockers and non-blockers. Does not write code, does not post anywhere.
+description: Deep self-audit of pending local changes (committed + uncommitted) under truthseeker rigor before commit/push/PR. Hands pointers to the change (repo, base, head SHA, scope) to a review sub-agent that pulls the diff live — fresh on the first pass so the audit is uncontaminated by the conversation that produced it, continued on re-review iterations. Local-only — produces a triage block of blockers and non-blockers. Does not write code, does not post anywhere.
 triggers:
   - gh-self-review
   - self-review
@@ -21,7 +21,7 @@ related:
 
 # /gh-self-review — Pre-flight self-audit (delegated to a fresh agent)
 
-The same rigor `/gh-pr` applies to a posted PR, applied to local changes that haven't been committed, pushed, or PR'd. The wrapping skill collects the scope and the diff; the actual review work is **delegated to a fresh sub-agent via the `Agent` tool** so the audit runs without the conversational context that produced the code. The author's blind spots stay with the author; the sub-agent sees only the diff and the stated intent.
+The same rigor `/gh-pr` applies to a posted PR, applied to local changes that haven't been committed, pushed, or PR'd. The wrapping skill collects the scope pointers and the intent; the actual review work is **delegated to a sub-agent via the `Agent` tool** — spawned fresh on the first pass so the audit runs without the conversational context that produced the code, and continued on later iterations per `core/review-rigor` → *Re-review continuity*. The author's blind spots stay with the author; the sub-agent pulls the diff live and sees only it and the stated intent.
 
 The analysis itself — principles, claim verification, second-pass checklist, correctness / fragility / performance / tests / security / scope / conventions / Godot subsections — lives in `core/review-rigor` and is shared verbatim with `/gh-pr`. The sub-agent loads it via `kb_get` and applies it end-to-end.
 
@@ -80,7 +80,7 @@ The result is the **in-scope set** passed to the sub-agent in Phase 3.
 
 ## Phase 2: Gather scope pointers + intent signals
 
-Collect what the sub-agent needs — it has no conversation context, but it DOES have the repo. The brief carries **pointers and intent, never the diff body** (`core/review-rigor` → *Consume the diff from live git*: the diff lives in exactly one context — the reviewer's, pulled live). Do not dump the diff to a scratch file and do not paste it into the brief; both pay its tokens per copy and go stale.
+Collect what the sub-agent needs — it has no conversation context, but it DOES have the repo. The brief carries **pointers and intent, never the diff body** — the sub-agent pulls the diff live per `core/review-rigor` → *Consume the diff from live git*; do not dump it to a scratch file and do not paste it into the brief.
 
 ```
 git diff "$base"...HEAD --stat                   # shape + size (wrapper sizes the review; body stays unread)
@@ -160,7 +160,7 @@ If the sub-agent returned with empty sections only ("nothing to flag"), report t
 
 ## Phase 5: Loop until clean
 
-A single sub-agent pass can miss regressions a fix introduces. Fixing one blocker often perturbs adjacent code in ways the first review didn't flag — the canonical failure shape this loop exists to catch. After the dev addresses items from Phase 4, **re-run the review against the updated tree** by **continuing the same reviewer sub-agent** (`core/review-rigor` → *Re-review continuity*): send it a delta brief — which findings were addressed, the fix commits, the new head SHA — and it re-verifies each cited finding with fresh evidence plus a regression sweep of the fix commits, without re-deriving the context it already holds. Phase 1 scope handling still re-runs in the wrapper (below).
+A single sub-agent pass can miss regressions a fix introduces. Fixing one blocker often perturbs adjacent code in ways the first review didn't flag — the canonical failure shape this loop exists to catch. After the dev addresses items from Phase 4, **re-run the review against the updated tree** by **continuing the same reviewer sub-agent** (`core/review-rigor` → *Re-review continuity*): send it a delta brief — which findings were addressed, the fix commits, the new head SHA — and it re-reviews per that section (fresh evidence, regression sweep of the fix commits). Phase 1 scope handling still re-runs in the wrapper (below).
 
 Stop conditions:
 
@@ -170,7 +170,7 @@ Stop conditions:
 
 The test for "can I defer this?" is **not** "is it a blocker?" — it is "is it out of scope for this change?" If you could fix it with the same tools in the same diff, it is in scope, and shipping it as a known non-blocker is a punt.
 
-Iteration mechanics: the FIRST pass is a fresh `Agent` spawn (the Phase 3 freshness contract — independence from the authoring conversation). Iterations 2+ **continue that same sub-agent** with the delta brief; anchoring on its own prior conclusions is guarded by the rigor doc's verdict-integrity rules (held context is reused, held conclusions must be re-proven against the fix commits). If the sub-agent cannot be continued (context lost, agent expired), fall back to a fresh spawn with the full Phase 3 brief — continuity is an optimization, never a gate bypass.
+Iteration mechanics: the FIRST pass is a fresh `Agent` spawn (the Phase 3 freshness contract — independence from the authoring conversation). Iterations 2+ **continue that same sub-agent** with the delta brief; anchoring on its own prior conclusions is guarded by the rigor doc's verdict-integrity rules (held context is reused, held conclusions must be re-proven against the fix commits). If the sub-agent cannot be continued (context lost, agent expired), fall back to a fresh spawn with the full Phase 3 brief, per the same section's fallback rule.
 
 **Iteration 2+ scope handling.** Phase 1 re-runs to pick up new commits the dev made between iterations — committed scope evolves naturally. Only re-prompt the dev about modified/untracked files if the set *changed* since the prior iteration (new untracked files appeared, or files in the prior in-scope set are no longer in the working tree). If the modified/untracked set is unchanged, carry the prior iteration's in-scope decision forward silently — don't re-ask the same question.
 
