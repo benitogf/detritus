@@ -165,10 +165,11 @@ The human resolves and can relaunch the loop. Pausing is the safe default — th
 
 ## Scheduling
 
-**Delegate to `core/janitor-platforms`** — do not hardcode a scheduler. Load it, pick the adapter for the host, and report the effective cadence in human terms.
+**Delegate to `core/janitor-platforms`** — do not hardcode a scheduler. Load it, pick the adapter for the host, report the effective cadence in human terms. These arrangements map one-to-one onto *Self-continuation*; take the first the host supports.
 
-- **Default: the in-session loop (attended).** Be honest that a self-rescheduling driver (`/loop`-style) stops if the session ends or a usage limit kills a tick — see `core/loop` → *Usage-Limit Resilience*. Present it as office-hours / attended, not unattended-durable.
-- **Resilient option: durable cron** (`CronCreate durable: true`) — a standing schedule that survives a usage-limit kill where `/loop` does not, seat-billed, against the local checkout. Offer this when the user wants the watch to survive a limit hit.
+- **Preferred default: a durable standing schedule** (`CronCreate durable: true`, an OS timer, or Routines) — fires ticks automatically and survives a usage-limit kill or session end (`core/loop` → *Usage-Limit Resilience*). `/babysit` is automatic by default, and a standing schedule is what makes "automatic" hold unattended — so this is the default whenever the host offers it.
+- **Attended fallback: the in-session self-arm** (`ScheduleWakeup`, `/loop`-style). Use only where the host actually delivers the self-wake, and state plainly it is **not** unattended-durable — it stops if the session ends or a usage limit kills a tick before it re-arms (`core/loop` → *Usage-Limit Resilience*). Office-hours / attended use.
+- **Last resort: on-demand.** If the host can arm neither of the above, degrade to on-demand per *Self-continuation* (one tick per invocation, flagged degraded) — never refuse to run.
 - **Cloud Routines are ineligible at 60s** — their floor is 1 hour, so a sub-hour interval is rejected at routine-creation time. Do not route a 60s watch there.
 
 The interval arg defaults to 60s; if a chosen platform's minimum exceeds the requested interval, round up and state the effective cadence (per the platform adapter's rules).
