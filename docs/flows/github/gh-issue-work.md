@@ -253,7 +253,10 @@ gh pr create \
 
 ## Phase 10: Report back
 
-Print the PR URL on its own line, then a one-sentence summary of what was done. No emoji elsewhere in the reply. Then **offer** `/babysit <pr>` (`flows/github/babysit`) as the optional watch-to-merge continuation — it watches this PR, folds in reviewer feedback each tick, and merges on a SHA-pinned human approval. Offer it; do not auto-start it — a developer often merges by hand, and opening a watch loop unbidden expands beyond the issue→PR contract this skill delivers. (When entered at Phase 9 by an autonomous caller such as `/smith` or `/vibe`, that caller owns the watch decision — this skill's offer applies to its own interactive use.)
+Print the PR URL on its own line, then a one-sentence summary of what was done. No emoji elsewhere in the reply. Then **auto-start** `/babysit <pr>` (`flows/github/babysit`) — the watch-to-merge continuation that watches this PR, folds in reviewer feedback each tick, and merges on a SHA-pinned human approval. **Hand off to it by default; do not merely offer.** Auto-starting is safe because `/babysit` never merges without a fresh human approval on the current HEAD, is hard-capped at 20 ticks, and can be halted at any time — so the watch costs little and removes the manual "now go watch it" step. Two carve-outs remain:
+
+- **Autonomous callers own the watch decision.** When Phase 9 was entered by `/smith`, `/vibe`, `/forge`, or a sidecar flow, that caller — not this skill — decides whether to watch; do **not** auto-start `/babysit` under them (their deliverable is the open PR handed back to the human).
+- **Honor an explicit opt-out.** If the user said "just open the PR" / "don't watch it," report the URL and stop — auto-start is the default, not a mandate.
 
 ## Phase 11: Handle chat follow-up
 
