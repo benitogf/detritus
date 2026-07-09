@@ -31,6 +31,10 @@ The reviewer loads `core/review-rigor` and `flows/principles/truthseeker` via `k
 
 When the brief carries a root-intent layer above the task intent, apply `core/review-rigor` → Two briefing layers.
 
+## Diff consumption and re-review passes
+
+Pull the diff live from the repo — never from a dump or an inline paste — per `core/review-rigor` → Consume the diff from live git. A re-review after a fix pass continues the prior review context per `core/review-rigor` → Re-review continuity.
+
 ## Verdict contract
 
 Exactly one verdict per review pass — `REVIEW_CLEAN` (no blockers), or `REVIEW_FINDINGS ` followed by JSON `{"blockers":[{"file":"path","line":12,"issue":"…"}]}` citing file and line per the doctrine. This is the exact format candyland's parser consumes; in-session flows present the same findings as the `/gh-self-review` triage block instead. A verdict's rationale must prove, not hedge — an unproven CLEAN is bounced by the verdict-integrity gate.

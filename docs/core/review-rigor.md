@@ -151,6 +151,14 @@ Forbidden middle states: no `approve-with-reservations`, no `mostly-clean`, no `
   - **Out-of-scope code is not proof.** Speculation that a consumer or caller "lives elsewhere" never clears a reachability gap; only FINDING and CITING it does.
 - **V2 — Resolve reachability across the change's FULL shipping scope.** "Unwired in this diff" is checked against the whole scope the change ships in — the integrated branch AND the sibling PRs of a coordinated multi-PR feature (one feature → one PR per repo, or a validator-PR + wiring-PR split). When a consumer is CLAIMED to live in a sibling PR or branch, LOCATE that PR/branch, confirm it wires the symbol, and CITE it; otherwise the symbol is unwired = blocker. This is the verify-don't-assume half of R1/R1b sharpened for the cross-PR clear — do not duplicate the whole-repo reachability sweep of R1, the entrypoint trace of R1b, or the test-vs-entrypoint check of R1c; this extends them to the multi-PR boundary.
 
+## Re-review continuity
+
+The **first** review pass runs in a fresh, uncontaminated context — independence from the authoring conversation is what makes it a real gate (the spawner owns that handoff). Every **re-review after a fix pass** is a different job: verifying that cited findings were resolved. It **continues the same reviewer context** — the diff understanding, the brief, and the evidence trail it already established — with a delta instruction; it never re-derives context it already holds.
+
+- **Fresh evidence, held context.** The continued reviewer re-verifies each cited finding against the live tree: diff the fix commits, re-run the checks it already established, confirm nothing regressed. Held *context* is reused; held *conclusions* are not — the verdict-integrity rules (V1–V2) apply to a re-review verdict unchanged.
+- **Fallback.** When the prior reviewer context is unavailable (session gone, agent not continuable), spawn fresh with the full brief — continuity is an optimization, never a gate bypass.
+- **Realizations.** The candyland conductor continues the reviewer by resuming its session in the next round; in-session flows (`/gh-self-review`, `/forge` convergence) continue the same review sub-agent instead of spawning a new one per iteration. One contract, two transports.
+
 ## Correctness
 
 For each non-trivial change, ask:
@@ -274,6 +282,12 @@ Skip this entire subsection unless the diff actually touches Godot files. If onl
 - For a Godot bug fix, a regression test means a GUT test (or an in-engine `assert`-driven test) that fires the buggy code path and asserts the new expected behaviour.
 - Missing fixtures in tests (referenced `.tres` / `.tscn` / textures not committed) are the same `t.Skip("requires fixture")` antipattern as in Go — flag fixtures-not-in-repo as fragile.
 
-## Large diffs
+## Consume the diff from live git
+
+The reviewer has the repo; git is the database. Pull the change on demand — never through a materialized copy:
+
+- **Map first:** `git diff --stat <base>...HEAD` (or the brief's diff command) to see shape and size. Then **per-file diffs** (`git diff <base>...HEAD -- <file>`) for the files under examination, and `Read` for surrounding source. Untracked files are read directly from the tree.
+- **Never materialize a full-diff snapshot** — no dumping the diff to a scratch file to re-read, and (for spawning flows) no pasting the full diff into the reviewer's brief. A snapshot pays the diff's tokens once per copy and goes **stale** the moment a fix commit lands — a re-review consulting it reviews history, not the branch. The brief carries *pointers* (repo path, base, head SHA, in-scope file list, the driving intent); the diff itself lives in exactly one context: the reviewer's, pulled live.
+- **Pin the tree.** The brief names the head SHA the verdict must bind to; verify `git rev-parse HEAD` matches before reviewing, and re-check after — a tree that moved mid-review invalidates the pass.
 
 For diffs >500 lines: prioritize files in the change's stated scope, then skim the rest for drift. **Say so in the report.** Pretending to have read every line of a 5000-line diff is worse than saying "I prioritized these files".
