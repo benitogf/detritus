@@ -29,7 +29,7 @@ related:
 
 # /forge — In-Process Implementation Loop
 
-`/forge` takes an **already-settled plan** and drives it to one PR per impacted repo using the parallel implementation loop: a tech-lead partitions the work into fork-safe tasks, a test-engineer defines each with a failing test, backend/frontend/fullstack coders build them concurrently, and the tech-lead integrates and delivers. `/forge` does **not** plan — it consumes a plan contract produced by `/plan` (developer) or `/dream` (executive intake, via `/vibe`).
+`/forge` takes an **already-settled plan** and drives it to one PR per impacted repo using the parallel implementation loop: a tech-lead partitions the work into fork-safe tasks, each named with its defining test; backend/frontend/fullstack coders build them concurrently — each writing its own task's defining test failing-first, then driving it to green — and the tech-lead integrates and delivers. `/forge` does **not** plan — it consumes a plan contract produced by `/plan` (developer) or `/dream` (executive intake, via `/vibe`).
 
 `/forge` is a **thin driver**: it composes `roles/tech-lead` (decisions + choreography), `core/build` (build unit + delivery), and `core/coder` (coder behavior). It restates none of them — when those tighten, `/forge` inherits it.
 
@@ -77,7 +77,7 @@ These are **recorded here, not sent to the user** — the ledger is the audit tr
 
 ## Visibility trade-off
 
-`/forge`'s coders are in-process sub-agents, so only **this terminal** sees them — there is no external DAG, no per-agent pause/kill, no live dashboard. That is the deliberate trade for running solo. When you need control and visibility over the running agents, that is candyland's job, not `/forge`'s.
+`/forge`'s coders are in-process sub-agents, so only **this terminal** sees them — there is no external task view, no per-agent pause/kill, no live dashboard. That is the deliberate trade for running solo. When you need control and visibility over the running agents, that is candyland's job, not `/forge`'s.
 
 ## Boundaries
 

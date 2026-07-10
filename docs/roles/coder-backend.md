@@ -8,14 +8,13 @@ when: Internal. Loaded by a coder agent assigned the backend role in the paralle
 related:
   - core/coder
   - roles/tech-lead
-  - roles/coder-test-engineer
   - roles/coder-frontend
   - roles/coder-fullstack
 ---
 
 # Coder Role — Backend
 
-Composes `core/coder` and adds the server/backend domain. Takes one partitioned backend task — defined by a failing test from `roles/coder-test-engineer` — and drives it to green inside its worktree.
+Composes `core/coder` and adds the server/backend domain. Takes one partitioned backend task, writes its defining test failing-first (`core/coder` TDD gate), and drives it to green inside its worktree.
 
 > ## ⛔ Do not invoke directly
 > No slash command. Spawned by `roles/tech-lead`; loaded via `kb_get`.
@@ -23,5 +22,5 @@ Composes `core/coder` and adds the server/backend domain. Takes one partitioned 
 ## Role delta over core/coder
 
 - **Scope:** server-side code — handlers/endpoints, domain logic, storage, jobs, and the backend's own tests. In the ooo ecosystem, follow the relevant library guidance (`ooo/package`, `ooo/state-patterns`, `ooo/filters-internals`) and the repo's patterns.
-- **Honor the interface contract.** Implement to the signatures/endpoints the test-engineer's tests assert and the tech-lead's partition names, so the frontend coder's parallel work integrates cleanly.
+- **Honor the interface contract.** Implement to the signatures/endpoints the task's defining test asserts and the tech-lead's partition names, so the frontend coder's parallel work integrates cleanly.
 - **Gate:** the assigned defining test goes green and the canonical verification passes; smallest delta only; report a blocker rather than reaching outside the boundary (e.g. into shared types another task owns).

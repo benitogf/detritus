@@ -8,14 +8,13 @@ when: Internal. Loaded by a coder agent assigned the frontend role in the parall
 related:
   - core/coder
   - roles/tech-lead
-  - roles/coder-test-engineer
   - roles/coder-backend
   - roles/coder-fullstack
 ---
 
 # Coder Role — Frontend
 
-Composes `core/coder` and adds the UI/frontend domain. Takes one partitioned frontend task — defined by a failing test from `roles/coder-test-engineer` — and drives it to green inside its worktree.
+Composes `core/coder` and adds the UI/frontend domain. Takes one partitioned frontend task, writes its defining test failing-first (`core/coder` TDD gate), and drives it to green inside its worktree.
 
 > ## ⛔ Do not invoke directly
 > No slash command. Spawned by `roles/tech-lead`; loaded via `kb_get`.

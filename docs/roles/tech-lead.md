@@ -15,7 +15,6 @@ related:
   - core/coder
   - core/sidecar
   - core/todo-audit
-  - roles/coder-test-engineer
   - roles/coder-backend
   - roles/coder-frontend
   - roles/coder-fullstack
@@ -71,7 +70,7 @@ The tech-lead reads `.plan/<slug>.md`, the settled plan-contract artifact writte
    - **Concurrency is the target for genuinely independent work — but don't over-split.** The partition's job is to *find* the fork-safe split (disjoint repos, files, modules) so independent units run in parallel; independent work run serially is wasted wall-clock. Against that, each extra coder re-ingests the full context — prefer fewer, bigger tasks, and remember a single task is a valid partition.
    - ✅ Two independent files, neither consuming the other's output → two concurrent tasks with disjoint `files`.
    - ❌ Coupled work (shared files, or task B consumes task A's output) emitted as two "parallel" tasks, OR one file split across two tasks (overlapping boundary → dirty merge).
-2. **Define tasks with failing tests.** The test-engineer (`roles/coder-test-engineer`) writes the failing test that defines each task. "Done" for every downstream coder is that test green (`core/coder` TDD gate). Every task spec must meet `core/planning` → Decision-completeness.
+2. **Define each task by a failing test.** Every task names its defining test; the coder that owns the task writes that test **failing-first** as the task's first step (`core/coder` TDD gate) — there is no separate test-authoring sibling, and no coder writes another task's test. "Done" for the coder is that test green. Every task spec must meet `core/planning` → Decision-completeness.
 3. **Parallel build.** Each task goes to a coder (`roles/coder-backend` / `roles/coder-frontend` / `roles/coder-fullstack`) in its own worktree, working only inside its boundary. Coders run concurrently; they emit `green`/`blocked` status.
 4. **Integrate sequentially.** Merge completed tasks one at a time, re-running the canonical verification after each. **On a dirty merge or a red suite, loop the work back to the owning coder** — the tech-lead never hand-fixes a coder's task silently, because a silent fix erases the test-defined contract and hides the regression.
    - ✅ Merge task A, run verification green; merge task B, suite goes red → loop B back to its coder with the failing assertion.
@@ -86,7 +85,7 @@ Under the candyland conductor the tech-lead does not spawn coders — it **emits
 PARTITION [{"id":"export-endpoint","title":"Export endpoint → CSV","role":"Backend","emoji":"⚙️","files":["api/reports.go","api/export_test.go"],"test":"api/export_test.go"},{"id":"import-form","title":"Import upload form","role":"Frontend","emoji":"🎨","files":["web/src/Import.tsx","web/src/Import.test.tsx"],"test":"web/src/Import.test.tsx"}]
 ```
 
-Per task: `id` (stable slug), `title`, `role` (Backend / Frontend / Fullstack / Test eng / …), optional `emoji`, `files` (the disjoint fork-safe boundary — for a `Fullstack` task this spans both server and client files, still disjoint from every other task), and `test` (the defining test). Every emitted task is fully independent of every sibling (the partition rule above) — there is no dependency field and no ordering between tasks. A one-element array (a single atomic task) is a valid emission. The driver parses this line, renders the task table, and spawns one coder process per task with its slice. In-process drivers (`/forge`) may ignore the line and spawn sub-agents directly; the format is a no-op there, so emitting it is always safe.
+Per task: `id` (stable slug), `title`, `role` (Backend / Frontend / Fullstack), optional `emoji`, `files` (the disjoint fork-safe boundary — for a `Fullstack` task this spans both server and client files, still disjoint from every other task), and `test` (the defining test, written failing-first by the task's own coder). Every emitted task is fully independent of every sibling (the partition rule above) — there is no dependency field and no ordering between tasks. A one-element array (a single atomic task) is a valid emission. The driver parses this line, renders the task table, and spawns one coder process per task with its slice. In-process drivers (`/forge`) may ignore the line and spawn sub-agents directly; the format is a no-op there, so emitting it is always safe.
 
 ## INCIDENT line format (out-of-process driver)
 

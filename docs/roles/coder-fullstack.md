@@ -9,7 +9,6 @@ when: Internal. Loaded by a coder agent assigned the fullstack role — a single
 related:
   - core/coder
   - roles/tech-lead
-  - roles/coder-test-engineer
   - roles/coder-backend
   - roles/coder-frontend
 ---
