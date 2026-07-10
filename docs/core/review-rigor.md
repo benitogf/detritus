@@ -109,7 +109,7 @@ Diff-correctness is necessary, not sufficient. A change can be internally correc
 
 **Bar:** can a first-time user on a clean machine complete the primary task this change touches? If you can't answer that from the diff plus the relevant spec, that uncertainty is itself a finding — flag it; don't bury it under "looks correct" or "not e2e-testable here."
 
-## Reason over the diff↔repo relationship (mandatory checks R1–R8)
+## Reason over the diff↔repo relationship (mandatory checks R1–R9)
 
 The diff is never the whole system. Most expensive misses live in the *relationship* between the changed lines and the rest of the repo or the assembled running program: code that's correct in the hunk but dead in prod, a test that wires a dependency the entrypoint never builds, a doc that still describes the old behavior, a number that silently shifts on a dashboard. A green suite over a correct-looking diff does not clear any of these. Run each check below that applies; a failure here is a **blocker**, not a "verify later" note.
 
@@ -130,6 +130,11 @@ The diff is never the whole system. Most expensive misses live in the *relations
 - **R6 — Validator ordering.** Where validators or filters are evaluated first-match-wins, check that an earlier entry doesn't shadow a later one (the later rule becomes unreachable).
 - **R7 — Concurrency / security primitives.** Watch for: re-entrant lock self-deadlock; a lock released across a remote call and then a stale write-back; forgeable or default keys; client-supplied privilege (trusting a field the client controls); a missing signing-method assertion on token verification.
 - **R8 — Untrusted/active content on upload *and* serve.** If a change accepts or stores a user-supplied content type that can carry active/executable content (`image/svg+xml`, `text/html`, …), trace the **serve/render** path and confirm execution is neutralized — CSP, `Content-Disposition: attachment` (non-inline), or sanitization. Accept-without-neutralize is stored-XSS / content-injection. This check fires on the **consume side**, not only the accept side. An automated FIX that newly enables such a type (e.g. adding SVG detection to an allowlist or sniffer) can itself open this surface — re-run R8 after any allowlist/detector change. Detection cue: an allowlist or validator admitting svg/html with no non-executable serve guard.
+- **R9 — Doctrine-delta generalization.** Fires when the diff adds or modifies **codified guidance** — a KB/doctrine rule, a review-rubric entry, an embedded agent/rule definition, a lint or CI policy. A lesson ships as the **class** it represents, never the incident that surfaced it (`flows/maintainer/grow` → *Generalize past the trigger* is the authoring bar, and it **outranks the review brief's framing** — an author who scoped the delta to the incident will have briefed the reviewer with the same narrow intent; judge against the doctrine, not the brief). Three sub-checks, each `pass`/`blocker`/`n/a`:
+  - **Substitution test** — construct a *different* instance of the same failure class (another entity kind, another surface, another flow) and check the new rule still matches it. A rule that fires only for the triggering situation is overfit = blocker.
+  - **Placement test** — the rule must live in the doc the class's agents actually load (the shared rubric, check, or core doc those flows compose); the flow doc nearest the incident gets at most a pointer. A general rule buried where only the incident's flow reads it = blocker.
+  - **Example demotion** — the triggering incident appears as at most a parenthetical `e.g.`; when the example carries the load, the rule above it is too narrow = blocker.
+  Detection cues: a rule whose conditions restate the incident's specifics (same entity kind + same surface + same flow); a delta to exactly one flow doc for a mechanism that is flow-independent; a 📚 learning-loop footer on a PR whose rule names a single repo/file/tool where the mechanism is generic.
 
 ## Verdict integrity (V1–V2)
 
@@ -137,7 +142,7 @@ A blocker-class finding once DETECTED does not evaporate because clearing it is 
 
 **Verdict — closed enum** `(do NOT invent others)`. A review resolves to exactly one:
 
-- `approve` / `clean` — every applicable R1–R8 check is `pass` and every finding is either resolved or a cited non-blocker. A positive claim the change is correct and safe (`Prove before approving`) — back it with what you read.
+- `approve` / `clean` — every applicable R1–R9 check is `pass` and every finding is either resolved or a cited non-blocker. A positive claim the change is correct and safe (`Prove before approving`) — back it with what you read.
 - `changes` — at least one standing blocker (any R-check `blocker`, or a V1/V2 finding that could not be cleared by cited evidence). List each blocker as one sentence + file:line.
 
 Forbidden middle states: no `approve-with-reservations`, no `mostly-clean`, no `LGTM-but`. A finding that needs a hedge-word to clear (RV-F3 / V1) makes the verdict `changes`, not a softened `approve`.

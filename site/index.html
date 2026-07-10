@@ -349,7 +349,7 @@
         <p>A doc is a command <b>if and only if</b> it lives under <code>docs/flows/</code>. From that single rule, one binary generates skills, prompt files, sub-agents, router instructions, the README table and marketplace shims — then registers itself as an MCP server across <b>Claude Code, VS Code/Copilot, Cursor, Windsurf, Codex and Verdent</b>. The generated shim is a stable <code>kb_get</code> indirection, so editing a doc ships new behaviour with nothing to regenerate client-side. Drift tests fail the build if the surface and the docs ever disagree.</p>
         <ul class="tight">
           <li><b>truthseeker</b> — always active. Prove before acting; reject fragility; make the invisible visible; push back on the user when the evidence demands it.</li>
-          <li><b>review-rigor</b> — forbidden-action tables with IDs, mandatory checks R1–R8, closed-enum verdicts (<code>approve|changes</code>), and hedge-words <b>banned</b> outright. No "approve with reservations."</li>
+          <li><b>review-rigor</b> — forbidden-action tables with IDs, mandatory checks R1–R9, closed-enum verdicts (<code>approve|changes</code>), and hedge-words <b>banned</b> outright. No "approve with reservations."</li>
           <li><b>the universal pipeline</b> — every flow runs plan → build → review-with-rework → deliver, and <span class="plus">no flow may skip a stage</span>. <code>/babysit</code> merges only when an approval's commit matches HEAD — a push invalidates it.</li>
           <li><b>todoguard</b> — a PreToolUse hook that trusts Claude's <code>agent_id</code>, deliberately distrusts the spoofable <code>agent_type</code>, and fails open. A small, honest threat model.</li>
         </ul>
