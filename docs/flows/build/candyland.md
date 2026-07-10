@@ -26,7 +26,7 @@ related:
 
 `/candyland` launches **one run** in the candyland sidecar: candyland's **tech-lead agent** partitions the settled plan into fork-safe tasks, **coders** build them concurrently in worktrees, a **reviewer** loops fix→re-review until clean, and the run **delivers** — the same pipeline every flow instantiates (`core/flows`). detritus only plans and launches (`core/sidecar`); candyland owns everything after. The in-session homologue is `/forge` (this session as tech-lead, coders as sub-agents, no dashboard).
 
-The run's review→fix→re-review loop is the **atom of correctness at every level**: the same primitive gates run delivery, quest branch delivery, and campaign gate 2 — a level differs only in its (diff, task intent, root intent, remediation rungs). Campaign **intent review remains the completeness judge** (the reviewer at a gate judges contradiction, not union-completeness — `core/review-rigor` → Two briefing layers). Remediation is **cost-ordered**: a citable blocker runs a fix pass in the loop, a structural finding relaunches a child run, an unmet commitment spawns a remediation quest, and only exhaustion escalates.
+The run's review→fix→re-review loop is the **atom of correctness at every level**: the same primitive gates a run's delivery and a quest's branch delivery — a level differs only in its (diff, task intent, root intent, remediation rungs). The reviewer at a gate judges contradiction, not union-completeness (`core/review-rigor` → Two briefing layers). Remediation is **cost-ordered**: a citable blocker runs a fix pass in the loop, a structural finding relaunches a child run, and only exhaustion escalates.
 
 ## Plan-gated intake — by input shape
 

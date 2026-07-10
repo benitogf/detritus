@@ -1,5 +1,5 @@
 ---
-description: Learn from candyland telemetry - mine failure signatures across runs/quests/campaigns into audited KB updates
+description: Learn from candyland telemetry - mine failure signatures across runs/quests into audited KB updates
 triggers:
   - learn
   - telemetry mining
@@ -10,7 +10,7 @@ triggers:
   - learnings ledger
   - prospective validation
   - self-harness
-when: User invokes /learn to improve the KB from accumulated candyland telemetry (past runs/quests/campaigns), not from a live session correction
+when: User invokes /learn to improve the KB from accumulated candyland telemetry (past runs/quests), not from a live session correction
 related:
   - flows/maintainer/grow
   - flows/maintainer/absorb
@@ -24,7 +24,7 @@ related:
 >
 > `/learn` is to `/grow` what `/dream` is to `/plan`: **same shipping spine, different source.**
 > - `/grow` source = the current **session incident** (a correction the user just made).
-> - `/learn` source = **candyland telemetry** — the structured record of many past runs/quests/campaigns.
+> - `/learn` source = **candyland telemetry** — the structured record of many past runs/quests.
 >
 > The shipping machinery is IDENTICAL and is **composed by reference, not restated** (this KB forbids
 > duplicated prose). `/learn` replaces only `/grow` Steps 1–2 (session signal extraction + compliance
@@ -55,11 +55,9 @@ the only hard stop is a true capability blocker (no `gh` auth), owned by `core/k
 Embed this verbatim; do not stumble on ports/keys. Mining reads structured records only — never scrape logs.
 
 - API `:8888`; UI `:8080`; db at `~/.candyland/db`.
-- Live glob reads: `GET http://127.0.0.1:8888/runs/*` · `/quests/*` · `/campaigns/*` · `/audits/*`.
+- Live glob reads: `GET http://127.0.0.1:8888/runs/*` · `/quests/*` · `/audits/*`.
 - REST: `GET /api/runs/{id}` · `/api/runs/{id}/trace` · `/api/quests/{id}` · `/api/quests/{id}/runs`
-  · `/api/quests/{id}/findings` · `/api/campaigns/{id}` · `/api/campaigns/{id}/quests` ·
-  `/api/campaigns/{id}/runs`.
-- Adventures = `quests/*` filtered client-side on `convergence == "perFinding"` (no adventures key).
+  · `/api/quests/{id}/findings`.
 - Remote/WSL: forward BOTH ports; UI on :8080 stays empty until API :8888 is reachable.
 
 The records carry the telemetry fields `/learn` mines (effective model + thinking, token/tool-call
@@ -74,10 +72,10 @@ This is the canonical recipe (`/absorb` Phase 2 composes it by reference — don
 
 1. **Footer ref (fast path).** Read the PR body (`gh api repos/<owner>/<repo>/pulls/<n> --jq .body`, per the
    `flows/github/gh` reads-via-`gh api` convention) and parse the candyland footer
-   `🍬 Opened by candyland — <kind> \`<id>\`` where `<kind>` ∈ `run` / `quest` / `campaign`. A match gives
+   `🍬 Opened by candyland — <kind> \`<id>\`` where `<kind>` ∈ `run` / `quest`. A match gives
    `<kind>`+`<id>` directly — mine that unit (+ children) as the root.
 2. **Reverse lookup (fallback + migration path for pre-footer PRs).** No footer → glob the records
-   (`GET /runs/*` · `/quests/*` · `/campaigns/*`) and select the unit whose `prs[]` contains the PR URL.
+   (`GET /runs/*` · `/quests/*`) and select the unit whose `prs[]` contains the PR URL.
 3. **No unit found** → the PR was not candyland-produced; there is no telemetry to mine (a `/learn <pr-url>`
    here reports the miss and stops — `/absorb` routes such a PR to a `/grow`-only leg from the review outcome).
 
@@ -90,7 +88,7 @@ edits, validate before adoption; no re-run benchmark, no metered calls). Do NOT 
 
 ### Build a failure signature per failed record
 
-For each failed run/quest/campaign, extract a **failure signature**:
+For each failed run/quest, extract a **failure signature**:
 
 ```
 (terminal cause, causal agent behavior, mechanism)
@@ -106,7 +104,7 @@ When an agent catches itself (`core/ego` trigger ①: "you are right, I …", "I
 "I ignored /…") it records an `INCIDENT` line, which candyland persists **structurally** on the unit
 record as an **`incidents[]`** array (each entry carries `agent`, `summary`, `detail`, `severity`, `at` —
 the conductor stamps `agent`+`at`, the emitting agent supplies the rest). Mine `incidents[]` **directly** — it is a first-class field alongside terminal status, read over the
-same data-access path above (`GET /runs/*` · `/quests/*` · `/campaigns/*`). Each entry is a direct,
+same data-access path above (`GET /runs/*` · `/quests/*`). Each entry is a direct,
 agent-attributed *mechanism*; mine it even when the unit terminated green, because an admitted mistake in
 a passing run is still a mechanism worth patching (the symptom-free case the terminal-status scan alone
 would miss). No free-text scraping — the structural `incidents[]` field is the signal.
