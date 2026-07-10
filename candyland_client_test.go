@@ -182,9 +182,8 @@ func TestStartCandylandRunFeedback(t *testing.T) {
 	}
 }
 
-// The start-quest and start-campaign wire tests live in
-// candyland_client_classify_test.go (TestStartCandylandQuestSendsConvergenceAndTitle
-// / TestStartCandylandCampaignSendsTitleNoAutonomy): they assert the current
+// The start-quest wire test lives in candyland_client_classify_test.go
+// (TestStartCandylandQuestSendsConvergenceAndTitle): it asserts the current
 // title + convergence contract and the absence of any autonomy field.
 
 // readQuestRunArgs reads the objective from the file and defaults folders to
@@ -217,39 +216,6 @@ func TestReadQuestRunArgs(t *testing.T) {
 
 	if _, _, err := readQuestRunArgs(filepath.Join(dir, "nope.md"), nil, "/work/repo"); err == nil {
 		t.Error("a missing objective file should error")
-	}
-}
-
-// readCampaignRunArgs reads the input from the file and defaults folders to
-// [cwd] when none are passed, while preserving explicit folders.
-func TestReadCampaignRunArgs(t *testing.T) {
-	dir := t.TempDir()
-	inputFile := filepath.Join(dir, "campaign.md")
-	if err := os.WriteFile(inputFile, []byte("# goal\nship the program"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	input, folders, err := readCampaignRunArgs(inputFile, nil, "/work/repo")
-	if err != nil {
-		t.Fatalf("readCampaignRunArgs: %v", err)
-	}
-	if input != "# goal\nship the program" {
-		t.Errorf("input = %q, want the file contents", input)
-	}
-	if len(folders) != 1 || folders[0] != "/work/repo" {
-		t.Errorf("folders = %v, want [/work/repo] (cwd default)", folders)
-	}
-
-	_, folders2, err := readCampaignRunArgs(inputFile, []string{"/a", "/b"}, "/work/repo")
-	if err != nil {
-		t.Fatalf("readCampaignRunArgs: %v", err)
-	}
-	if len(folders2) != 2 || folders2[0] != "/a" || folders2[1] != "/b" {
-		t.Errorf("explicit folders not preserved: %v", folders2)
-	}
-
-	if _, _, err := readCampaignRunArgs(filepath.Join(dir, "nope.md"), nil, "/work/repo"); err == nil {
-		t.Error("a missing campaign input file should error")
 	}
 }
 
