@@ -375,7 +375,7 @@ func TestTitleFriendlyPrompt(t *testing.T) {
 	cases := []struct {
 		name, in, wantFirst string
 	}{
-		{"markdown heading", "# Plan: campaign/quest agents\n\nbody here", "campaign/quest agents"},
+		{"markdown heading", "# Plan: quest orchestration\n\nbody here", "quest orchestration"},
 		{"heading no label", "## Fix the emoji squares\n\nbody", "Fix the emoji squares"},
 		{"plain first line untouched", "Add typed cancellation\n\nbody", "Add typed cancellation"},
 		{"leading blank lines", "\n\n# Plan: do the thing\nbody", "do the thing"},
