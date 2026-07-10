@@ -1,5 +1,5 @@
 ---
-description: How a ship-leg flow gets a writable detritus KB checkout and opens a docs-only PR — resolve or provision a clone (fork when needed), edit in a worktree, ship via /gh.
+description: How a ship-leg flow gets a writable detritus KB checkout and opens the writeback PR (docs-only, or code+docs when the sweep hits embedded doctrine) — resolve or provision a clone (fork when needed), edit in a worktree, ship via /gh.
 triggers:
   - kb writeback
   - writable checkout
@@ -21,7 +21,7 @@ related:
 # KB Writeback — get a writable checkout, ship a docs PR
 
 The detritus KB is public, so a lesson can ship from ANY machine — a pre-existing local clone is NOT
-required. This doc owns resolving or provisioning a writable checkout and the docs-only PR recipe.
+required. This doc owns resolving or provisioning a writable checkout and the writeback PR recipe (docs-only, or code+docs per step 2's sweep).
 Ship conventions (body, footer, private-name scrub) compose `flows/github/gh` by reference and are
 never restated here.
 
