@@ -412,7 +412,7 @@ func TestDeriveShortTitle(t *testing.T) {
 }
 
 // The quest request carries title + convergence on the wire and no autonomy
-// field at all: --quest-run sends converge, --adventure-run sends perFinding.
+// field at all: --quest-run sends converge, --quest-run --per-finding sends perFinding.
 func TestStartCandylandQuestSendsConvergenceAndTitle(t *testing.T) {
 	for _, convergence := range []string{"converge", "perFinding"} {
 		var raw []byte
@@ -453,34 +453,4 @@ func decodeBody(t *testing.T, r *http.Request) map[string]any {
 		t.Errorf("decode body: %v", err)
 	}
 	return body
-}
-
-// The campaign request carries a title and no autonomy field.
-func TestStartCandylandCampaignSendsTitleNoAutonomy(t *testing.T) {
-	var raw []byte
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/api/campaigns":
-			defer r.Body.Close()
-			raw, _ = json.Marshal(decodeBody(t, r))
-			_, _ = w.Write([]byte(`{"id":"c-1"}`))
-		case strings.HasSuffix(r.URL.Path, "/begin"):
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	defer srv.Close()
-
-	if _, err := startCandylandCampaignAt(srv.URL, "ship the program", "Ship the program", []string{"/repo"}, "pr", 0); err != nil {
-		t.Fatalf("startCandylandCampaignAt: %v", err)
-	}
-	var body map[string]any
-	_ = json.Unmarshal(raw, &body)
-	if body["title"] != "Ship the program" {
-		t.Fatalf("title = %v, want Ship the program", body["title"])
-	}
-	if strings.Contains(strings.ToLower(string(raw)), "autonomy") {
-		t.Fatalf("campaign request must carry no autonomy field: %s", raw)
-	}
 }

@@ -328,9 +328,8 @@
         <p>For work too big for a single agent, detritus hands off to <b>candyland</b> — a long-running REST sidecar it launches and correctly detaches (new session on Unix, new process group on Windows) so it outlives the session that started it. A tech-lead partitions the work, coders build concurrently in git worktrees, a reviewer loops fix→re-review until clean, then it delivers. <em style="color:var(--slate)">(That engine lives in its own repo — what ships here is the launcher and the classifier.)</em></p>
         <div class="flow-row">
           <span class="chip"><span class="s">run</span> one unit</span><span class="arrow">⊂</span>
-          <span class="chip"><span class="s">quest</span> converge → 1 PR/repo</span><span class="arrow">⊂</span>
-          <span class="chip"><span class="s">campaign</span> two gates, child quests</span>
-          <span class="chip" style="margin-left:auto"><span class="s">adventure</span> 1 PR / finding</span>
+          <span class="chip"><span class="s">quest</span> converge → 1 PR/repo</span>
+          <span class="chip" style="margin-left:auto"><span class="s">quest --per-finding</span> 1 PR / finding</span>
         </div>
         <div class="panel brass">
           <div class="ptitle">The quiet genius: the delivery classifier</div>

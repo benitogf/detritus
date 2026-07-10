@@ -187,7 +187,7 @@ evidence) and re-verify — bounded by a remediation budget (the K-attempt circu
 gap that survives the budget is a disposition-3 capability blocker. Parking in terminal `blocked` on the
 **first** failing review while the gap is still finishable is the silent-deferral failure at the
 **orchestrator / supervisor level**, forbidden exactly as it is at the single-unit level. This binds a
-program-level supervisor reviewing per-commitment verdicts (e.g. a campaign's intent review) as much as
+program-level supervisor reviewing per-commitment verdicts (e.g. a quest's intent review) as much as
 a per-task coder loop — an orchestrator never parks with finishable in-scope work undone.
 
 The only legitimate hand-backs are three: **milestone / PR-open**, a **capability blocker** (disposition
@@ -234,14 +234,14 @@ delivery the mode promised did not land). Rules:
   `done`, and never let a green intent/review gate upstream mask a failed push downstream.
 - **Feed the error back**, don't strand it. The git/gh error text is usually **machine-fixable** by an
   agent that reads it (e.g. a push blocked by secret scanning → remove the offending file/history; a
-  non-fast-forward → rebase). In a loop/campaign this is a remediation round on the delivery error
+  non-fast-forward → rebase). In a loop/quest this is a remediation round on the delivery error
   itself, bounded like any other; only a failure that survives the budget is a real capability blocker.
 - **A multi-unit deliverable (e.g. one PR per repo) is not `done` until *every* impacted unit delivered.**
   One unit's delivery failure is isolated from the others but keeps the whole out of clean `done`.
 
 **Carve-out 1 — branch delivery is legitimate `done` with `prsOpened:0`.** A run/child delivering to a
 branch (`deliver=="branch"`) is *legitimately* `done` with no PR — its delivery **is** the branch commit,
-and the parent campaign opens the PR (`core/build` → *Multi-repo delivery*).
+and the parent quest opens the PR (`core/build` → *Multi-repo delivery*).
 
 **Carve-out 2 — feedback delivery is legitimate `done` with no NEW PR.** A `feedback` run
 (`deliver=="feedback"`) updated an **existing** PR in place — its delivery **is** the pushed fix on that

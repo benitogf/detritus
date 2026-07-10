@@ -123,57 +123,24 @@ func main() {
 			}
 			return
 		case "--quest-run":
-			// detritus --quest-run <objective-file> [folder ...]
-			// Starts a standalone Candyland-native iterative quest (the /quest
-			// command): a BOUNDED loop that converges to one PR per repo. The
-			// DELIVERY mode is classified from the objective against live gh state
-			// (resolveLaunchDelivery, the gh-mirror classifier all launchers
+			// detritus --quest-run <objective-file> [--per-finding] [folder ...]
+			// Starts a Candyland-native iterative quest (the /quest command): a
+			// BOUNDED loop that converges to one PR per repo. With --per-finding it
+			// runs open-ended instead — the same quest machinery with a per-finding
+			// delivery policy (a PR per accepted finding, perpetual until stopped).
+			// The DELIVERY mode is classified from the objective against live gh
+			// state (resolveLaunchDelivery, the gh-mirror classifier all launchers
 			// share); the launch summary states the mode honestly. There is no
 			// autonomy axis — once planning settles, work runs to done.
 			if len(os.Args) < 3 {
-				fmt.Fprintln(os.Stderr, "usage: detritus --quest-run <objective-file> [folder ...]")
+				fmt.Fprintln(os.Stderr, "usage: detritus --quest-run <objective-file> [--per-finding] [folder ...]")
 				os.Exit(1)
 			}
 			self, _ := os.Executable()
 			cwd, _ := os.Getwd()
-			if err := runQuestCmd(self, os.Args[2], os.Args[3:], "quest", "converge", cwd); err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
-			}
-			return
-		case "--adventure-run":
-			// detritus --adventure-run <objective-file> [folder ...]
-			// Starts an open-ended freeseeking adventure (the /adventure command):
-			// the same quest machinery with a per-finding delivery policy — a PR
-			// per accepted finding, perpetual until stopped. Same gh-mirror
-			// classification as --quest-run.
-			if len(os.Args) < 3 {
-				fmt.Fprintln(os.Stderr, "usage: detritus --adventure-run <objective-file> [folder ...]")
-				os.Exit(1)
-			}
-			self, _ := os.Executable()
-			cwd, _ := os.Getwd()
-			if err := runQuestCmd(self, os.Args[2], os.Args[3:], "adventure", "perFinding", cwd); err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
-			}
-			return
-		case "--campaign-run":
-			// detritus --campaign-run <input-file> [folder ...]
-			// Starts a Candyland program-level campaign (the /campaign command)
-			// from a high-level goal, partial brief, or detailed plan. The DELIVERY
-			// mode is classified from the input against live gh state
-			// (resolveLaunchDelivery, the gh-mirror classifier all launchers
-			// share): a feedback/review-on-PR input updates/reviews that PR,
-			// otherwise it opens a new PR (deliver:"pr", the default). There is no
-			// autonomy axis.
-			if len(os.Args) < 3 {
-				fmt.Fprintln(os.Stderr, "usage: detritus --campaign-run <input-file> [folder ...]")
-				os.Exit(1)
-			}
-			self, _ := os.Executable()
-			cwd, _ := os.Getwd()
-			if err := runCampaignCmd(self, os.Args[2], os.Args[3:], cwd); err != nil {
+			perFinding, folders := extractPerFindingFlag(os.Args[3:])
+			convergence := convergenceMode(perFinding)
+			if err := runQuestCmd(self, os.Args[2], folders, convergence, cwd); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
@@ -191,9 +158,7 @@ func main() {
 			fmt.Println("  detritus --setup [--dry-run]                          Configure all detected IDEs")
 			fmt.Println("  detritus --candyland-up                               Bring the candyland sidecar online (no run)")
 			fmt.Println("  detritus --candyland-run <prompt-file> [folder ...]   Start a candyland sidecar build run over REST")
-			fmt.Println("  detritus --quest-run <objective-file> [folder ...]   Start a candyland-native bounded quest over REST")
-			fmt.Println("  detritus --adventure-run <objective-file> [folder ...] Start a candyland open-ended adventure over REST")
-			fmt.Println("  detritus --campaign-run <input-file> [folder ...]    Start a candyland program-level campaign over REST")
+			fmt.Println("  detritus --quest-run <objective-file> [--per-finding] [folder ...]  Start a candyland-native quest over REST (--per-finding: open-ended)")
 			fmt.Println("  detritus --update [--dry-run]                         Self-update to latest release")
 			fmt.Println("  detritus --todo-guard                                 PreToolUse hook handler (internal; installed by --setup)")
 			fmt.Println("  detritus --upsert-mcp <file> <key> <cmd>              Upsert MCP config entry")

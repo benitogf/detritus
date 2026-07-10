@@ -62,7 +62,7 @@ Phase 2 resolves the producing unit fastest from a PR-body footer that candyland
 🍬 Opened by candyland — <kind> `<id>`
 ```
 
-where `<kind>` is `run` / `quest` / `campaign`. **Emitting that footer is a companion change in the candyland
+where `<kind>` is `run` / `quest`. **Emitting that footer is a companion change in the candyland
 repo — OUT OF SCOPE for this doc.** Until it ships, and for every PR opened before it shipped, `/absorb` resolves
 the unit via the **reverse telemetry lookup** fallback (Phase 2) — that fallback is the migration path, not a
 temporary crutch, so `/absorb` works today with no candyland change.
@@ -92,7 +92,7 @@ Resolve which candyland unit opened this PR, in order:
    convention) and parse the `🍬 Opened by candyland — <kind> \`<id>\`` footer. A match gives `<kind>`+`<id>` directly.
 2. **Reverse telemetry lookup (fallback + migration path).** No footer (pre-footer PR, or a hand-opened PR) → glob
    the candyland records for the unit whose `prs[]` contains this PR URL. **The recipe is canonical in
-   `flows/maintainer/learn`'s data-access map** (ports/keys, `/runs/*` · `/quests/*` · `/campaigns/*` glob reads,
+   `flows/maintainer/learn`'s data-access map** (ports/keys, `/runs/*` · `/quests/*` glob reads,
    the `prs[]` field) — compose it by reference; do not restate the endpoints here.
 3. **No unit found.** The PR was not candyland-produced. Record "non-candyland" and carry it into Phase 3 routing —
    there is no telemetry leg to run.
@@ -123,7 +123,7 @@ the PR body in place. **Do not restate that flow.** Two `/absorb`-specific oblig
 
 Invoke **`/learn` scoped to the resolved unit + its children**, not the whole corpus:
 
-- The unit from Phase 2 is the mining root; a campaign includes its quests, a quest includes its runs
+- The unit from Phase 2 is the mining root; a quest includes its runs
   (`/learn`'s data-access map has the child endpoints).
 - Pass the **review-round history** from Phase 1 as first-class telemetry — the reviewer's blocker is the strongest
   mechanism evidence in the bundle.

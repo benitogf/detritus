@@ -1,5 +1,5 @@
 ---
-description: Learn from candyland telemetry - mine failure signatures across runs/quests/campaigns into audited KB updates
+description: Learn from candyland telemetry - mine failure signatures across runs/quests into audited KB updates
 ---
 
 The user invoked this command with: $ARGUMENTS
