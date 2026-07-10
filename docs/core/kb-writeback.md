@@ -18,7 +18,7 @@ related:
   - core/completion
 ---
 
-# KB Writeback — get a writable checkout, ship a docs PR
+# KB Writeback — get a writable checkout, ship the writeback PR
 
 The detritus KB is public, so a lesson can ship from ANY machine — a pre-existing local clone is NOT
 required. This doc owns resolving or provisioning a writable checkout and the writeback PR recipe (docs-only, or code+docs per step 2's sweep).
