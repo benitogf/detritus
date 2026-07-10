@@ -1,5 +1,5 @@
 ---
-description: How a ship-leg flow gets a writable detritus KB checkout and opens a docs-only PR — resolve or provision a clone (fork when needed), edit in a worktree, ship via /gh.
+description: How a ship-leg flow gets a writable detritus KB checkout and opens the writeback PR (docs-only, or code+docs when the sweep hits embedded doctrine) — resolve or provision a clone (fork when needed), edit in a worktree, ship via /gh.
 triggers:
   - kb writeback
   - writable checkout
@@ -18,10 +18,10 @@ related:
   - core/completion
 ---
 
-# KB Writeback — get a writable checkout, ship a docs PR
+# KB Writeback — get a writable checkout, ship the writeback PR
 
 The detritus KB is public, so a lesson can ship from ANY machine — a pre-existing local clone is NOT
-required. This doc owns resolving or provisioning a writable checkout and the docs-only PR recipe.
+required. This doc owns resolving or provisioning a writable checkout and the writeback PR recipe (docs-only, or code+docs per step 2's sweep).
 Ship conventions (body, footer, private-name scrub) compose `flows/github/gh` by reference and are
 never restated here.
 
@@ -67,8 +67,15 @@ lessons never collide.
 
 1. `git -C <base> worktree add <base>-wt-<slug> -b <branch> upstream/main` (use `origin/main` when the
    base is a direct upstream clone).
-2. Edit `docs/` only. `generated/` is gitignored and the search index regenerates at release — **no Go
-   toolchain is needed** to ship a docs change.
+2. Edit `docs/` — the usual surface. `generated/` is gitignored and the search index regenerates at
+   release — **no Go toolchain is needed** to ship a pure docs change.
+   **Doctrine does not live in `docs/` alone** — detritus embeds it in Go string literals (the
+   installer's agent/rule definitions and prompts). A lesson that deletes or renames a doc, or
+   changes a model other docs or agents state, sweeps the whole reference surface per
+   `core/review-rigor` R1 (deleted/renamed entity) and folds every embedded statement; if the sweep
+   touches Go strings it is a **code+docs writeback** — run
+   `go generate ./... && go build ./... && go test ./...` before pushing. The no-toolchain shortcut
+   applies only when the sweep confirms no embedded references exist.
 3. Commit (attribution / footer / scrub per `/gh`).
 4. Push the branch to the pushable remote (`origin` — fork or upstream depending on the ladder).
 5. Open the PR against upstream (`--repo benitogf/detritus --base main`), choosing the `--head` shape
@@ -91,5 +98,7 @@ lessons never collide.
 - Never require a pre-existing local clone — resolve or provision one.
 - Never a temp clone per lesson — one durable cached base + a worktree per lesson.
 - Never dirty the user's own checkout — always work in a worktree.
-- Docs-only writeback: no Go build/test needed on the contributor's machine.
+- Docs-only writeback needs no Go build/test — but only after the repo-wide sweep (recipe step 2)
+  confirms the lesson touches no Go-embedded doctrine; a doc deletion/rename or model change that
+  hits embedded strings is a code+docs writeback and runs the Go verification.
 - Public repo: scrub private names from every issue / PR / branch / commit (per `/gh`).
