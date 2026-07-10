@@ -799,11 +799,25 @@ func questDeliveryEffect(deliver string, targetPR int) string {
 	}
 }
 
-// questLaunchSummary renders the launch output for a started quest or
-// adventure: the id, deliver mode with a what-will/won't-do line
-// (questDeliveryEffect: feedback updates PR #N in place, review reports on
-// PR #N, pr opens a new PR), and the API + UI ports with a remote/WSL
-// port-forwarding hint. kind names the flow ("quest" or "adventure").
+// extractPerFindingFlag pulls the --per-finding flag out of the trailing quest
+// args, returning whether it was present and the remaining args (the folders).
+// The flag may appear anywhere among the folders.
+func extractPerFindingFlag(args []string) (perFinding bool, folders []string) {
+	for _, arg := range args {
+		if arg == "--per-finding" {
+			perFinding = true
+			continue
+		}
+		folders = append(folders, arg)
+	}
+	return perFinding, folders
+}
+
+// questLaunchSummary renders the launch output for a started quest: the id,
+// deliver mode with a what-will/won't-do line (questDeliveryEffect: feedback
+// updates PR #N in place, review reports on PR #N, pr opens a new PR), and the
+// API + UI ports with a remote/WSL port-forwarding hint. kind names the flow
+// for the summary line ("quest" for a bounded run, "adventure" for --per-finding).
 func questLaunchSummary(kind, id, deliver string, targetPR int, degraded bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "candyland %s started: %s\n", kind, id)
@@ -817,14 +831,13 @@ func questLaunchSummary(kind, id, deliver string, targetPR int, degraded bool) s
 	return b.String()
 }
 
-// runQuestCmd is the `detritus --quest-run` / `--adventure-run
-// <objective-file> [folder ...]` handler: read the objective, classify its
-// delivery against live gh state, ensure the sidecar is up, start the quest,
-// and print the launch summary. Mirrors runCandyland. convergence is the
-// quest's delivery policy — "converge" (--quest-run: bounded, one PR per repo
-// at terminal) or "perFinding" (--adventure-run: open-ended, a PR per accepted
-// finding); kind names the flow for the summary line.
-func runQuestCmd(detritusPath, objectiveFile string, folders []string, kind, convergence, cwd string) error {
+// runQuestCmd is the `detritus --quest-run <objective-file> [--per-finding]
+// [folder ...]` handler: read the objective, classify its delivery against live
+// gh state, ensure the sidecar is up, start the quest, and print the launch
+// summary. Mirrors runCandyland. convergence is the quest's delivery policy —
+// "converge" (bounded, one PR per repo at terminal) or "perFinding"
+// (--per-finding: open-ended, a PR per accepted finding).
+func runQuestCmd(detritusPath, objectiveFile string, folders []string, convergence, cwd string) error {
 	objective, folders, err := readQuestRunArgs(objectiveFile, folders, cwd)
 	if err != nil {
 		return err
@@ -840,66 +853,17 @@ func runQuestCmd(detritusPath, objectiveFile string, folders []string, kind, con
 	if err != nil {
 		return err
 	}
-	fmt.Print(questLaunchSummary(kind, id, deliver, targetPR, degraded))
+	fmt.Print(questLaunchSummary(questKindFor(convergence), id, deliver, targetPR, degraded))
 	return nil
 }
 
-// readCampaignRunArgs parses `--campaign-run` args: the campaign input file path
-// and optional folders. It reads the input from inputFile (a high-level goal,
-// partial brief, or detailed plan — keeps a large input off argv) and defaults
-// folders to [cwd] when none given.
-func readCampaignRunArgs(inputFile string, folders []string, cwd string) (input string, resolvedFolders []string, err error) {
-	raw, err := os.ReadFile(inputFile)
-	if err != nil {
-		return "", nil, fmt.Errorf("read campaign input file %s: %w", inputFile, err)
+// questKindFor names the flow for the launch summary line: an open-ended
+// per-finding quest reads as "adventure", a bounded one as "quest".
+func questKindFor(convergence string) string {
+	if convergence == "perFinding" {
+		return "adventure"
 	}
-	if len(folders) == 0 {
-		folders = []string{cwd}
-	}
-	return string(raw), folders, nil
-}
-
-// runCampaignCmd is the `detritus --campaign-run <input-file> [folder ...]`
-// handler: read the campaign input, classify its delivery against live gh state
-// (resolveLaunchDelivery — the gh-mirror classification all launchers share),
-// ensure the sidecar is up, start the campaign, and print the launch summary.
-// Mirrors runQuestCmd. ensureCandylandUp failures are returned so the caller
-// exits non-zero.
-func runCampaignCmd(detritusPath, inputFile string, folders []string, cwd string) error {
-	input, folders, err := readCampaignRunArgs(inputFile, folders, cwd)
-	if err != nil {
-		return err
-	}
-	deliver, targetPR, degraded, err := resolveLaunchDelivery(input, folders[0])
-	if err != nil {
-		return err
-	}
-	if err := ensureCandylandUp(detritusPath); err != nil {
-		return err
-	}
-	id, err := startCandylandCampaign(input, deriveShortTitle(input), folders, deliver, targetPR)
-	if err != nil {
-		return err
-	}
-	fmt.Print(campaignLaunchSummary(id, deliver, targetPR, degraded))
-	return nil
-}
-
-// campaignLaunchSummary renders the launch output for a started campaign: the
-// campaign id, the derived delivery mode with an honest what-it-produces line
-// (questDeliveryEffect, reused), and the API + UI ports. Mirrors
-// questLaunchSummary's mode line so feedback/review/pr read the same across
-// both flows.
-func campaignLaunchSummary(id, deliver string, targetPR int, degraded bool) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "candyland campaign started: %s\n", id)
-	fmt.Fprintf(&b, "Deliver: %s (%s)\n", deliver, questDeliveryEffect(deliver, targetPR))
-	if degraded {
-		b.WriteString(degradedClassificationNotice)
-	}
-	fmt.Fprintf(&b, "API: %s\n", candylandBaseURL)
-	fmt.Fprintf(&b, "UI / Dashboard: %s\n", candylandDashboardURL)
-	return b.String()
+	return "quest"
 }
 
 // ensureCandylandUp returns nil once the candyland sidecar answers its health
@@ -1188,10 +1152,10 @@ func startCandylandRunAt(baseURL string, folders []string, prompt, title, delive
 }
 
 // candylandQuestRequest is the body POSTed to /api/quests. candyland owns the
-// full QuestSpec; detritus only sets the fields the /quest and /adventure
-// commands settle. Title is the derived short display label (the full objective
-// still rides in Objective); Convergence is the delivery policy — "converge"
-// (bounded quest, one PR per repo at terminal) or "perFinding" (adventure, a PR
+// full QuestSpec; detritus only sets the fields the /quest command settles.
+// Title is the derived short display label (the full objective still rides in
+// Objective); Convergence is the delivery policy — "converge" (bounded quest,
+// one PR per repo at terminal) or "perFinding" (--per-finding: open-ended, a PR
 // per accepted finding).
 type candylandQuestRequest struct {
 	Objective   string   `json:"objective"`
@@ -1251,73 +1215,6 @@ func startCandylandQuestAt(baseURL, objective, title string, folders []string, d
 	defer beginResp.Body.Close()
 	if beginResp.StatusCode < 200 || beginResp.StatusCode >= 300 {
 		return "", fmt.Errorf("begin quest %s: HTTP %d", created.ID, beginResp.StatusCode)
-	}
-	return created.ID, nil
-}
-
-// candylandCampaignRequest is the body POSTed to /api/campaigns. candyland owns
-// the full CampaignSpec; detritus only sets the fields the /campaign command
-// settles. tokenBudget is left to candyland's default and not set here. Title is
-// the derived short display label (the full input still rides in Input).
-// deliver/targetPr share the exact wire contract with candylandQuestRequest: the
-// campaign launcher classifies them from the input (resolveLaunchDelivery) and
-// candyland propagates them to the affected child quests.
-type candylandCampaignRequest struct {
-	Input    string   `json:"input"`
-	Title    string   `json:"title"`
-	Folders  []string `json:"folders"`
-	Deliver  string   `json:"deliver"`
-	TargetPR int      `json:"targetPr"`
-}
-
-// startCandylandCampaign creates a campaign (POST /api/campaigns) and begins it
-// (POST /api/campaigns/{id}/begin), returning the campaign id. The sidecar must
-// already be up; callers run ensureCandylandUp first. Mirrors startCandylandQuest.
-// deliver/targetPR carry the input's delivery intent; candyland propagates them
-// to the child quests the campaign decomposes into.
-func startCandylandCampaign(input, title string, folders []string, deliver string, targetPR int) (string, error) {
-	return startCandylandCampaignAt(candylandBaseURL, input, title, folders, deliver, targetPR)
-}
-
-// startCandylandCampaignAt is startCandylandCampaign against an explicit base URL (test seam).
-func startCandylandCampaignAt(baseURL, input, title string, folders []string, deliver string, targetPR int) (string, error) {
-	body, err := json.Marshal(candylandCampaignRequest{
-		Input:    input,
-		Title:    title,
-		Folders:  folders,
-		Deliver:  deliver,
-		TargetPR: targetPR,
-	})
-	if err != nil {
-		return "", err
-	}
-
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Post(baseURL+"/api/campaigns", "application/json", bytes.NewReader(body))
-	if err != nil {
-		return "", fmt.Errorf("create campaign: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("create campaign: HTTP %d", resp.StatusCode)
-	}
-	var created struct {
-		ID string `json:"id"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
-		return "", fmt.Errorf("decode campaign id: %w", err)
-	}
-	if created.ID == "" {
-		return "", fmt.Errorf("create campaign: empty id in response")
-	}
-
-	beginResp, err := client.Post(baseURL+"/api/campaigns/"+created.ID+"/begin", "application/json", nil)
-	if err != nil {
-		return "", fmt.Errorf("begin campaign %s: %w", created.ID, err)
-	}
-	defer beginResp.Body.Close()
-	if beginResp.StatusCode < 200 || beginResp.StatusCode >= 300 {
-		return "", fmt.Errorf("begin campaign %s: HTTP %d", created.ID, beginResp.StatusCode)
 	}
 	return created.ID, nil
 }
