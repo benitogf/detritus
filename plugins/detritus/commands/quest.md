@@ -1,6 +1,6 @@
 ---
-description: A bounded, terminating iterative loop in the candyland sidecar — a quest-lead ticks discover→triage→launch child runs onto a quest branch until the objective is met, then opens ONE PR per impacted repo. The only multi-agent orchestration layer in the sidecar. Feedback/review intents work the target PR's head branch instead.
-argument-hint: "[objective] [folder ...]"
+description: The one flexible, persistent iterative loop in the candyland sidecar — a quest-lead ticks discover→triage→launch serial child runs against an objective + scope lens, with two delivery modes (converge-until-clean → one PR per impacted repo; per-finding → one PR per accepted finding). Feedback/review intents work the target PR's head branch instead.
+argument-hint: "[objective] [--per-finding] [folder ...]"
 ---
 
 The user invoked this command with: $ARGUMENTS

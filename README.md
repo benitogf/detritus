@@ -54,7 +54,7 @@ absent — they are not commands.
 | `/candyland` | Launch ONE candyland run in the sidecar — a tech-lead agent partitions the work, coders build it concurrently in worktrees, a reviewer loops fix→re-review until clean, then the run delivers. |
 | `/forge` | Drive a settled plan to a PR with a parallel tech-lead + coders implementation loop, in-process. |
 | `/janitor` | Create a recurring proactive code-maintenance worker that audits, safely fixes, verifies, self-reviews, and routes delivery through /gh. |
-| `/quest` | A bounded, terminating iterative loop in the candyland sidecar — a quest-lead ticks discover→triage→launch child runs onto a quest branch until the objective is met, then opens ONE PR per impacted repo. |
+| `/quest` | The one flexible, persistent iterative loop in the candyland sidecar — a quest-lead ticks discover→triage→launch serial child runs against an objective + scope lens, with two delivery modes (converge-until-clean → one PR per impacted repo; per-finding → one PR per accepted finding). |
 | `/smith` | Recurring loop that takes a feature from /plan all the way to an open PR — the in-session single-agent instantiation of the universal pipeline. |
 
 ### GitHub

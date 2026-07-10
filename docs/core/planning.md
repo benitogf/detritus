@@ -58,7 +58,7 @@ A plan or task spec is **decision-complete** when the implementer makes **zero**
 - **Every choice is resolved** — each non-trivial technical decision is either made in the spec or explicitly delegated **with the decision rule attached** (the rule the implementer applies to decide, not a bare "your call").
 - **Acceptance checks are runnable verbatim** — the commands/tests that prove the task done are written out, not described.
 
-This applies uniformly to every artifact that hands work to an executor: `.plan/<slug>.md` contracts, tech-lead partitions, quest work items, and campaign briefs. The system runs low-effort executors precisely because the decisions are made upstream — an underspecified spec pushes a decision onto an agent chosen for cheapness, which either stalls (escalation) or guesses (drift). Decision-completeness is what makes the executor's low effort safe.
+This applies uniformly to every artifact that hands work to an executor: `.plan/<slug>.md` contracts, tech-lead partitions, and quest work items. The system runs low-effort executors precisely because the decisions are made upstream — an underspecified spec pushes a decision onto an agent chosen for cheapness, which either stalls (escalation) or guesses (drift). Decision-completeness is what makes the executor's low effort safe.
 
 ## The plan contract — `.plan/<slug>.md`
 
