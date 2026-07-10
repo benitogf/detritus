@@ -33,22 +33,33 @@ The tag captures whatever commit `main` points at **now**. A tag cut before a la
 merge silently omits that work (a real incident: a candyland tag cut right after one
 PR merged excluded two MCP PRs that merged minutes later). Before tagging:
 
-1. `git checkout main && git pull` in the repo.
-2. Confirm `git log --oneline -n 15 origin/main` contains every PR you intend to ship.
-3. Confirm there are **no open PRs** you meant to include (`gh pr list`), and the tree is clean.
+> **Pin every per-repo git command with `git -C <repo-path>` — never rely on the shell's
+> working directory.** This is a two-repo flow; the cwd persists across tool calls and
+> parallel/independent calls have no guaranteed ordering, so an unpinned command silently
+> runs against whatever clone the last `cd` left active. A real incident: the detritus tag
+> was created in the candyland clone and pushed to `candyland.git`, triggering a spurious
+> build and a stray remote tag that needed deleting. Every `git` snippet below is pinned;
+> keep it that way.
+
+1. `git -C /path/to/<repo> checkout main && git -C /path/to/<repo> pull` in the repo.
+2. Confirm `git -C /path/to/<repo> log --oneline -n 15 origin/main` contains every PR you intend to ship.
+3. Confirm there are **no open PRs** you meant to include (`gh pr list --repo benitogf/<repo>`), and the tree is clean.
 
 ## Steps (per repo)
 
-1. **Pick the next version.** Read the latest tag: `git tag --sort=-v:refname | head -1`.
+1. **Pick the next version.** Read the latest tag: `git -C /path/to/<repo> tag --sort=-v:refname | head -1`
+   (pinning matters here too — an unpinned read in the wrong clone returns the wrong repo's
+   series, e.g. detritus `vX.Y.Z` vs candyland `v0.Y.Z`, so you bump off the wrong base).
    Bump **minor** for features (the common case), **patch** for fix-only releases,
    **major** only on a breaking change. detritus is `vX.Y.Z`; candyland is pre-1.0
    (`v0.Y.Z`). Do not edit any version file — the tag is the source of truth.
-2. **Tag + push.** Annotated tag with a short changelog derived from the merged PRs:
+2. **Tag + push.** Annotated tag with a short changelog derived from the merged PRs.
+   Pinned per the rule above:
    ```bash
-   git tag -a vX.Y.Z -m "vX.Y.Z
+   git -C /path/to/<repo> tag -a vX.Y.Z -m "vX.Y.Z
 
    - <one line per shipped PR>"
-   git push origin vX.Y.Z
+   git -C /path/to/<repo> push origin vX.Y.Z
    ```
    The push triggers the repo's release workflow (`on: push tags ['v*']`).
 3. **Watch CI to completion.** `gh run watch <run-id> --repo benitogf/<repo> --exit-status`
@@ -89,6 +100,7 @@ MCP client" if detritus changed).
 - Don't tag before every intended PR is merged (see the ⛔ rule above).
 - Don't hand-build or hand-upload assets — the tagged CI workflow does it.
 - Don't skip watching candyland's build just because it's slow — confirm it went green and published assets before updating the local install.
+- Don't run any per-repo git command (`tag`, `push`, `checkout`, `pull`, `log`) without pinning the repo via `git -C <path>` — the shell cwd persists across calls and parallel calls have no guaranteed order, so an unpinned command can act on the wrong clone.
 - Don't run `detritus --setup` as a *substitute* for `--update` when detritus itself has a new release; `--update` chains it. Run `--setup` alone only to pull a candyland-only release onto an already-current detritus.
 
 **Incident hook.** Any mistake surfaced while running this flow — a self-acknowledged doctrine violation ("you are right, I …", "I didn't follow …") or a blocker on a PR it authored — is an incident: detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.
