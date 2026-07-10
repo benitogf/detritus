@@ -32,9 +32,11 @@ ledger, the verification gate, and the K=3 escalation cap — as its coordinatio
   task-graph; **workers** do the partitioned work. Workers do **not** coordinate peer-to-peer for
   dependent work (conflicting peer decisions over unshared context are the dominant multi-agent failure
   mode for coding); they share context through the orchestrator and through git, not lossy peer messages.
-- **Task-graph.** Nodes `{id, title, status ∈ {pending, in_progress, blocked, done}, owner, deps[],
-  priority, version}`. The orchestrator single-writes; dependents auto-unblock when their deps reach
-  `done`. (This is a superset of candyland's existing `partitionTask` — it adds
+- **Task-graph.** Nodes `{id, title, status ∈ {pending, in_progress, blocked, done}, owner,
+  priority, version}`. The orchestrator single-writes. Nodes are fully independent by construction —
+  a task is emitted only when it shares no files with and consumes no output of any sibling
+  (`roles/tech-lead` → *Partition*); there are no dependency edges and no ordering between nodes.
+  (This is a superset of candyland's existing `partitionTask` — it adds
   `status`/`owner`/`priority`/`version`, reusing the same `PARTITION` parse path; see `roles/tech-lead`
   → *Partition emission format*.)
 - **Message types** (FIPA-reduced, two-tier correlation): `{from, to, type, conversationId,
