@@ -69,18 +69,12 @@ lessons never collide.
    base is a direct upstream clone).
 2. Edit `docs/` — the usual surface. `generated/` is gitignored and the search index regenerates at
    release — **no Go toolchain is needed** to ship a pure docs change.
-   **Doctrine does not live in `docs/` alone.** detritus embeds doctrine in Go string literals — the
-   installer's agent and rule definitions, embedded prompts (`setup.go`). If the lesson **deletes or
-   renames a doc, or changes a model that other docs or agents state** (a role removed, a mechanism
-   replaced, an enum closed), sweep repo-wide before committing:
-   `grep -rniE '<old-name|old-term>' .` (exclude `.git`/`generated`) and fold every embedded statement
-   to the new model. A docs-only sweep leaves the runtime agents enforcing the old doctrine — the KB
-   says one thing, the installed agent definitions say another.
-   ✅ role doc deleted → repo-wide grep finds the installer's agent definition still listing it → that
-   string is folded in the same lesson.
-   ❌ `grep docs/` returns clean → ship → the embedded agent definition keeps instructing the old model.
-   A lesson whose sweep touches Go strings is a **code+docs writeback**: run
-   `go generate ./... && go build ./... && go test ./...` before pushing — the no-toolchain shortcut
+   **Doctrine does not live in `docs/` alone** — detritus embeds it in Go string literals (the
+   installer's agent/rule definitions and prompts). A lesson that deletes or renames a doc, or
+   changes a model other docs or agents state, sweeps the whole reference surface per
+   `core/review-rigor` R1 (deleted/renamed entity) and folds every embedded statement; if the sweep
+   touches Go strings it is a **code+docs writeback** — run
+   `go generate ./... && go build ./... && go test ./...` before pushing. The no-toolchain shortcut
    applies only when the sweep confirms no embedded references exist.
 3. Commit (attribution / footer / scrub per `/gh`).
 4. Push the branch to the pushable remote (`origin` — fork or upstream depending on the ladder).
