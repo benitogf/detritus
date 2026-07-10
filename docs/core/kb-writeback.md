@@ -67,8 +67,21 @@ lessons never collide.
 
 1. `git -C <base> worktree add <base>-wt-<slug> -b <branch> upstream/main` (use `origin/main` when the
    base is a direct upstream clone).
-2. Edit `docs/` only. `generated/` is gitignored and the search index regenerates at release — **no Go
-   toolchain is needed** to ship a docs change.
+2. Edit `docs/` — the usual surface. `generated/` is gitignored and the search index regenerates at
+   release — **no Go toolchain is needed** to ship a pure docs change.
+   **Doctrine does not live in `docs/` alone.** detritus embeds doctrine in Go string literals — the
+   installer's agent and rule definitions, embedded prompts (`setup.go`). If the lesson **deletes or
+   renames a doc, or changes a model that other docs or agents state** (a role removed, a mechanism
+   replaced, an enum closed), sweep repo-wide before committing:
+   `grep -rniE '<old-name|old-term>' .` (exclude `.git`/`generated`) and fold every embedded statement
+   to the new model. A docs-only sweep leaves the runtime agents enforcing the old doctrine — the KB
+   says one thing, the installed agent definitions say another.
+   ✅ role doc deleted → repo-wide grep finds the installer's agent definition still listing it → that
+   string is folded in the same lesson.
+   ❌ `grep docs/` returns clean → ship → the embedded agent definition keeps instructing the old model.
+   A lesson whose sweep touches Go strings is a **code+docs writeback**: run
+   `go generate ./... && go build ./... && go test ./...` before pushing — the no-toolchain shortcut
+   applies only when the sweep confirms no embedded references exist.
 3. Commit (attribution / footer / scrub per `/gh`).
 4. Push the branch to the pushable remote (`origin` — fork or upstream depending on the ladder).
 5. Open the PR against upstream (`--repo benitogf/detritus --base main`), choosing the `--head` shape
@@ -91,5 +104,7 @@ lessons never collide.
 - Never require a pre-existing local clone — resolve or provision one.
 - Never a temp clone per lesson — one durable cached base + a worktree per lesson.
 - Never dirty the user's own checkout — always work in a worktree.
-- Docs-only writeback: no Go build/test needed on the contributor's machine.
+- Docs-only writeback needs no Go build/test — but only after the repo-wide sweep (recipe step 2)
+  confirms the lesson touches no Go-embedded doctrine; a doc deletion/rename or model change that
+  hits embedded strings is a code+docs writeback and runs the Go verification.
 - Public repo: scrub private names from every issue / PR / branch / commit (per `/gh`).
