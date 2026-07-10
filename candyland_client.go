@@ -813,6 +813,15 @@ func extractPerFindingFlag(args []string) (perFinding bool, folders []string) {
 	return perFinding, folders
 }
 
+// convergenceMode maps the --per-finding flag to the convergence argument
+// runQuestCmd expects: perFinding when the flag is set, converge otherwise.
+func convergenceMode(perFinding bool) string {
+	if perFinding {
+		return "perFinding"
+	}
+	return "converge"
+}
+
 // questLaunchSummary renders the launch output for a started quest: the id,
 // deliver mode with a what-will/won't-do line (questDeliveryEffect: feedback
 // updates PR #N in place, review reports on PR #N, pr opens a new PR), and the

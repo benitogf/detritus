@@ -39,8 +39,8 @@ func TestQuestLaunchSummaryFeedbackEffect(t *testing.T) {
 }
 
 // TestExtractPerFindingFlag verifies the --per-finding flag is pulled out of the
-// trailing quest args wherever it appears, leaving the folders intact, and that
-// its presence is what selects the perFinding convergence mode.
+// trailing quest args wherever it appears, leaving the folders intact. The
+// flag→convergence mapping it feeds is covered by TestConvergenceMode.
 func TestExtractPerFindingFlag(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -64,17 +64,17 @@ func TestExtractPerFindingFlag(t *testing.T) {
 			if strings.Join(gotFolders, ",") != strings.Join(tc.wantFolders, ",") {
 				t.Errorf("folders = %v, want %v", gotFolders, tc.wantFolders)
 			}
-			convergence := "converge"
-			if gotFlag {
-				convergence = "perFinding"
-			}
-			wantConvergence := "converge"
-			if tc.wantFlag {
-				wantConvergence = "perFinding"
-			}
-			if convergence != wantConvergence {
-				t.Errorf("convergence = %q, want %q", convergence, wantConvergence)
-			}
 		})
+	}
+}
+
+// TestConvergenceMode covers the flag→convergence mapping runQuestCmd receives:
+// the --per-finding flag selects perFinding, its absence selects converge.
+func TestConvergenceMode(t *testing.T) {
+	if got := convergenceMode(true); got != "perFinding" {
+		t.Errorf("convergenceMode(true) = %q, want %q", got, "perFinding")
+	}
+	if got := convergenceMode(false); got != "converge" {
+		t.Errorf("convergenceMode(false) = %q, want %q", got, "converge")
 	}
 }

@@ -139,10 +139,7 @@ func main() {
 			self, _ := os.Executable()
 			cwd, _ := os.Getwd()
 			perFinding, folders := extractPerFindingFlag(os.Args[3:])
-			convergence := "converge"
-			if perFinding {
-				convergence = "perFinding"
-			}
+			convergence := convergenceMode(perFinding)
 			if err := runQuestCmd(self, os.Args[2], folders, convergence, cwd); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)

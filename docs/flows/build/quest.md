@@ -25,11 +25,11 @@ related:
 
 # /quest — the one persistent iterative loop in the sidecar
 
-A quest is the sidecar's **one flexible, persistent loop**: the **quest-lead** ticks **discover → triage → launch child runs** against an **objective + scope lens**, iterating until the objective is met. Child runs commit onto the quest branch (`quest/<id>`, `deliver: branch`); a single run (`/candyland`, `flows/build/candyland`) is the atom the quest launches. Its in-session homologues are `/smith` (single agent) and `/forge` (parallel).
+A quest is the sidecar's **one flexible, persistent loop**: the **quest-lead** ticks **discover → triage → launch child runs** against an **objective + scope lens**, iterating until the objective is met. In converge mode, child runs commit onto the quest branch (`quest/<id>`, `deliver: branch`); in per-finding mode each child run ships its own PR off base (no shared quest branch). A single run (`/candyland`, `flows/build/candyland`) is the atom the quest launches. Its in-session homologues are `/smith` (single agent) and `/forge` (parallel).
 
 ## Child runs are serial — persistence and isolation, never parallelism
 
-The quest holds **one child run in flight at a time**. Its justification is **persistence + isolation**, not parallelism: the loop survives across many ticks, and each child run builds in its own worktree/branch off the quest branch. A quest is never a way to fan work out concurrently — that is `/candyland`'s job (independent tasks on one repo, each in its own worktree). The quest's value is that it keeps going.
+The quest holds **one child run in flight at a time**. Its justification is **persistence + isolation**, not parallelism: the loop survives across many ticks, and each child run builds in its own worktree — off the quest branch in converge mode, off base in per-finding mode. A quest is never a way to fan work out concurrently — that is `/candyland`'s job (independent tasks on one repo, each in its own worktree). The quest's value is that it keeps going.
 
 ### Survives connection loss and usage limits
 
