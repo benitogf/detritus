@@ -56,7 +56,7 @@ Size the work before partitioning with `code_graph`: `impacted_by` gives the bla
 
 ## The progress ledger — .plan/PROGRESS-&lt;slug&gt;.md
 
-`/forge` maintains a durable progress ledger at `.plan/PROGRESS-<slug>.md`: the fork-safe **task table** (task, owner, deps, status), an append-only **tick log**, a **state block** (in-flight coders, integration status, next move, blockers/feature-splits), and a **Decisions made autonomously** section. It is **overwritten at checkpoints** per `core/loop` → *Checkpoint-then-/clear*: after each checkpoint the ledger + git + the `.plan/<slug>.md` contract are the complete resume state, so the tech-lead session itself can be `/clear`'d and a fresh context resumes from them — the tick report ends with `checkpoint complete — safe to /clear` at the heavy boundaries `core/loop` names. Never rely on `/compact`.
+`/forge` maintains a durable progress ledger at `.plan/PROGRESS-<slug>.md`: the fork-safe **task table** (task, owner, status), an append-only **tick log**, a **state block** (in-flight coders, integration status, next move, blockers/feature-splits), and a **Decisions made autonomously** section. It is **overwritten at checkpoints** per `core/loop` → *Checkpoint-then-/clear*: after each checkpoint the ledger + git + the `.plan/<slug>.md` contract are the complete resume state, so the tech-lead session itself can be `/clear`'d and a fresh context resumes from them — the tick report ends with `checkpoint complete — safe to /clear` at the heavy boundaries `core/loop` names. Never rely on `/compact`.
 
 ### Decisions made autonomously
 

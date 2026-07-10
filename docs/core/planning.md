@@ -28,7 +28,7 @@ related:
 A settled plan captures, in plain language:
 
 - **Feature spec** — what is being built and why.
-- **Acceptance criteria** — a checklist, each item objectively verifiable by test, command output, UI check, or a documented manual check.
+- **Acceptance criteria** — a checklist, each item objectively verifiable by test, command output, UI check, or a documented manual check — and **safely agent-executable**: the delivering agent can run every criterion without mutating live user infrastructure (spawning real agent trees, sending external messages, touching production data). When only a live path proves the behavior, the plan names the harness (stub executor, create-then-cancel, dry-run flag). A criterion the agent must skip for safety is a planning defect.
 - **User-stated rules** — verbatim constraints from the conversation.
 - **Decisions made on the user's behalf** — each non-trivial technical choice with a one-line why (the audit trail a reviewer needs in place of a conversation they didn't see).
 - **Feature-splits & blockers** — genuinely separate features and hard blockers per `core/completion`'s three dispositions. This is **not** a parking lot for in-scope work, which is always built (disposition 1). Disposition is intake-specific: `/plan` records genuinely-separate features for the developer to triage; `/dream` (autonomous, non-technical path) resolves in-scope concerns into the plan and splits genuinely-separate features into their own plans rather than handing the user a note they can't action (`core/dream` → *Hazards — deal with them, never defer*).
@@ -41,6 +41,18 @@ A plan is ready only when:
 - **Acceptance clarity** — every criterion is objective enough to verify.
 - **Constraint capture** — user-stated rules, repo guidance, KB guidance, and known external constraints are captured as rules or decisions, not left as chat-only context.
 - **One-feature boundary** — the spec fits one coherent feature; independent features split into separate plans.
+- **Delivery packaging is independent** — every PR the plan emits passes the independence gate below; no criterion requires the agent to touch live infrastructure to verify (name the harness instead).
+
+## Delivery packaging — split only what is fully independent
+
+A plan emits only PRs that are **independent and simultaneously launchable**: disjoint files, and no PR consumes another's changes. The same rule governs every split at every level (PRs here, coder tasks in `roles/tech-lead`):
+
+- **Coupled work within a repo = ONE PR.** If two pieces touch the same files or one builds on the other's output, they are one unit.
+- **Work that requires a merged predecessor belongs to a LATER planning round**, run after the merge — never a simultaneous launch with a prose sequencing note.
+- **Cross-repo companions** (one feature spanning N repos) keep the merge-together pattern from `core/build` → *Multi-repo delivery* — that is one feature with one PR per repo, not a dependency chain.
+
+✅ Plan emits PR A (repo X, `docs/**`) and PR B (repo Y, `server/**`) — disjoint, neither reads the other's diff → launch both now.
+❌ Plan emits PR 1 and "PR 2 (after PR 1 merges)" — a prose dependency note is a planning defect caught at the readiness check, not a sequencing mechanism; PR 2 is a later planning round.
 
 ## Consistency check
 
@@ -48,6 +60,7 @@ Before declaring ready:
 
 - Feature spec, acceptance criteria, verification plan, and decisions must agree with each other.
 - Any requirement that cannot be verified, contradicts another, or expands beyond the feature boundary is resolved first.
+- Every acceptance criterion is safely agent-executable (no live-infrastructure mutation); any criterion that would need a live path names its harness or is rewritten.
 - Helpful but out-of-scope work is handled per the intake's disposition rule (`core/completion`) — a genuinely separate feature is split out, never silently folded into the plan; in-scope work is built, never parked.
 
 ## Decision-completeness
