@@ -20,7 +20,7 @@ related:
 
 # /gh — Router for GitHub Issue & PR Workflows
 
-One entry point for the five `gh-*` skills. Reads the conversation + any arguments, decides which sub-skill fits, and hands off. The sub-skills stay focused; this file is the dispatcher and the home for cross-skill conventions so they live in one place. The sidecar launchers (`/candyland`, `/quest`, `/adventure`, `/campaign`) mirror this router's Phase 1 classification outcome in Go, mapping routes to delivery modes — `core/sidecar` holds the mapping.
+One entry point for the five `gh-*` skills. Reads the conversation + any arguments, decides which sub-skill fits, and hands off. The sub-skills stay focused; this file is the dispatcher and the home for cross-skill conventions so they live in one place. The sidecar launchers (`/candyland`, `/quest`) mirror this router's Phase 1 classification outcome in Go, mapping routes to delivery modes — `core/sidecar` holds the mapping.
 
 ## Preconditions (hard gate — every flow that composes /gh inherits this)
 
@@ -54,7 +54,7 @@ These apply to every sub-skill this router dispatches to. The sub-skill docs als
     ```
     🍬 Opened by candyland — <kind> `<id>`
     ```
-    (`<kind>` ∈ `run` / `quest` / `campaign`). This is the provenance link `/absorb` (`flows/maintainer/absorb`) reads to resolve the PR's producing candyland unit; dropping it during a rewrite breaks the fast-path unit resolution. Never mint one where it's absent — candyland owns stamping it.
+    (`<kind>` ∈ `run` / `quest`). This is the provenance link `/absorb` (`flows/maintainer/absorb`) reads to resolve the PR's producing candyland unit; dropping it during a rewrite breaks the fast-path unit resolution. Never mint one where it's absent — candyland owns stamping it.
 12. **Preserve the learning-loop footer on every PR-body rewrite.** The same re-append discipline as #11 applies to KB PRs opened by the ship-leg learning flows (`/grow`, `/learn`, `/optimize` directly; `/absorb` transitively via `/grow`). Such a PR carries a learning-loop provenance footer:
     ```
     📚 Learned by detritus — <flow> `<ref>`

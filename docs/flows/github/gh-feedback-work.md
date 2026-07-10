@@ -174,7 +174,7 @@ Rewrite, don't append. The PR body should read as if it always described the PR'
   ```
   🍬 Opened by candyland — <kind> `<id>`
   ```
-  (`<kind>` ∈ `run` / `quest` / `campaign`). This is the provenance link `/absorb` (`flows/maintainer/absorb`) uses to
+  (`<kind>` ∈ `run` / `quest`). This is the provenance link `/absorb` (`flows/maintainer/absorb`) uses to
   resolve the producing unit — a body rewrite must keep it verbatim, never drop or edit it. If it's absent, do not add
   one (candyland stamps it; this skill doesn't mint provenance).
 - **Cross-repo refs** in the rewritten body default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `idnerdidx/bulk#311` smears into nested autolinks via the `idx` substring). If the existing body still has bare cross-repo shortcuts, rewrite them to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)` form during this pass, keeping the `<owner>/<repo>` pattern out of the label. Same-repo `#<n>` references stay valid bare. See the cross-repo-refs convention in `flows/github/gh`.

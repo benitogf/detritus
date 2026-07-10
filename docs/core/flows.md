@@ -6,15 +6,13 @@ triggers:
   - flow pipeline
   - orchestration ladder
   - PR policy
-when: Internal. Loaded via kb_get by the flow docs (campaign, quest, adventure, janitor, candyland, forge, smith, vibe) for the shared model — the universal pipeline, the taxonomy, the three axes, the PR policy, and the safety rails.
+when: Internal. Loaded via kb_get by the flow docs (quest, janitor, candyland, forge, smith, vibe) for the shared model — the universal pipeline, the taxonomy, the three axes, the PR policy, and the safety rails.
 related:
   - core/build
   - core/loop
   - core/completion
   - core/sidecar
-  - flows/build/campaign
   - flows/build/quest
-  - flows/build/adventure
   - flows/build/janitor
   - flows/build/candyland
   - flows/build/forge
@@ -35,7 +33,7 @@ The flows are different ways to do the **same work**. Every flow instantiates on
 plan → execute → review-with-rework → deliver
 ```
 
-- **plan** — intent settles BEFORE execution starts. Once planning settles, work runs to done **without stopping** — no pause gates, no approval gates, no mid-run user questions. What makes "never stop" true is the **decision-fallback ladder**: post-plan a *decision* (ambiguity, trade-off, scope interpretation, unexpected difficulty, unclear root cause) NEVER reaches the user — it falls to the lowest tier with authority, is decided there and **recorded**. `/smith` (single agent): decide the best option given context and record it in the ledger's *Decisions made autonomously* section. `/forge`: the coder emits `BLOCKED {json}`, the tech-lead (session) decides and re-spawns; the tech-lead's own fallback is the smith rule. candyland: escalate **exactly one tier up** — coder → tech-lead → quest-lead → tech-manager → intent-manager — decided at the lowest tier with authority (`core/coordination` → *Re-planning loop*). A **capability blocker** (a failure no decision can resolve — missing credentials, absent permissions, unreachable infrastructure, toolchain broken outside the repo) is the **only** thing that stops, and only with a postmortem (`core/completion`).
+- **plan** — intent settles BEFORE execution starts. Once planning settles, work runs to done **without stopping** — no pause gates, no approval gates, no mid-run user questions. What makes "never stop" true is the **decision-fallback ladder**: post-plan a *decision* (ambiguity, trade-off, scope interpretation, unexpected difficulty, unclear root cause) NEVER reaches the user — it falls to the lowest tier with authority, is decided there and **recorded**. `/smith` (single agent): decide the best option given context and record it in the ledger's *Decisions made autonomously* section. `/forge`: the coder emits `BLOCKED {json}`, the tech-lead (session) decides and re-spawns; the tech-lead's own fallback is the smith rule. candyland: escalate **exactly one tier up** — coder → tech-lead → quest-lead — decided at the lowest tier with authority (`core/coordination` → *Re-planning loop*). A **capability blocker** (a failure no decision can resolve — missing credentials, absent permissions, unreachable infrastructure, toolchain broken outside the repo) is the **only** thing that stops, and only with a postmortem (`core/completion`).
 - **execute** — build units per `core/build` (smallest delta → verification hard gate → commit).
 - **review-with-rework** — a fresh-context critic that can send work back, looping until clean, bounded: `/gh-self-review` convergence in-session; the reviewer's fix→re-review loop in the sidecar. Mandatory at every level.
 - **deliver** — composes `/gh`; modes are a **closed enum — `pr | branch | feedback | review` (do NOT invent others)** per `core/build` → *Delivery modes*. Never merges — the human merge is the real gate.
@@ -45,10 +43,8 @@ plan → execute → review-with-rework → deliver
 
 | Flow | Control | Where | What it is |
 |---|---|---|---|
-| **campaign** | intent manager + tech manager (convergence-gated) | sidecar | program → concurrent child quests on a shared branch → one PR per repo at the end |
-| **quest** | quest-lead | sidecar | **bounded** iterative loop: ticks runs onto a quest branch → one PR per repo when the objective is met; terminating |
-| **adventure** | quest-lead | sidecar | **open-ended freeseeking** loop: PR per accepted finding, perpetual until stopped/dry; janitor's sidecar homologue |
-| **janitor** | single session | in-session | adventure's in-session homologue: discover→triage→fix→verify→deliver, one delivery at a time via /gh |
+| **quest** | quest-lead | sidecar | the one flexible **persistent** loop: ticks serial child runs against an objective + scope lens; two delivery modes — **converge** (one PR per repo when the objective is met) or **per-finding** (`--per-finding`: one PR per accepted finding) |
+| **janitor** | single session | in-session | the in-session homologue of a per-finding quest: discover→triage→fix→verify→deliver, one delivery at a time via /gh |
 | **run** (via `/candyland`) | tech-lead + coders + reviewer | sidecar | one work unit: partition→build→integrate→review-loop→deliver |
 | **forge** | session as tech-lead | in-session | run's homologue: this session partitions; coders are Agent-tool sub-agents |
 | **smith** | single agent | in-session | same pipeline, no spawning; `/plan`-gated; ends at the open PR |
@@ -57,17 +53,16 @@ plan → execute → review-with-rework → deliver
 ## Three axes (orthogonal)
 
 1. **Intake style** — developer (`/plan`: open-ended, user steers tech) vs executive (`dream`: multiple-choice, architect owns tech). `/vibe` IS the executive intake fronting an executor, not a rung on the ladder.
-2. **Execution substrate** — in-session single agent (smith) / in-session multi-agent (forge) / sidecar processes (run, quest, adventure, campaign).
-3. **Orchestration ladder** — run ⊂ quest ⊂ campaign. A campaign decomposes ONLY into quests (never bare runs); a quest owns its runs as it ticks. adventure sits beside quest — same machinery, different delivery policy.
+2. **Execution substrate** — in-session single agent (smith) / in-session multi-agent (forge) / sidecar processes (run, quest).
+3. **Orchestration ladder** — run ⊂ quest. A quest owns and sequences its child runs serially as it ticks; a single run is the atom it launches. Its two delivery modes (converge / per-finding) are the same machinery under a different delivery policy.
 
-In-session bounded homologues of quest are `/smith` (single agent) and `/forge` (parallel). Campaign has no in-session homologue.
+In-session bounded homologues of quest are `/smith` (single agent) and `/forge` (parallel).
 
 ## PR policy
 
-- **Bounded objectives converge to one PR per impacted repo** (smith, forge, run, quest, campaign): iterate on a branch, deliver once.
-- **Only open-ended freeseeking is multi-PR** (adventure / janitor): each accepted finding is a DISTINCT deliverable → its own run → its own PR.
-- **Campaign-child quests open NO PRs** — the parent stamps `deliver: branch`; their runs commit onto the campaign branch; the campaign opens the per-repo PRs at its delivery gate.
-- The bounded/open-ended split is **explicit at invocation** (which command was launched), never detected at runtime from objective wording.
+- **Converging objectives deliver one PR per impacted repo** (smith, forge, run, a converge quest): iterate on a branch, deliver once.
+- **Per-finding delivery is multi-PR** (a `--per-finding` quest / janitor): each accepted finding is a DISTINCT deliverable → its own child run → its own PR.
+- The converge/per-finding split is **explicit at invocation** (whether `--per-finding` was passed), never detected at runtime from objective wording.
 - The shared doctrine all of this instantiates is `core/build` → *One deliverable, one PR — converge, don't spray*.
 
 ## PR-watch — the universal terminal phase
@@ -78,7 +73,7 @@ Because merge is irreversible and gated on a human's review, watch is **opt-in a
 
 - **Interactive developer flows** — `/smith`, `/forge`, `/gh-issue-work` open the PR, report the URL, and **offer** `/babysit` as the one-command continuation that watches it to merge. They do not auto-run it: a developer often merges by hand, and starting a watch loop unbidden is the flow expanding its own scope.
 - **Executive / autonomous intake** — `/vibe` **auto-chains** into `/babysit` per opened PR. Its stakeholder is non-technical: leaving a "run `/babysit` next" note they can't action is a silent drop (`core/completion`'s no-deferral rule), and the human's review approval is still the merge gate. The autonomy ends at merge-on-approval, never at a self-approved merge.
-- **Sidecar launchers** — `/candyland`, `/quest`, `/campaign` are observe-and-stop-only (`core/sidecar`) and **never merge inside the sidecar**; after the per-repo PRs open, the launcher names each PR and points the user at `/babysit` (in-session) to watch it to merge.
+- **Sidecar launchers** — `/candyland`, `/quest` are observe-and-stop-only (`core/sidecar`) and **never merge inside the sidecar**; after the per-repo PRs open, the launcher names each PR and points the user at `/babysit` (in-session) to watch it to merge.
 
 No flow ever self-approves. `/babysit`'s SHA-pinned approval invariant is the load-bearing guard — the watch phase can only merge what a human approved on the exact HEAD it merges.
 

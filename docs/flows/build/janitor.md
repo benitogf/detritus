@@ -19,7 +19,7 @@ related:
   - flows/principles/truthseeker
   - flows/testing/testing
   - core/flows
-  - flows/build/adventure
+  - flows/build/quest
   - flows/maintainer/grow
   - flows/maintainer/learn
   - flows/maintainer/absorb
@@ -29,7 +29,7 @@ related:
 
 Create a recurring scheduled automation that uses otherwise idle agent quota to improve a codebase without changing product features or intended behavior.
 
-`/janitor` is the **in-session** variant of this iterative loop — it settles a crisp loop intent, then runs discover→triage→fix→verify→deliver in this conversation, one delivery at a time through `/gh`. Its Candyland-native sibling is `flows/build/adventure`: `/adventure` hands the same open-ended freeseeking loop to the candyland sidecar to run **out-of-process**, opening a PR per accepted finding, watched in a dashboard (`core/flows`).
+`/janitor` is the **in-session** variant of this iterative loop — it settles a crisp loop intent, then runs discover→triage→fix→verify→deliver in this conversation, one delivery at a time through `/gh`. Its Candyland-native sibling is a **per-finding quest** (`flows/build/quest`): `/quest --per-finding` hands the same open-ended, discovery-driven loop to the candyland sidecar to run **out-of-process**, opening a PR per accepted finding, watched in a dashboard (`core/flows`).
 
 `/janitor` is **plan-gated**: before the audit loop runs, it refines the loop intent (objective, target scope, iteration strategy, safety boundary, verification command) so every tick is anchored to a settled intent rather than a generic scheduled audit. This gate composes the existing planning doctrine — it does not introduce a new mechanism. See *Settle the loop intent* below.
 

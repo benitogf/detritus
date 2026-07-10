@@ -36,8 +36,7 @@ ledger, the verification gate, and the K=3 escalation cap — as its coordinatio
   priority, version}`. The orchestrator single-writes; dependents auto-unblock when their deps reach
   `done`. (This is a superset of candyland's existing `partitionTask` — it adds
   `status`/`owner`/`priority`/`version`, reusing the same `PARTITION` parse path; see `roles/tech-lead`
-  → *Partition emission format*. At campaign altitude the tech manager mirrors the same convention with
-  a `QUESTS [...]` line — see `roles/tech-lead` → *QUESTS line format*.)
+  → *Partition emission format*.)
 - **Message types** (FIPA-reduced, two-tier correlation): `{from, to, type, conversationId,
   correlationId?, ts, seq, body}`, `type` is a **closed enum — `question | response | feedback |
   directive | task_mutation` (do NOT invent others)**. A `question` carries a `correlationId`; the
@@ -116,10 +115,9 @@ brief the coder process reads — a populated-but-unrendered field is invisible 
 re-derives — and a regression test asserts it surfaces in the worker-visible brief at the transport
 boundary, not merely that the field is set.
 
-In candyland a decision escalates **exactly one tier up** the ladder — coder → tech-lead → quest-lead →
-campaign **tech-manager** → **intent-manager** — and is decided at the lowest tier with authority. The
-top tier for each substrate (standalone-run = tech-lead; standalone-quest = quest-lead; campaign =
-intent-manager) applies the smith rule (decide + record). Escalation **never pauses for a human**; the
+In candyland a decision escalates **exactly one tier up** the ladder — coder → tech-lead → quest-lead
+— and is decided at the lowest tier with authority. The top tier for each substrate (standalone-run =
+tech-lead; quest = quest-lead) applies the smith rule (decide + record). Escalation **never pauses for a human**; the
 dashboard shows decisions **read-only** for audit. Only a capability blocker terminates a record as
 `blocked`, and only with a schema-valid postmortem (`core/completion`). **Realization B is built
 in the candyland repo (its own PR), not here** — detritus ships the protocol + Realization A; candyland

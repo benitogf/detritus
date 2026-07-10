@@ -263,7 +263,7 @@ func isLaunchHandoff(input, refText string) bool {
 // against freshly-fetched (stubbed in tests) gh state, mapped to a delivery mode.
 // It is the one classifier all sidecar launchers share.
 //
-// Launcher inputs are objective/plan/campaign-brief TEXT, which routinely cite
+// Launcher inputs are objective/plan TEXT, which routinely cite
 // issues/PRs in prose (a settled plan may mention "#97" or a full URL in passing).
 // A citation must NOT hijack delivery — that is the safety the old marker-only
 // path had. The distinction that matters is NOT bare-vs-explicit; it is whether
@@ -816,11 +816,11 @@ func extractPerFindingFlag(args []string) (perFinding bool, folders []string) {
 // questLaunchSummary renders the launch output for a started quest: the id,
 // deliver mode with a what-will/won't-do line (questDeliveryEffect: feedback
 // updates PR #N in place, review reports on PR #N, pr opens a new PR), and the
-// API + UI ports with a remote/WSL port-forwarding hint. kind names the flow
-// for the summary line ("quest" for a bounded run, "adventure" for --per-finding).
-func questLaunchSummary(kind, id, deliver string, targetPR int, degraded bool) string {
+// API + UI ports with a remote/WSL port-forwarding hint. Both delivery modes
+// (converge and per-finding) are quests, so the summary always reads "quest".
+func questLaunchSummary(id, deliver string, targetPR int, degraded bool) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "candyland %s started: %s\n", kind, id)
+	fmt.Fprintf(&b, "candyland quest started: %s\n", id)
 	fmt.Fprintf(&b, "Deliver: %s (%s)\n", deliver, questDeliveryEffect(deliver, targetPR))
 	if degraded {
 		b.WriteString(degradedClassificationNotice)
@@ -853,17 +853,8 @@ func runQuestCmd(detritusPath, objectiveFile string, folders []string, convergen
 	if err != nil {
 		return err
 	}
-	fmt.Print(questLaunchSummary(questKindFor(convergence), id, deliver, targetPR, degraded))
+	fmt.Print(questLaunchSummary(id, deliver, targetPR, degraded))
 	return nil
-}
-
-// questKindFor names the flow for the launch summary line: an open-ended
-// per-finding quest reads as "adventure", a bounded one as "quest".
-func questKindFor(convergence string) string {
-	if convergence == "perFinding" {
-		return "adventure"
-	}
-	return "quest"
 }
 
 // ensureCandylandUp returns nil once the candyland sidecar answers its health

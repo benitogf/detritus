@@ -36,7 +36,7 @@ Each launcher writes its input to a file (keeps large text off argv), then detri
 | Flow | Command | REST |
 |---|---|---|
 | run | `detritus --candyland-run <plan-file> [folder ...]` | `POST /api/runs` + `/begin` |
-| quest | `detritus --quest-run <objective-file> [folder ...]` | `POST /api/quests` + `/begin` (converge policy) |
+| quest | `detritus --quest-run <objective-file> [--per-finding] [folder ...]` | `POST /api/quests` + `/begin` (`--per-finding` → per-finding policy; else converge) |
 
 Requests carry the full input plus a derived short `Title`, and `deliver`/`targetPr` when intake resolved them (below).
 
