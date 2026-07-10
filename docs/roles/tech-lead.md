@@ -89,7 +89,7 @@ Per task: `id` (stable slug), `title`, `role` (Backend / Frontend / Fullstack / 
 
 ## INCIDENT line format (out-of-process driver)
 
-Self-acknowledged incidents (`core/ego` trigger ①) are recorded structurally, the same emit-for-the-driver-to-capture pattern as `PARTITION` / `QUESTS` — but one line **per incident, emitted as it happens**, never a single array at the unit's end. The moment an agent acknowledges a mistake or works around a non-terminal problem, it emits a **single line** beginning with `INCIDENT ` followed by a JSON **object**:
+Self-acknowledged incidents (`core/ego` trigger ①) are recorded structurally, the same emit-for-the-driver-to-capture pattern as `PARTITION` — but one line **per incident, emitted as it happens**, never a single array at the unit's end. The moment an agent acknowledges a mistake or works around a non-terminal problem, it emits a **single line** beginning with `INCIDENT ` followed by a JSON **object**:
 
 ```
 INCIDENT {"summary":"edited the defining test to go green instead of the implementation","severity":"warn"}

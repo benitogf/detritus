@@ -1,5 +1,5 @@
 ---
-description: Shared intent-review method — did we build what was MEANT? A reproducible, per-commitment check of the shipped result against the original intent, complementary to core/review-rigor (which checks code mechanics). Do not invoke directly; composed by the intent manager's review stage (agent id intent-reviewer).
+description: Shared intent-review method — did we build what was MEANT? A reproducible, per-commitment check of the shipped result against the original intent, complementary to core/review-rigor (which checks code mechanics). Do not invoke directly; composed by the review stage (agent id intent-reviewer).
 triggers:
   - intent review
   - intent-review
