@@ -56,6 +56,13 @@ distill/ship machinery — only when an incident fires and where it goes.
   session drains that collection and routes every entry post-delivery — lesson capture is
   in-session, never in the sidecar. Appending (never overwriting) means a unit that trips multiple
   incidents surfaces all of them, not just the last.
+- **Route directly means autonomously — never a confirmation prompt.** Once a trigger has fired,
+  its route is *decided* (this table decided it); post-delivery the agent runs that route without
+  asking the user to authorize it. Detection ≡ decision (①: acknowledgment ≡ detection), so
+  "want me to `/grow` that?" / "should I capture this lesson?" is a redundant confirmation of what
+  doctrine already mandates — the failure mode `/grow` itself exists to fix. Announce that you're
+  routing if useful, then do it; the only thing that legitimately waits for the user is a genuine
+  decision the taxonomy doesn't already settle. (The user can always redirect after the fact.)
 - **No local clone required.** Detection fires anywhere; shipping does too — the ship-leg flows
   (`/grow` / `/absorb` / `/learn`) resolve or provision a writable KB checkout on demand per
   `core/kb-writeback` (forking when the user lacks write access), so an incident routes to a KB PR
