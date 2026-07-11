@@ -46,3 +46,15 @@ The reviewer never edits files, never commits, never fixes. Remediation belongs 
 ## Model and effort
 
 Model and effort are set per role, never per command — the installed `~/.claude/agents/detritus-reviewer.md` definition pins `claude-fable-5` at `high` effort for in-session spawns; candyland's settings default the reviewer roles to the same. Independent review wants a different model at high effort, not the builder's own model reviewing its own blind spots.
+
+### In-session model-limit fallback
+
+Claude Code has no native usage-limit fallback — its `--fallback-model` covers only transient overloads (529) and model-unavailability, explicitly *not* rate-limit, billing, or usage-limit errors. So when the pinned `claude-fable-5` reviewer exhausts its weekly Fable allowance mid-session, the spawning flow (`/forge` delivery, `/gh-self-review`) owns the fallback:
+
+- **Trigger.** The reviewer sub-agent dies or returns carrying a usage-limit banner that *names its pinned model* — e.g. `You've hit your Fable limit · resets <time>` (any model-named limit banner).
+- **Action.** The spawning flow re-spawns the reviewer **once** with the `Agent` tool's `model: "opus"` override (`claude-opus-4-8`), rather than failing the review or waiting for the Fable limit to reset.
+- **Disclosure.** The review output states it ran on the fallback model, so a reader knows the verdict came from opus, not the pinned fable.
+- **Session-stickiness.** Once the fable limit is hit, subsequent reviewer spawns in the same session go straight to `model: "opus"` instead of re-hitting the limit each time.
+- **Exclusion.** An account-wide banner — a session, weekly, or usage limit with *no model named* — is **not** fallback-eligible: the whole seat is exhausted, so the flow surfaces it to the user as a capability blocker rather than retrying on another model.
+
+The generated `detritus-reviewer` definition stays fable-pinned; the fallback lives in the *spawning flow*, never in the definition.
