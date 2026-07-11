@@ -99,7 +99,7 @@ If the `--stat` exceeds ~2000 changed lines, the brief should say so explicitly 
 
 ## Phase 3: Hand off to a fresh sub-agent
 
-Spawn the review via the `Agent` tool. The sub-agent runs with **no prior context** — the prompt is everything it sees. Use `subagent_type: "detritus-reviewer"` — the role definition `detritus --setup` installs at `~/.claude/agents/detritus-reviewer.md`, which pins the reviewer's model and effort per role (`roles/reviewer` → *Model and effort*). If the definition is absent (setup not run), fall back to `subagent_type: "general-purpose"` so the review still runs — it then inherits the session model.
+Spawn the review via the `Agent` tool. The sub-agent runs with **no prior context** — the prompt is everything it sees. Use `subagent_type: "detritus-reviewer"` — the role definition `detritus --setup` installs at `~/.claude/agents/detritus-reviewer.md`, which pins the reviewer's model and effort per role (`roles/reviewer` → *Model and effort*). If the definition is absent (setup not run), fall back to `subagent_type: "general-purpose"` so the review still runs — it then inherits the session model. If the reviewer spawn returns or dies with a banner naming its pinned model's limit (not an account-wide limit), re-spawn it per `roles/reviewer` → *Model and effort* (In-session model-limit fallback).
 
 The prompt is built from this template — fill in `<...>` placeholders from Phases 1-2:
 
