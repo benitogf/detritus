@@ -1,30 +1,33 @@
 ---
-description: Platform-specific scheduling adapters for /janitor. Keeps Codex, Claude Code, GitHub Actions, Cursor, Windsurf, and generic scheduler details out of the core janitor workflow.
+description: Platform-specific scheduling and watch adapters for the recurring-loop commands (/janitor, /smith) and the event-driven watch (/babysit). Keeps Codex, Claude Code, GitHub Actions, Cursor, Windsurf, and generic scheduler/watch details out of the core workflows.
 triggers:
   - janitor platform
   - janitor platforms
   - janitor scheduling
   - platform scheduling
+  - event watch
+  - pr watch adapter
   - codex janitor
   - claude janitor
   - claude code janitor
   - cursor janitor
   - windsurf janitor
   - github actions janitor
-when: /janitor needs to create a recurring schedule on a specific platform or explain the nearest supported scheduler behavior.
+when: /janitor or /smith needs to create a recurring schedule on a specific platform, or /babysit needs an event-watch adapter for the host — or a flow needs the nearest supported scheduler/watch behavior explained.
 related:
   - core/loop
   - flows/build/janitor
   - flows/build/smith
+  - flows/github/babysit
   - flows/github/gh
   - flows/github/gh-self-review
 ---
 
 # Loop Platform Adapters
 
-This document owns platform-specific scheduling behavior for the recurring-loop commands (`/janitor` and `/smith`). Do not duplicate these details in `core/loop`, `flows/build/janitor`, or `flows/build/smith`.
+This document owns platform-specific scheduling behavior for the recurring-loop commands (`/janitor` and `/smith`), plus the **event-watch adapter** consumed by the event-driven watch `/babysit`. Do not duplicate these details in `core/loop`, `flows/build/janitor`, `flows/build/smith`, or `flows/github/babysit`.
 
-The shared loop fundamentals (scratchpad layout, durability rule, target-scoped state, cadence guideline, skip-streak guardrail, `/gh` delivery) live in `core/loop`. Each command's own doc supplies its specific loop steps, audit-agent contract, safety boundaries, and report shape. The adapter's job is only to schedule the loop on the host platform.
+The shared loop fundamentals (scratchpad layout, durability rule, target-scoped state, cadence guideline, skip-streak guardrail, `/gh` delivery) live in `core/loop`. Each command's own doc supplies its specific loop steps, audit-agent contract, safety boundaries, and report shape. The adapter's job is only to schedule the loop — or, for an event-watch, arm the watch — on the host platform.
 
 ## Shared Adapter Rules
 
@@ -35,7 +38,7 @@ The shared loop fundamentals (scratchpad layout, durability rule, target-scoped 
 - Start one run immediately when the platform supports it.
 - If the requested cadence is below the platform's minimum, round up to the minimum and report the effective cadence; do not ask the user a clarifying question for this case.
 - If the requested cadence is unsupported in a way that materially changes behavior (not just rounded up), choose the nearest safe option and say what changed.
-- Every adapter must preserve target-scoped non-overlap: a wake checks existing branches, issues, PRs, or state before starting fresh audit work.
+- Every **poll-per-tick maintenance adapter** (the `/janitor` / `/smith` schedulers) must preserve target-scoped non-overlap: a wake checks existing branches, issues, PRs, or state before starting fresh audit work. The **event-watch adapter** (`/babysit`) does not participate in this — it watches a single named target and carries no scratchpad; non-overlap does not apply.
 
 ## `--platform auto`
 
@@ -73,6 +76,7 @@ Claude Code Routines are the first-party scheduling primitive. Two variants shar
 - **Cloud Routines** (`/schedule` → Routines → Cloud): run on Anthropic-managed infrastructure, clone the selected repository at the start of each run, and survive without the user's machine. Minimum interval is **1 hour**; cron expressions evaluating to a sub-hour cadence are rejected at routine-creation time. Opt-in for `/janitor` when the loop is explicitly GitHub-state-only — no workspace, no local scratchpad, no rolling metric history beyond what survives in issue / PR bodies.
 - **In-session durable cron** (`CronCreate` with `durable: true`): a standing schedule that fires inside the running interactive session against the local checkout. Seat-billed — it never spawns `claude -p`, so it does not draw on the Agent-SDK credit pool the way the external scheduler does. Standing-schedule, so it is **usage-limit resilient** (see *core/loop* → *Usage-Limit Resilience*) where `/loop` is not. Choose this when the user wants limit-resilient durability without `claude -p` billing and is willing to keep a Claude REPL open. Details below.
 - **`/loop`**: session-scoped self-rescheduling polling inside the current conversation. **Fragile under usage limits** — it re-arms the next tick at the end of each tick, so a tick that dies on a seat/token limit stops the whole loop, not just that tick (*core/loop* → *Usage-Limit Resilience*). Stops when the session ends. Office-hours / attended use only; never present it as unattended-durable.
+- **`Monitor` event-watch**: an out-of-band background poll that wakes the model only on change, rather than every interval. Unlike all of the above — which spend a full model turn each wake even when nothing changed — the model is idle between events. Fits **event-driven watches over a single remote target** (the `/babysit` shape), not the poll-per-tick maintenance loops. Session-scoped and attended (dies with the session). Details below.
 
 `/smith` requires a durable runner (mode 1), so Cloud Routines (disposable) cannot host it — use Desktop Routines or the external scheduler. Cloud remains fine for `/janitor`. See `flows/build/smith` → *Build Phase Durability*.
 
@@ -113,6 +117,50 @@ Constraints to state to the user up front:
 - Fires only while a Claude REPL is **idle** (not mid-query) and **running** — it does not fire while Claude is fully closed. For always-on-while-closed durability the user must accept the external `claude -p` scheduler (and its Agent-SDK billing) instead.
 - `recurring` cron jobs **auto-expire after 7 days**, firing one final time then deleting. For a perpetual janitor, re-create on expiry or keep a lightweight weekly refresh.
 - Non-overlap is not platform-guaranteed; rely on the target-scoped state check (loop step 3) at every wake, as with Cloud Routines.
+
+### `Monitor` event-watch (event-driven, token-cheap)
+
+An event-watch primitive, distinct from the poll-per-tick options above. Where a standing schedule / self-arm / `/loop` wakes the *model* every interval — spending a full model turn even on an interval where nothing changed — a `Monitor` run `persistent: true` polls a single remote target **out of band** and emits **one notification per gate-state change**. Each emitted stdout line is one event, i.e. one model wake; between events the model is idle, so **cost is ∝ the number of events, not wall-clock**. Watching becomes near-free; you pay only when there is something to react to.
+
+**When to use it.** Event-driven watches over a **single remote target** where the caller reacts to changes — the `/babysit` shape (watch one PR, act on each new review / check / **comment** / mergeable transition). It is *not* the maintenance-loop model: it carries no scratchpad and does not participate in janitor's target-scoped-non-overlap discipline. Keep it to single-target event watches; the poll-per-tick options remain the fit for `/janitor` / `/smith`.
+
+**Durability: session-scoped (attended).** The `Monitor` process dies when the session ends — `/clear`, a closed terminal, the machine sleeping. Its only state is the in-process previous-poll diff; nothing survives session death, and it carries no scratchpad. This is the honest counterpart to `/loop`'s attended-only framing (*core/loop* → *Durability*). For a watch that must survive session death, fall back to the **in-session durable cron** (or another standing schedule) above — but that re-polls per fire (a model turn per fire, so the token win does **not** apply) and must carry the last-seen state forward across fires so it still acts only on *new* changes.
+
+**The watch is notify-only.** It performs no mutating actions — read-only fetches only, no merge / comment / body-edit / branch-update. The woken caller (the actor flow) performs any mutation.
+
+Generalized script shape — a `persistent: true` poll loop that emits only what changed since the last poll and ends only on the target's terminal state:
+
+```sh
+# persistent Monitor; each emitted line -> one notification (one model wake); runs until the target is terminal
+prev=""
+while true; do
+  # Assemble the FULL cur set from all sources; ANY sub-fetch failing makes the whole poll inconclusive.
+  cur=$(
+    gh api repos/<owner>/<repo>/pulls/<n> --jq '...head_sha/mergeable/mergeable_state/merged/state...' &&
+    gh api ... pulls/<n>/reviews          --jq '... per-reviewer latest state, sorted ...' &&
+    gh api ... commits/<head_sha>/check-runs --jq '... newly-terminal conclusions, sorted ...' &&
+    # comment sources folded into cur so a comment-only change produces a NEW line -> an emitted event:
+    gh api ... pulls/<n>/comments         --jq '... latest created_at / id per inline comment ...' &&
+    gh api ... issues/<n>/comments        --jq '... latest created_at / id per issue comment ...'
+  ) 2>/dev/null || { sleep 45; continue; }           # partial/failed poll is inconclusive -> skip; do NOT touch prev
+  comm -13 <(echo "$prev") <(echo "$cur")            # emit ONLY newly-changed lines; never re-emit an unchanged state
+  prev="$cur"                                        # updated ONLY after a fully-successful cur assembly
+  # emit gate: mergeable @<head7> on the strict composite; gate: ci-failed on a failed required check;
+  # emit gate: changes-requested; emit new comment; emit terminal: merged / terminal: closed AND break on merged/closed
+  sleep 45                                           # 30s+ for remote APIs (rate-limit guidance)
+done
+```
+
+`cur` must fold in **all three feedback sources** — the reviews set (keyed on state), inline review comments, and issue-thread comments — not just check conclusions and reviews. A plain issue-comment or inline reply changes no check and no review state; if it is not in `cur`, `comm -13` emits nothing and the comment sits invisible on a quiet PR forever. Key the two comment sources so a new comment yields a new `cur` line (a latest-`created_at`, or an id set) → an emitted event.
+
+Rules the watch script must carry:
+
+- **`gh api` only** — never `gh pr view` / `gh pr checks` in the script (`flows/github/gh` #2: the Projects-classic GraphQL deprecation breaks them on some repos even where the REST call works).
+- **Coverage — silence is not success** (the `Monitor` contract's own rule): the emit filter must cover **every** state the caller acts on — CI *failure* conclusions, `CHANGES_REQUESTED`, a **new comment** (inline or issue), merged, **and** closed — not just the happy `gate: mergeable`. A watch that emits only good news goes silent through a CI crash — or a review-comment on a quiet PR — and looks identical to "still waiting."
+- **Terminal = merged/closed only.** The loop `break`s (ends the watch) only when the target is merged or closed; `gate: mergeable`, `gate: ci-failed`, `gate: changes-requested`, new-comment, and per-check / per-review events are all **emit-and-continue** — the woken actor decides what to do on each.
+- **Inconclusive polls never emit and never advance `prev`.** `mergeable_state == unknown` / `mergeable == null` (GitHub still computing, typically right after a push) → do not emit a false event; let the next poll settle it. A failed / partial `gh api` → the **whole** `cur` assembly is inconclusive: `continue` without touching `prev`. Guard the entire multi-source assembly, not just the first fetch — a partial `cur` that overwrote `prev` would drop lines and then re-emit them as "new" on the next full poll.
+- **`comm -13` newly-changed diff** — emit only what changed since the previous poll; never re-emit an unchanged state. A too-chatty watch is auto-stopped by `Monitor`.
+- **Poll interval 45–60s** (30s+ for remote APIs per `Monitor` guidance); honor `core/loop` cache-window guidance.
 
 ### Cloud Routines (GitHub-state-only opt-in)
 
