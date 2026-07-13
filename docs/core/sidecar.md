@@ -73,7 +73,7 @@ Because the lifecycle is idempotent — and dirty-safe toward every holder excep
 
 ## Watch-to-merge is in-session, never in the sidecar
 
-The sidecar **never merges** — merge is irreversible and gated on a human review (`core/flows` → *PR-watch — the universal terminal phase*), while the sidecar surface is observe-and-stop-only. When a launched run/quest converges and opens its per-repo PR(s), the launcher reports each PR URL and points the user at `/babysit` (`flows/github/babysit`) to carry it to merge **in-session**: `/babysit` watches one PR, folds in reviewer feedback each tick, and merges the moment a SHA-pinned human `APPROVED` review covers HEAD. The watch loop runs in the user's session, not as a sidecar agent — it is the same universal terminal phase the in-session flows use, applied to the sidecar's delivered PRs.
+The sidecar **never merges** — merge is irreversible and gated on a human review (`core/flows` → *PR-watch — the universal terminal phase*), while the sidecar surface is observe-and-stop-only. When a launched run/quest converges and opens its per-repo PR(s), the launcher reports each PR URL and points the user at `/babysit` (`flows/github/babysit`) to carry it to merge **in-session**: `/babysit` watches one PR, folds in reviewer feedback as it arrives, and merges the moment a SHA-pinned human `APPROVED` review covers HEAD. The watch loop runs in the user's session, not as a sidecar agent — it is the same universal terminal phase the in-session flows use, applied to the sidecar's delivered PRs.
 
 ## Launch output contract
 
