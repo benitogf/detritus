@@ -200,28 +200,43 @@ type launchReference struct {
 	owner string
 	repo  string
 	num   int
-	bare  bool   // "#N" with no owner/repo — resolve owner/repo from the cwd repo
-	text  string // the exact matched substring (used to detect a hand-off vs a prose citation)
+	bare  bool // "#N" with no owner/repo — resolve owner/repo from the cwd repo
+	start int  // byte offset of the match start in the input
+	end   int  // byte offset one past the match end in the input
 }
 
 var (
-	refURLRe  = regexp.MustCompile(`(?:https?://)?github\.com/([\w.\-]+)/([\w.\-]+)/(?:pull|issues)/(\d+)`)
+	// refURLRe also consumes an optional path/query/fragment suffix
+	// (`/files`, `?tab=comments`, `#issuecomment-123`) so a deep-link PR/issue
+	// URL handed as the whole objective classifies as a hand-off, not new work.
+	refURLRe  = regexp.MustCompile(`(?:https?://)?github\.com/([\w.\-]+)/([\w.\-]+)/(?:pull|issues)/(\d+)(?:[/?#][^\s)]*)?`)
 	refNWORe  = regexp.MustCompile(`([\w.\-]+)/([\w.\-]+)#(\d+)`)
 	refBareRe = regexp.MustCompile(`#(\d+)`)
 )
 
 // parseLaunchReference extracts the first PR/issue reference from input: a full
-// github.com URL, an owner/repo#N shorthand, or a bare #N (resolved against the
-// cwd repo). Returns found=false when the input names no reference (new work).
+// github.com URL (optionally with a path/query/fragment suffix), an owner/repo#N
+// shorthand, or a bare #N (resolved against the cwd repo). Returns found=false
+// when the input names no reference (new work). The match's byte offsets are
+// recorded on the reference so a hand-off check needs no second textual scan.
 func parseLaunchReference(input string) (launchReference, bool) {
-	if m := refURLRe.FindStringSubmatch(input); m != nil {
-		return launchReference{owner: m[1], repo: m[2], num: atoiOr0(m[3]), text: m[0]}, true
+	if loc := refURLRe.FindStringSubmatchIndex(input); loc != nil {
+		return launchReference{
+			owner: input[loc[2]:loc[3]], repo: input[loc[4]:loc[5]], num: atoiOr0(input[loc[6]:loc[7]]),
+			start: loc[0], end: loc[1],
+		}, true
 	}
-	if m := refNWORe.FindStringSubmatch(input); m != nil {
-		return launchReference{owner: m[1], repo: m[2], num: atoiOr0(m[3]), text: m[0]}, true
+	if loc := refNWORe.FindStringSubmatchIndex(input); loc != nil {
+		return launchReference{
+			owner: input[loc[2]:loc[3]], repo: input[loc[4]:loc[5]], num: atoiOr0(input[loc[6]:loc[7]]),
+			start: loc[0], end: loc[1],
+		}, true
 	}
-	if m := refBareRe.FindStringSubmatch(input); m != nil {
-		return launchReference{num: atoiOr0(m[1]), bare: true, text: m[0]}, true
+	if loc := refBareRe.FindStringSubmatchIndex(input); loc != nil {
+		return launchReference{
+			num: atoiOr0(input[loc[2]:loc[3]]), bare: true,
+			start: loc[0], end: loc[1],
+		}, true
 	}
 	return launchReference{}, false
 }
@@ -234,20 +249,22 @@ func parseLaunchReference(input string) (launchReference, bool) {
 // in longer or multi-line prose is a citation. This is the predicate that decides
 // whether gh state may drive the launch (hand-off) or whether an explicit
 // feedback/review intent marker is additionally required (citation).
-func isLaunchHandoff(input, refText string) bool {
-	trimmed := strings.TrimSpace(input)
-	if strings.ContainsAny(trimmed, "\n\r") {
+//
+// The reference position comes from the regex match recorded on ref (start/end),
+// not a re-scan for its text — a re-scan by first textual occurrence could
+// diverge from the actual match if the reference regexes ever gain alternation.
+func isLaunchHandoff(input string, ref launchReference) bool {
+	if strings.ContainsAny(strings.TrimSpace(input), "\n\r") {
 		return false // multi-line prose is always a citation
 	}
-	idx := strings.Index(trimmed, refText)
-	if idx < 0 {
+	if ref.start < 0 || ref.end > len(input) || ref.start > ref.end {
 		return false
 	}
-	after := strings.TrimRight(strings.TrimSpace(trimmed[idx+len(refText):]), " .!?;:,)")
+	after := strings.TrimRight(strings.TrimSpace(input[ref.end:]), " .!?;:,)")
 	if after != "" {
 		return false // the reference is followed by more than trailing punctuation
 	}
-	before := strings.TrimSpace(trimmed[:idx])
+	before := strings.TrimSpace(input[:ref.start])
 	if before == "" {
 		return true // the reference is the whole objective
 	}
@@ -301,7 +318,7 @@ func classifyLaunchInput(input, cwd string) (launchClassification, error) {
 	if !found {
 		return launchClassification{Deliver: "pr"}, nil
 	}
-	handoff := isLaunchHandoff(input, ref.text)
+	handoff := isLaunchHandoff(input, ref)
 	if !handoff {
 		// Prose citation: gate on the SAME strict phrase markers as the degraded
 		// fallback (deriveMarkerDelivery), NOT the loose word-level intent helpers.
