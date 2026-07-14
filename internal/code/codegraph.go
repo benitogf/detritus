@@ -1,13 +1,17 @@
 package code
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -78,6 +82,61 @@ func BuildCodeGraph(q GraphQuery) (string, *GraphResult, error) {
 		scope = ResolveProjectRoot(wd)
 	}
 
+	pkgs, edges, failReason := loadGraph(scope)
+	if failReason != "" {
+		return graphFallback(scope, q.Symbol, failReason), newGraphResult(q.Symbol), nil
+	}
+
+	// Interface query first: if the symbol names an interface, list its implementers.
+	if iface, name := findInterface(pkgs, q.Symbol); iface != nil {
+		return renderImplementers(pkgs, name, iface), newGraphResult(q.Symbol), nil
+	}
+
+	targets := edges.byName[q.Symbol]
+	if len(targets) == 0 {
+		return fmt.Sprintf("symbol %q not found as a function or interface in %s", q.Symbol, scope), newGraphResult(q.Symbol), nil
+	}
+	text, res := renderFunctionGraph(edges, q.Symbol, targets)
+	return text, res, nil
+}
+
+// graphCacheEntry is one memoized load for a scope: the fingerprint of the
+// scope's Go sources at load time, plus the loaded packages and derived call
+// graph. It is reused while the fingerprint still matches.
+type graphCacheEntry struct {
+	fingerprint string
+	pkgs        []*packages.Package
+	edges       *callEdges
+}
+
+// graphCache memoizes the packages.Load + buildCallEdges result per scope for
+// the lifetime of the process. code_graph runs a full type-checking load over
+// ./... on every call, which is multi-second on a large module; each detritus
+// consumer spawns its own stdio child, so a process-lifetime memo keyed on the
+// scope's source fingerprint turns repeated queries within one session into
+// cache hits while still reloading the instant any .go file changes.
+var graphCache = struct {
+	mu      sync.Mutex
+	entries map[string]*graphCacheEntry
+}{entries: map[string]*graphCacheEntry{}}
+
+// loadGraph returns the loaded packages and the type-resolved call graph for
+// scope, reusing a cached load while the scope's Go sources are unchanged.
+// failReason is non-empty (and pkgs/edges nil) when the load should fall back
+// to the structural map — those transient/broken states are never cached, so a
+// later query re-checks once the package loads or compiles again.
+func loadGraph(scope string) (pkgs []*packages.Package, edges *callEdges, failReason string) {
+	fp := fingerprintScope(scope)
+
+	graphCache.mu.Lock()
+	defer graphCache.mu.Unlock()
+
+	if fp != "" {
+		if e, ok := graphCache.entries[scope]; ok && e.fingerprint == fp {
+			return e.pkgs, e.edges, ""
+		}
+	}
+
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
 			packages.NeedImports | packages.NeedDeps | packages.NeedTypes |
@@ -88,29 +147,59 @@ func BuildCodeGraph(q GraphQuery) (string, *GraphResult, error) {
 		Tests: true,
 		Dir:   scope,
 	}
-	pkgs, err := packages.Load(cfg, "./...")
+	loaded, err := packages.Load(cfg, "./...")
 	if err != nil {
-		return graphFallback(scope, q.Symbol, "package failed to load"), newGraphResult(q.Symbol), nil
+		return nil, nil, "package failed to load"
 	}
-	if len(pkgs) == 0 {
-		return graphFallback(scope, q.Symbol, "no Go packages in scope"), newGraphResult(q.Symbol), nil
+	if len(loaded) == 0 {
+		return nil, nil, "no Go packages in scope"
 	}
-	if pkgErrors(pkgs) {
-		return graphFallback(scope, q.Symbol, "package does not compile"), newGraphResult(q.Symbol), nil
-	}
-
-	// Interface query first: if the symbol names an interface, list its implementers.
-	if iface, name := findInterface(pkgs, q.Symbol); iface != nil {
-		return renderImplementers(pkgs, name, iface), newGraphResult(q.Symbol), nil
+	if pkgErrors(loaded) {
+		return nil, nil, "package does not compile"
 	}
 
-	edges := buildCallEdges(pkgs)
-	targets := edges.byName[q.Symbol]
-	if len(targets) == 0 {
-		return fmt.Sprintf("symbol %q not found as a function or interface in %s", q.Symbol, scope), newGraphResult(q.Symbol), nil
+	built := buildCallEdges(loaded)
+	if fp != "" {
+		graphCache.entries[scope] = &graphCacheEntry{fingerprint: fp, pkgs: loaded, edges: built}
 	}
-	text, res := renderFunctionGraph(edges, q.Symbol, targets)
-	return text, res, nil
+	return loaded, built, ""
+}
+
+// fingerprintScope hashes every Go source under scope (relative path + mtime +
+// size) into a stable digest, so the cache invalidates the moment any file is
+// added, removed, or edited. It returns "" if the scope cannot be walked, which
+// disables caching for that call rather than risking a stale hit.
+func fingerprintScope(scope string) string {
+	h := sha256.New()
+	err := filepath.WalkDir(scope, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if path != scope && (name == ".git" || name == "node_modules" || name == "vendor" || name == "testdata" || strings.HasPrefix(name, ".")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".go") {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(scope, path)
+		if err != nil {
+			rel = path
+		}
+		fmt.Fprintf(h, "%s\x00%d\x00%d\n", rel, info.ModTime().UnixNano(), info.Size())
+		return nil
+	})
+	if err != nil {
+		return ""
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 // pkgErrors reports whether any PRODUCTION package failed to load or type-check.
