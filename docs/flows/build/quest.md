@@ -35,6 +35,34 @@ The quest holds **one child run in flight at a time**. Its justification is **pe
 
 Because the quest is persistent, a spawned agent that dies on a **usage limit** or a **connection loss** does not fail the quest: the conductor pauses the affected child run with a truthful `PauseReason` and auto-resumes it in place when the window reopens (`core/sidecar` → *Auto-pause and resume*). Loop state — stage, gate, branch, accumulated commits — is durable across a sidecar bounce, so the quest picks up where it left off rather than restarting.
 
+## The loop is unbounded — it runs until the checks clear
+
+A quest is the sidecar homologue of `/janitor` (`flows/build/janitor`): its loop has **no tick cap and no default token cap**. It is meant to run until no safe in-scope work remains — that is the point of the flow. The loop terminates only on its **natural** conditions:
+
+- the checks clear / discovery returns no work items → **finish**;
+- discovery-failure escalation → **finish** or **blocked**;
+- an explicit **stop** or **pause**;
+- the per-item convergence bound (`itemAttempts` — a per-*item* thrash cap, not a loop cap);
+- the **opt-in** per-quest token budget — active only when a launcher sets `spec.TokenBudget > 0`. It is a user choice, never a default runaway guard.
+
+Context can grow over a long run; that is expected and not a failure mode. The value bought with `/quest` is a `/janitor` that does not die on token-window expiry or connection loss.
+
+## The lead maintains a state block across ticks
+
+To stay efficient over a long, unbounded run, the quest-lead follows `core/loop`'s **checkpoint-then-/clear** discipline: chat history is never a state carrier. Each tick forks the doctrine template fresh (no session resume for the lead) and resumes from a durable **state block** instead of re-deriving its context cold.
+
+Each tick the lead emits one `STATE` line — a small JSON object with three fields:
+
+- **orientation** — the active focus (one or two lines);
+- **learned** — context worth carrying to the next tick (repo facts established, dead ends, open threads);
+- **next-tick plan** — the concrete first move for the next tick.
+
+The conductor parses that line and persists it on the **quest record** (ooo storage), overwriting it each tick — the one mutable section, per doctrine. Because it lives on the quest record rather than a repo file, it is **restart-durable** (it survives a candyland server bounce, unlike an in-memory session), **UI-observable** (rendered in the dashboard, per the rich-observability principle), and leaves no stray files in the user's repo. The next tick's brief renders the block back to the lead so it resumes from its own orientation. Per-tick context stays fixed and bounded — a brief, not a transcript.
+
+A missing or invalid `STATE` line never fails a tick: the previous block is kept. This complements the triage decision memory (dedup / anti-contradiction across ticks) — the state block adds orientation and forward plan on top of that append-only record.
+
+The reviewer's within-round session resume (`CANDYLAND_REVIEW_CONTINUITY`) is a separate mechanism — the right tool inside one bounded review, where the state block is the right tool for the open-ended outer loop.
+
 ## Settle the loop intent
 
 Refine the request into four things, written to the objective file passed on argv:
