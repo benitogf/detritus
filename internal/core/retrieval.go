@@ -1,9 +1,5 @@
-// Package core holds the one retrieval pipeline shared by the curated KB (kb_*)
-// and the learned-memory store (memory_*): BM25 hits → score-normalize →
-// MMR-rerank → threshold-filter. The two callers feed it distinct bleve indices
-// and a per-result trust/source provenance field, but the engine is one — the
-// trust boundary lives in the write path and the provenance field, not in a
-// second engine.
+// Package core holds the one retrieval pipeline behind the curated KB (kb_*):
+// BM25 hits → score-normalize → MMR-rerank → threshold-filter.
 package core
 
 import (
@@ -11,18 +7,13 @@ import (
 	"unicode/utf8"
 )
 
-// Result is one retrieval hit. Trust/Source carry provenance: they are empty
-// for curated KB docs (trusted, no agent-write path) and populated for learned
-// memory entries (e.g. Trust="verified", Source=run/task/outcome) so callers
-// can filter on origin.
+// Result is one retrieval hit.
 type Result struct {
 	DocName  string
 	Section  string
 	Score    float64
 	Snippet  string
 	Position int
-	Trust    string
-	Source   string
 }
 
 const (

@@ -66,7 +66,6 @@ type DocEntry struct {
 
 type GeneratedData struct {
 	Chunks      []ChunkMeta
-	BlevePath   string
 	ToolDesc    string
 	DocMetadata []DocEntry
 }
