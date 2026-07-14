@@ -27,7 +27,7 @@ type mapToolArgs struct {
 func registerMap(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "code_map",
-		Description: "Ranked, token-budgeted structural map of a Go project: the most-referenced files first, each with its top-level signatures. PageRank over the symbol reference graph picks what matters; `focus` biases toward named identifiers/paths. No setup — start here to orient in an unfamiliar area before reading files.",
+		Description: "Ranked, token-budgeted structural map of a Go project: the most-referenced files first, each with its top-level signatures. PageRank over the symbol reference graph picks what matters; `focus` biases toward named identifiers/paths. No setup — start here to orient in an unfamiliar area before reading files. Go only: the PageRank ranking is Go-specialist and non-Go files are skipped entirely, so a non-Go repo (TypeScript, Python, …) returns nothing — use code_outline there.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args mapToolArgs) (*mcp.CallToolResult, any, error) {
 		out, err := BuildCodeMap(MapOptions{Scope: args.Scope, Focus: args.Focus, Budget: args.Budget})
@@ -35,7 +35,7 @@ func registerMap(server *mcp.Server) {
 			return codeErrResult("code_map: " + err.Error()), nil, nil
 		}
 		if out == "" {
-			return codeTextResult("(no Go files found in scope)"), nil, nil
+			return codeTextResult("(no Go files found in scope — code_map is Go-only; for a non-Go project use code_outline on a file or directory)"), nil, nil
 		}
 		return codeTextResult(out), nil, nil
 	})
@@ -49,7 +49,7 @@ type graphToolArgs struct {
 func registerGraph(server *mcp.Server) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "code_graph",
-		Description: "Precise, type-resolved navigation for a Go symbol: who-calls, reachable-from, impacted-by (what transitively depends on it — the blast radius if you change it), and affected tests for a function, or implementers for an interface. Heavier than code_map (loads full type info) — use when you need exact call/implementation relationships, not a broad overview. Falls back to the structural map when the package does not compile.",
+		Description: "Precise, type-resolved navigation for a Go symbol: who-calls, reachable-from, impacted-by (what transitively depends on it — the blast radius if you change it), and affected tests for a function, or implementers for an interface. Heavier than code_map (loads full type info) — use when you need exact call/implementation relationships, not a broad overview. Falls back to the structural map when the package does not compile. Go only: it resolves symbols through the Go type checker and has no equivalent for other languages.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: ptr(false)},
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args graphToolArgs) (*mcp.CallToolResult, *GraphResult, error) {
 		out, res, err := BuildCodeGraph(GraphQuery{Symbol: args.Symbol, Scope: args.Scope})
