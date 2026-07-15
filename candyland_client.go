@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,14 +26,33 @@ import (
 // `detritus --candyland-run <prompt-file> [folder ...]` is the in-session trigger
 // the /candyland skill invokes (runCandyland below).
 
-// candylandBaseURL is where the sidecar's REST API listens and
-// candylandDashboardURL is where its SPA serves the dashboard. candyland owns
-// these contracts; detritus only consumes them. Both are overridable via env
-// (CANDYLAND_API_URL / CANDYLAND_DASHBOARD_URL) so a non-default deployment — or
-// a second sidecar bound to other ports — can be targeted without a rebuild.
+// candylandDefaultAPIPort / candylandDefaultSPAPort are the ports candyland binds
+// when no override is given. Discovery may land on different ports (a foreign app
+// held the default, so detritus launched the sidecar on free ports) — the actual
+// endpoint is resolved via the endpoint file (C4) and reflected in the vars below.
+const (
+	candylandDefaultAPIPort = 8888
+	candylandDefaultSPAPort = 8080
+)
+
+// candylandAPIURLEnv / candylandDashboardURLEnv override where discovery looks
+// before falling back to the default ports — an internal seam (not a user
+// surface) so a non-default deployment or a second sidecar bound to other ports
+// can be targeted without a rebuild.
+const (
+	candylandAPIURLEnv       = "CANDYLAND_API_URL"
+	candylandDashboardURLEnv = "CANDYLAND_DASHBOARD_URL"
+)
+
+// candylandBaseURL / candylandDashboardURL are the RESOLVED endpoint of the
+// sidecar detritus is driving this launch. They seed from the env-override seam
+// (or the default ports) and ensureCandylandUp rewrites them to the
+// discovered/launched endpoint, so every subsequent REST call and printed URL
+// points at the real listener regardless of which ports were used. candyland
+// owns the contract; detritus only consumes it.
 var (
-	candylandBaseURL      = envURLOr("CANDYLAND_API_URL", "http://127.0.0.1:8888")
-	candylandDashboardURL = envURLOr("CANDYLAND_DASHBOARD_URL", "http://localhost:8080")
+	candylandBaseURL      = envURLOr(candylandAPIURLEnv, fmt.Sprintf("http://127.0.0.1:%d", candylandDefaultAPIPort))
+	candylandDashboardURL = envURLOr(candylandDashboardURLEnv, fmt.Sprintf("http://localhost:%d", candylandDefaultSPAPort))
 )
 
 // envURLOr returns the trimmed value of env key, or def when it is unset/blank.
@@ -39,6 +62,11 @@ func envURLOr(key, def string) string {
 	}
 	return def
 }
+
+// candylandLastIdentity is the verified identity of the sidecar this launch is
+// driving, captured by ensureCandylandUp so the launch summary can print the real
+// UI outcome (window / browser / headless) rather than an unconditional URL.
+var candylandLastIdentity candylandIdentity
 
 // readCandylandRunArgs parses `--candyland-run` args: the prompt file path and
 // optional folders. It reads the prompt from promptFile (the .plan/<slug>.md path
@@ -115,7 +143,7 @@ func runCandyland(detritusPath, promptFile string, folders []string, cwd string)
 		fmt.Print(degradedClassificationNotice)
 	}
 	fmt.Printf("API: %s\n", candylandBaseURL)
-	fmt.Printf("UI / Dashboard: %s\n", candylandDashboardURL)
+	fmt.Println(candylandUIOutcomeLine(candylandLastIdentity, candylandDashboardURL))
 	return nil
 }
 
@@ -132,7 +160,7 @@ func runCandylandUp(detritusPath string) error {
 	}
 	fmt.Printf("candyland is up\n")
 	fmt.Printf("API: %s\n", candylandBaseURL)
-	fmt.Printf("UI / Dashboard: %s\n", candylandDashboardURL)
+	fmt.Println(candylandUIOutcomeLine(candylandLastIdentity, candylandDashboardURL))
 	return nil
 }
 
@@ -846,8 +874,8 @@ func questLaunchSummary(id, deliver string, targetPR int, degraded bool) string 
 		b.WriteString(degradedClassificationNotice)
 	}
 	fmt.Fprintf(&b, "API: %s\n", candylandBaseURL)
-	fmt.Fprintf(&b, "UI / Dashboard: %s\n", candylandDashboardURL)
-	fmt.Fprintf(&b, "Remote/WSL: forward BOTH ports — the UI on :8080 stays empty until the API on :8888 is reachable\n")
+	fmt.Fprintln(&b, candylandUIOutcomeLine(candylandLastIdentity, candylandDashboardURL))
+	fmt.Fprintf(&b, "Remote/WSL: forward BOTH ports — the UI stays empty until the API is reachable (%s)\n", candylandBaseURL)
 	return b.String()
 }
 
@@ -877,63 +905,159 @@ func runQuestCmd(detritusPath, objectiveFile string, folders []string, convergen
 	return nil
 }
 
-// ensureCandylandUp returns nil once the candyland sidecar answers its health
-// endpoint. If it is already up the call is cheap. Otherwise it locates the
-// installed binary beside detritus and starts it detached, inheriting the
-// current environment so gh/HOME/GH_* credentials propagate to the sidecar's
-// spawned agents, then polls /api/health until ready (~20s) or returns an honest
-// error. detritusPath is the detritus executable path (os.Executable()), used to
-// find the sibling candyland binary.
+// ensureCandylandUp returns nil once a candyland sidecar this launch can drive is
+// online, with candylandBaseURL/candylandDashboardURL/candylandLastIdentity set to
+// the resolved endpoint. It resolves in order (D2): an already-running sidecar
+// advertised by the endpoint file, then the default ports — each VERIFIED by health
+// body (candylandIdentityAt), never trusting a bare 200. A verified sidecar goes
+// through the smart-takeover ladder (D3): a matching, UI-healthy one is driven;
+// a version-skewed or UI-degraded one is gracefully restarted ONLY when idle
+// (running work is never killed), and fails/warns when busy. Nothing verified →
+// launch the installed binary, seamlessly stepping to free ports if a foreign app
+// holds the default (D5). detritusPath finds the sibling candyland binary.
 func ensureCandylandUp(detritusPath string) error {
-	if candylandHealthy(2 * time.Second) {
-		return nil
+	bin, hasBin := candylandBinFor(detritusPath)
+
+	if res, found := resolveExistingCandyland(2 * time.Second); found {
+		installed := ""
+		if hasBin {
+			installed = installedVersionLookup(bin)
+		}
+		decision := decideTakeover(res.id, installed, displayMarkersPresent())
+		switch decision.action {
+		case takeoverDrive:
+			return adoptCandyland(res)
+		case takeoverWarnProceed:
+			log.Printf("candyland: %s", decision.reason)
+			return adoptCandyland(res)
+		case takeoverFail:
+			return fmt.Errorf("candyland: %s", decision.reason)
+		case takeoverRestart:
+			log.Printf("candyland: %s", decision.reason)
+			if err := shutdownCandyland(res.baseURL, 10*time.Second); err != nil {
+				return fmt.Errorf("candyland: graceful takeover of the stale sidecar failed: %w", err)
+			}
+			if !hasBin {
+				return errCandylandNotInstalled
+			}
+			// Relaunch the installed binary on the SAME ports the old one held.
+			return launchCandyland(detritusPath, bin, res.apiPort, res.spaPort)
+		}
 	}
 
-	bin, ok := candylandBinFor(detritusPath)
-	if !ok {
-		return fmt.Errorf("candyland binary not installed beside detritus (run `detritus --setup` to fetch it)")
+	if !hasBin {
+		return errCandylandNotInstalled
 	}
 
-	cmd := exec.Command(bin)
-	// Propagate gh/HOME/GH_* creds (via os.Environ()) plus DETRITUS_BIN — the
-	// detritus executable path — so candyland can register a passive detritus
-	// stdio MCP ({command: <bin>, args: []}) in each agent's --mcp-config. Each
-	// agent then spawns its own detritus stdio child, exactly like a VSCode
-	// Claude session. There is no long-lived shared detritus process.
+	apiPort, spaPort := candylandDefaultAPIPort, candylandDefaultSPAPort
+	if foreignAppOnDefaultAPIPort(2 * time.Second) {
+		p1, err1 := pickFreePort()
+		p2, err2 := pickFreePort()
+		if err1 != nil || err2 != nil {
+			return fmt.Errorf("candyland: default port %d is in use and picking free ports failed", candylandDefaultAPIPort)
+		}
+		apiPort, spaPort = p1, p2
+		log.Printf("candyland: default API port %d is held by another app — launching on free ports %d/%d", candylandDefaultAPIPort, apiPort, spaPort)
+	}
+	return launchCandyland(detritusPath, bin, apiPort, spaPort)
+}
+
+// errCandylandNotInstalled is the honest error when no sidecar binary sits beside
+// detritus (no release fetched yet), so the launcher never starts a missing binary.
+var errCandylandNotInstalled = fmt.Errorf("candyland binary not installed beside detritus (run `detritus --setup` to fetch it)")
+
+// adoptCandyland points the resolved-endpoint vars at a verified sidecar so every
+// subsequent REST call and printed URL targets the real listener.
+func adoptCandyland(res candylandResolution) error {
+	candylandBaseURL = res.baseURL
+	candylandDashboardURL = res.dashURL
+	candylandLastIdentity = res.id
+	return nil
+}
+
+// launchCandyland starts the sidecar detached on the given ports and waits for it
+// to advertise a verified endpoint, adopting it. Ports are passed explicitly so
+// discovery is deterministic regardless of which ports were chosen.
+func launchCandyland(detritusPath, bin string, apiPort, spaPort int) error {
+	cmd := buildCandylandLaunchCmd(detritusPath, bin, apiPort, spaPort)
+	if err := startDetachedProcess(cmd); err != nil {
+		return fmt.Errorf("start candyland (%s): %w", bin, err)
+	}
+	return waitForCandylandHealthy(20 * time.Second)
+}
+
+// startDetachedProcess starts cmd in its own session/process group (via
+// detachProcess) so the sidecar outlives detritus, then releases the handle. It is
+// a var so tests can substitute a spawn seam that captures the built cmd.Args.
+var startDetachedProcess = func(cmd *exec.Cmd) error {
+	detachProcess(cmd)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
+
+// buildCandylandLaunchCmd builds the detached launch command for the sidecar on
+// the given ports. It always passes --openBrowser so a visible surface materializes
+// (D5/C8), and propagates gh/HOME/GH_* creds (via os.Environ()) plus DETRITUS_BIN —
+// the detritus executable path — so candyland can register a passive detritus stdio
+// MCP ({command: <bin>, args: []}) in each agent's --mcp-config. Each agent then
+// spawns its own detritus stdio child, exactly like a VSCode Claude session; there
+// is no long-lived shared detritus process. The origin session's OTHER MCP servers
+// (obsidian, project tools) are enumerated from ~/.claude.json and handed over via a
+// private 0600 file path in CANDYLAND_INHERITED_MCP — never inline JSON, since they
+// may carry secret env values. Best-effort: a missing/unreadable config or a write
+// failure just means no extra servers to inherit, never a failed launch.
+func buildCandylandLaunchCmd(detritusPath, bin string, apiPort, spaPort int) *exec.Cmd {
+	cmd := exec.Command(bin, candylandLaunchArgs(apiPort, spaPort)...)
 	selfExe, err := os.Executable()
 	if err != nil || selfExe == "" {
 		selfExe = detritusPath
 	}
 	cmd.Env = append(os.Environ(), "DETRITUS_BIN="+selfExe)
-	// Enumerate the origin Claude session's OTHER MCP servers (obsidian, project
-	// tools, etc.) from ~/.claude.json and hand them to candyland so it can graft
-	// the SAME tool surface into each spawned agent's --mcp-config. We write the
-	// --mcp-config-shaped JSON to a private temp file and pass only its PATH via
-	// CANDYLAND_INHERITED_MCP — never the inline JSON. The servers may carry secret
-	// env values (API keys); keeping them in a 0600 file rather than an env value
-	// avoids leaking them through process/env inspection. Best-effort: a
-	// missing/unreadable config or a write failure just means no extra servers to
-	// inherit, never a failed launch, and no secret is ever printed. detritus
-	// rides via DETRITUS_BIN above and candyland is never a child server, so both
-	// are dropped from the inherited set.
 	if path, err := writeOriginMCPConfigFile(readOriginMCPServers(originClaudeConfigPath(), originCWD())); err == nil && path != "" {
 		cmd.Env = append(cmd.Env, detritusOriginMCPEnv+"="+path)
 	}
-	detachProcess(cmd)
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start candyland (%s): %w", bin, err)
-	}
-	// Detach: don't wait on the long-lived sidecar, just release our handle.
-	go func() { _ = cmd.Wait() }()
+	return cmd
+}
 
-	deadline := time.Now().Add(20 * time.Second)
+// candylandLaunchArgs builds the sidecar launch flags: explicit --port/--spaPort so
+// the endpoint is deterministic, and --openBrowser so a takeover relaunch (and any
+// launcher-driven start) reopens a visible surface (C8: default false, launcher
+// opts in).
+func candylandLaunchArgs(apiPort, spaPort int) []string {
+	return []string{
+		"--port", strconv.Itoa(apiPort),
+		"--spaPort", strconv.Itoa(spaPort),
+		"--openBrowser",
+	}
+}
+
+// waitForCandylandHealthy polls until a verified sidecar endpoint resolves (the
+// endpoint file it wrote at bind, or the default ports), adopting it, or returns an
+// honest error after the deadline.
+func waitForCandylandHealthy(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if candylandHealthy(2 * time.Second) {
-			return nil
+		if res, found := resolveExistingCandyland(2 * time.Second); found {
+			return adoptCandyland(res)
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	return fmt.Errorf("candyland did not become healthy within 20s after start")
+	return fmt.Errorf("candyland did not become healthy within %s after start", timeout)
+}
+
+// pickFreePort grabs an ephemeral TCP port from the OS and immediately releases it,
+// returning the number for an explicit --port launch. The tiny TOCTOU window is
+// acceptable for a loopback singleton (see Decisions).
+func pickFreePort() (int, error) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
 // detritusOriginMCPEnv is the env var carrying the origin session's inherited
@@ -1131,6 +1255,303 @@ func candylandHealthyAt(baseURL string, timeout time.Duration) bool {
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
+}
+
+// candylandIdentity mirrors the sidecar's /api/health body (C1): who answered and
+// what it is doing. preUpgrade marks a 200+version response that predates the
+// identity fields (missing pid/activeRuns) — its idleness cannot be verified and it
+// has no /api/shutdown, so the takeover ladder warns rather than guess-kills.
+type candylandIdentity struct {
+	OK           bool
+	Version      string
+	PID          int
+	StartedAt    string
+	ActiveRuns   int
+	ActiveQuests int
+	UI           string
+	preUpgrade   bool
+}
+
+// errCandylandForeignApp marks a health probe that got a 200 but a body that is not
+// candyland (missing ok/version) — a foreign app squatting the port, not a sidecar.
+// The launcher treats it distinctly from a refused connection (see D5: it triggers
+// the free-port fallback).
+var errCandylandForeignApp = errors.New("foreign app answered /api/health (not candyland)")
+
+// candylandIdentityAt verifies the sidecar's IDENTITY, not just a 200 (D1). It
+// requires HTTP 200 AND a body parsing to ok:true with a non-empty version;
+// a 200 with any other body is errCandylandForeignApp (a foreign app), and a refused
+// connection / non-200 is a plain error (down). A 200+version body missing the newer
+// pid/activeRuns fields is accepted as a pre-upgrade sidecar (preUpgrade set).
+func candylandIdentityAt(baseURL string, timeout time.Duration) (candylandIdentity, error) {
+	client := &http.Client{Timeout: timeout}
+	resp, err := client.Get(baseURL + "/api/health")
+	if err != nil {
+		return candylandIdentity{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return candylandIdentity{}, fmt.Errorf("candyland health: HTTP %d", resp.StatusCode)
+	}
+	var body struct {
+		OK           bool   `json:"ok"`
+		Version      string `json:"version"`
+		PID          *int   `json:"pid"`
+		StartedAt    string `json:"startedAt"`
+		ActiveRuns   *int   `json:"activeRuns"`
+		ActiveQuests *int   `json:"activeQuests"`
+		UI           string `json:"ui"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return candylandIdentity{}, fmt.Errorf("candyland health: %w", errCandylandForeignApp)
+	}
+	if !body.OK || body.Version == "" {
+		return candylandIdentity{}, errCandylandForeignApp
+	}
+	id := candylandIdentity{OK: true, Version: body.Version, StartedAt: body.StartedAt, UI: body.UI}
+	id.preUpgrade = body.PID == nil || body.ActiveRuns == nil
+	if body.PID != nil {
+		id.PID = *body.PID
+	}
+	if body.ActiveRuns != nil {
+		id.ActiveRuns = *body.ActiveRuns
+	}
+	if body.ActiveQuests != nil {
+		id.ActiveQuests = *body.ActiveQuests
+	}
+	return id, nil
+}
+
+// foreignAppOnDefaultAPIPort reports whether the default API port is held by a
+// foreign app (a 200 that is not candyland), so the launcher steps to free ports.
+func foreignAppOnDefaultAPIPort(timeout time.Duration) bool {
+	base, _ := candylandURLs(candylandDefaultAPIPort, candylandDefaultSPAPort)
+	_, err := candylandIdentityAt(base, timeout)
+	return errors.Is(err, errCandylandForeignApp)
+}
+
+// candylandURLs builds the REST base and dashboard URLs for a port pair.
+func candylandURLs(apiPort, spaPort int) (baseURL, dashURL string) {
+	return fmt.Sprintf("http://127.0.0.1:%d", apiPort), fmt.Sprintf("http://localhost:%d", spaPort)
+}
+
+// candylandEndpoint mirrors ~/.candyland/endpoint.json (C4): the sidecar's advertised
+// ports and identity, written at bind and removed on clean exit. Stale files are
+// harmless — every consumer verifies via health before trusting it (D2).
+type candylandEndpoint struct {
+	APIPort   int    `json:"apiPort"`
+	SPAPort   int    `json:"spaPort"`
+	PID       int    `json:"pid"`
+	Version   string `json:"version"`
+	StartedAt string `json:"startedAt"`
+}
+
+// candylandEndpointPath is the fixed per-user endpoint-advertisement file, independent
+// of --dataPath (discovery must not depend on knowing the data path). "" when the
+// home dir can't be resolved.
+func candylandEndpointPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".candyland", "endpoint.json")
+}
+
+// readCandylandEndpoint reads and parses the endpoint file. ok is false on any
+// failure (absent, unreadable, malformed, or no API port) — the caller falls through
+// to the default ports.
+func readCandylandEndpoint(path string) (candylandEndpoint, bool) {
+	if path == "" {
+		return candylandEndpoint{}, false
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil || len(raw) == 0 {
+		return candylandEndpoint{}, false
+	}
+	var ep candylandEndpoint
+	if err := json.Unmarshal(raw, &ep); err != nil {
+		return candylandEndpoint{}, false
+	}
+	if ep.APIPort == 0 {
+		return candylandEndpoint{}, false
+	}
+	return ep, true
+}
+
+// candylandResolution is a VERIFIED existing sidecar: its identity plus the URLs and
+// ports to reach it. Ports are retained so a takeover relaunch reuses the same ports.
+type candylandResolution struct {
+	id      candylandIdentity
+	baseURL string
+	dashURL string
+	apiPort int
+	spaPort int
+}
+
+// resolveExistingCandyland finds an already-running, VERIFIED sidecar (D2): the
+// endpoint file's advertised port first (verified via health), then the
+// env-override/default URLs (the internal seam above). A stale endpoint file
+// (dead port) fails verification and falls through. found is false when nothing
+// verifies.
+func resolveExistingCandyland(timeout time.Duration) (candylandResolution, bool) {
+	if ep, ok := readCandylandEndpoint(candylandEndpointPath()); ok {
+		base, dash := candylandURLs(ep.APIPort, ep.SPAPort)
+		if id, err := candylandIdentityAt(base, timeout); err == nil {
+			return candylandResolution{id: id, baseURL: base, dashURL: dash, apiPort: ep.APIPort, spaPort: ep.SPAPort}, true
+		}
+	}
+	defBase, defDash := candylandURLs(candylandDefaultAPIPort, candylandDefaultSPAPort)
+	base := envURLOr(candylandAPIURLEnv, defBase)
+	dash := envURLOr(candylandDashboardURLEnv, defDash)
+	if id, err := candylandIdentityAt(base, timeout); err == nil {
+		return candylandResolution{id: id, baseURL: base, dashURL: dash,
+			apiPort: portOfURL(base, candylandDefaultAPIPort), spaPort: portOfURL(dash, candylandDefaultSPAPort)}, true
+	}
+	return candylandResolution{}, false
+}
+
+// portOfURL extracts the port of rawURL, or def when none is present or the URL
+// does not parse — an env-override URL may omit the port or be malformed, and a
+// takeover relaunch still needs concrete ports to reuse.
+func portOfURL(rawURL string, def int) int {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return def
+	}
+	p, err := strconv.Atoi(u.Port())
+	if err != nil {
+		return def
+	}
+	return p
+}
+
+// takeoverAction is the smart-takeover ladder's verdict for a verified sidecar (D3).
+type takeoverAction int
+
+const (
+	takeoverDrive       takeoverAction = iota // match + UI healthy → use as-is
+	takeoverWarnProceed                       // degraded but running work must not be blocked → warn, use as-is
+	takeoverRestart                           // skew/UI-degraded AND idle → graceful shutdown + relaunch
+	takeoverFail                              // skew AND busy → fail, never kill running work
+)
+
+// takeoverDecision pairs the action with an actionable reason for the log/error.
+type takeoverDecision struct {
+	action takeoverAction
+	reason string
+}
+
+// displayMarkersDetected reports whether detritus sees a usable display (D3): DISPLAY
+// or WAYLAND_DISPLAY set, or a WSLg mount present. A var so tests drive it.
+var displayMarkersDetected = func() bool {
+	if os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "" {
+		return true
+	}
+	if _, err := os.Stat("/mnt/wslg"); err == nil {
+		return true
+	}
+	return false
+}
+
+func displayMarkersPresent() bool { return displayMarkersDetected() }
+
+// installedVersionLookup returns the version the installed candyland binary reports
+// via `--version` (D4), or "" (unknown) on any failure. A var so tests stub it.
+var installedVersionLookup = installedCandylandVersion
+
+// installedCandylandVersion execs `<bin> --version` with a 5s timeout and trims the
+// output. Non-zero exit / unparseable (an old binary without the flag) → "" (unknown).
+func installedCandylandVersion(bin string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, bin, "--version").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// versionEnforcement compares the sidecar's version against the installed binary's.
+// enforce is false when either side is unknown ("") or "dev" — transition tolerance:
+// dev builds never fight releases and a missing version is never treated as skew
+// (D4). skewed is meaningful only when enforce is true.
+func versionEnforcement(sidecar, installed string) (skewed, enforce bool) {
+	if sidecar == "" || installed == "" || sidecar == "dev" || installed == "dev" {
+		return false, false
+	}
+	return sidecar != installed, true
+}
+
+// decideTakeover is the pure smart-takeover ladder (D3). Running work is never
+// killed: a busy skew fails, a busy UI-degradation warns and proceeds; only an idle
+// sidecar is gracefully restarted. A pre-upgrade sidecar (missing identity fields)
+// can't have its idleness verified and has no shutdown endpoint, so it warns and
+// proceeds. Version enforcement is skipped (warn only) when either side is dev/unknown.
+func decideTakeover(id candylandIdentity, installedVersion string, displayMarkers bool) takeoverDecision {
+	if id.preUpgrade {
+		return takeoverDecision{takeoverWarnProceed, fmt.Sprintf("a stale sidecar (version %s) is running and predates identity reporting — cannot verify idleness or shut it down safely; run `detritus --setup` then restart it to refresh", id.Version)}
+	}
+
+	idle := id.ActiveRuns == 0 && id.ActiveQuests == 0
+	skewed, enforce := versionEnforcement(id.Version, installedVersion)
+
+	if enforce && skewed {
+		if idle {
+			return takeoverDecision{takeoverRestart, fmt.Sprintf("sidecar version %s differs from installed %s and it is idle — gracefully restarting on the installed version", id.Version, installedVersion)}
+		}
+		return takeoverDecision{takeoverFail, fmt.Sprintf("sidecar version %s differs from installed %s but it is busy (%d running run(s), %d running quest(s)) — refusing to restart; wait for the work to finish or stop it from the dashboard", id.Version, installedVersion, id.ActiveRuns, id.ActiveQuests)}
+	}
+
+	if id.UI == "headless" && displayMarkers {
+		if idle {
+			return takeoverDecision{takeoverRestart, "sidecar is running headless but a display is available and it is idle — gracefully restarting so a window/browser surface opens"}
+		}
+		return takeoverDecision{takeoverWarnProceed, fmt.Sprintf("sidecar is running headless but a display is available; it is busy (%d running run(s), %d running quest(s)) so it will not be restarted — driving it as-is, dashboard: %s", id.ActiveRuns, id.ActiveQuests, candylandDashboardURL)}
+	}
+
+	// Version enforcement skipped (a dev/unknown build on one side) with the UI
+	// healthy: drive it. Transition tolerance — dev builds never fight releases.
+	return takeoverDecision{takeoverDrive, ""}
+}
+
+// shutdownCandyland asks the sidecar to shut down gracefully (D3): POST /api/shutdown,
+// then poll until it stops answering health within deadline. A 409 means the sidecar
+// reports active work — surfaced as an error so the caller never kills running work.
+func shutdownCandyland(baseURL string, deadline time.Duration) error {
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Post(baseURL+"/api/shutdown", "application/json", nil)
+	if err != nil {
+		return fmt.Errorf("POST /api/shutdown: %w", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusConflict {
+		return fmt.Errorf("sidecar reports active work (HTTP 409) — refusing to take it over")
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("shutdown returned HTTP %d", resp.StatusCode)
+	}
+	stop := time.Now().Add(deadline)
+	for time.Now().Before(stop) {
+		if _, err := candylandIdentityAt(baseURL, 1*time.Second); err != nil {
+			return nil
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return fmt.Errorf("sidecar still answering health %s after shutdown request", deadline)
+}
+
+// candylandUIOutcomeLine prints the ACTUAL UI outcome (D6) from the driven sidecar's
+// reported mode: a window opened, a browser tab opened, or headless (no display) with
+// the dashboard URL to reach it manually.
+func candylandUIOutcomeLine(id candylandIdentity, dashURL string) string {
+	switch id.UI {
+	case "window":
+		return "candyland window opened"
+	case "browser":
+		return "dashboard opened in your browser"
+	default:
+		return fmt.Sprintf("no display available — dashboard: %s", dashURL)
+	}
 }
 
 // candylandRunRequest is the body POSTed to /api/runs. Deliver/TargetPR let a
