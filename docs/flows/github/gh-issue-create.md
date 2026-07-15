@@ -28,20 +28,6 @@ When posting anything to GitHub via `gh` or the REST API on the user's behalf, t
 
 This applies to issue bodies, PR bodies, comment bodies, release notes. It does NOT apply to commit messages (`Co-Authored-By:` handles commits) or to git push output.
 
-## Plane sync — mandatory `plane` label
-
-Every issue this skill creates MUST carry the `plane` label. The Plane management app mirrors GitHub issues into its workspace based on this label, so an issue posted without it will not sync. Apply the label on the POST (Phase 5) and surface it in the draft preview (Phase 4) so the user sees it before confirming.
-
-If the repo doesn't have the label yet, create it first (idempotent — 422 "already_exists" is fine to swallow):
-
-```
-gh api --method POST repos/<owner>/<repo>/labels \
-  -f name=plane \
-  -f color=8B5CF6 \
-  -f description="Synced to Plane management app" \
-  2>/dev/null || true
-```
-
 ## Inputs (all optional)
 
 - `<owner>/<repo>` — target a specific repo. Otherwise default to the cwd repo.
@@ -124,7 +110,7 @@ If any existing title is a substring match or near-match of the draft title, war
 
 ## Phase 4: Show draft, confirm
 
-Print title + body exactly as they will be posted, plus the labels line: `Labels: plane`.
+Print title + body exactly as they will be posted.
 
 **Decide whether a confirmation gate is needed:**
 
@@ -138,17 +124,16 @@ When in doubt about whether the instruction was explicit, ask. The gate's purpos
 
 ## Phase 5: Post
 
-First, ensure the `plane` label exists on the repo (see "Plane sync" above). Then use the REST API (not `gh issue create`, which can surface the Projects-classic GraphQL warning as a failure on some repos):
+Use the REST API (not `gh issue create`, which can surface the Projects-classic GraphQL warning as a failure on some repos):
 
 ```
 gh api --method POST repos/<owner>/<repo>/issues \
   -f title="<title>" \
   -f body="$(cat /tmp/issue-body.md)" \
-  -f "labels[]=plane" \
-  --jq '{number, html_url, labels: [.labels[].name]}'
+  --jq '{number, html_url}'
 ```
 
-Capture the returned `number` and `html_url`. Verify the response's `labels` array contains `plane` — if not, the sync to Plane will not happen; surface the failure to the user instead of pretending it worked.
+Capture the returned `number` and `html_url`.
 
 ## Phase 6: Next steps
 
@@ -179,6 +164,5 @@ https://github.com/<owner>/<repo>/issues/<n>
 - Don't open an issue in a repo the user didn't authorize (ask if ambiguous).
 - Don't open obvious duplicates — warn on near-match titles.
 - The attribution footer goes on the body, never the title.
-- The `plane` label is mandatory on every posted issue — without it the Plane management app won't sync the issue. Verify the POST response includes it.
 - The issue body is the single source of truth for this ask. If the user refines scope in later turns, edit the body in place (`gh api --method PATCH .../issues/<n>`) — don't leave a comment trail that duplicates what the body already says.
 - **Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") surfaced while drafting the issue is an incident — detect and route per `core/ego` (→ `/grow`), after finishing the deliverable.
