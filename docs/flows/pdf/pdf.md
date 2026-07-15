@@ -22,7 +22,7 @@ related:
 
 The user states **what** to produce and, when they care, **how** it should look — in the invocation argument or in the live session. Author the document freely to match:
 
-- **Multi-page is allowed.** Lay out as many pages as the content needs.
+- **Multi-page is allowed.** Lay out as many pages as the content needs. When the document spans pages, apply `core/pdf-render`'s **multi-page typesetting defaults** (the sticky-heading / non-breakable-block preamble, and stickying an intro line to the block it introduces) so no heading or lead-in is stranded on a page seam away from its content.
 - **Style follows the user.** When they specify a format/style, honor it. When they don't, apply **light typographic defaults** — sensible margins, a readable body size, and a clear heading scale — and do not impose the decision layout.
 - **Diagrams when useful.** Render a diagram via D2 (per `core/pdf-render`'s flowchart skeleton) when the content calls for one; otherwise render Typst-only.
 

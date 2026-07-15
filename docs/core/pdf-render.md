@@ -50,6 +50,36 @@ Work in a temp dir **under the output dir** (`.pdfs/`). Steps:
 4. **Compile** — `typst compile <tmp>/<slug>.typ .pdfs/<slug>.pdf`.
 5. **Report** — announce `.pdfs/<slug>.pdf`. Do not open or commit it.
 
+## Multi-page typesetting defaults — keep content off page seams
+
+A multi-page document (the `/pdf` generator's case) must not split an atomic unit across a page boundary — the classic failure is a heading, or a "…returns:" lead-in, stranded at the bottom of one page while the code block / table / figure it introduces flows to the next. Single-page renders (the decision engine) never paginate, so this is moot there; the rules below are inert on one page and safe to include always.
+
+**Baseline preamble — put at the top of every multi-page `.typ`:**
+
+```typst
+#show heading: set block(sticky: true)                     // a heading never sits alone at a page bottom — it moves with its content
+#show raw.where(block: true): set block(breakable: false)  // code blocks stay whole (when they fit — see the caveat)
+#show figure: set block(breakable: false)                  // figures / embedded diagrams stay whole
+```
+
+(In current Typst, sticky headings and unbreakable figures are already the defaults — only the `raw` line changes behavior. The preamble states all three explicitly so it stays correct on older Typst and if a default ever changes.)
+
+**Couple an intro line to its block (the default fix, and the one the preamble alone misses).** `sticky` attaches a block to the one *immediately after* it — so a sticky heading follows its lead-in paragraph, but that lead-in does not automatically follow the block *it* introduces. When a short paragraph introduces a code block, table, or figure, **make that paragraph sticky** so the whole unit travels together (4-backtick fence so the inner block's fence doesn't close the example):
+
+````typst
+#block(sticky: true)[Gateway-side rejections return:]
+```json
+{"error": "<reason>"}
+```
+````
+
+**Caveat — whole *when it fits*, break when it can't.** A unit taller than the printable page area cannot be kept whole; forcing `breakable: false` on it makes Typst overflow the margin. So keep short units atomic (above), but leave genuinely page-spanning content — a long code listing, a large table — **breakable** so it splits at a sensible seam instead of overflowing.
+
+**Escape hatches** for anything the rules above don't settle:
+
+- `#block(breakable: false)[ … ]` — force an arbitrary span (heading + intro + block) to stay on one page as a unit.
+- `#pagebreak(weak: true)` — start a section on a fresh page when it would otherwise straddle the seam (weak: collapses if already at a page top).
+
 ## D2 flowchart skeleton
 
 Minimal and runnable — a general starting point when a diagram helps. Fill the labels from the content; add, remove, and rewire nodes freely.
