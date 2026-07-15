@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 // resolveCandylandDelivery is the two-tier feedback classifier: an explicit PR
@@ -339,35 +338,6 @@ func TestWriteOriginMCPConfigFile(t *testing.T) {
 	}
 	if _, has := servers["obsidian"]; !has {
 		t.Errorf("mcpServers should contain obsidian, got %v", servers)
-	}
-}
-
-// ensureCandylandUp returns nil immediately when the health endpoint already
-// answers 200 — no binary needed.
-func TestEnsureCandylandUpAlreadyHealthy(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/health" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv.Close()
-
-	if !candylandHealthyAt(srv.URL, time.Second) {
-		t.Fatal("mock health endpoint should report healthy")
-	}
-}
-
-// candylandHealthyAt reports false when nothing is listening / the endpoint 500s.
-func TestCandylandHealthyAtDown(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer srv.Close()
-
-	if candylandHealthyAt(srv.URL, time.Second) {
-		t.Error("a 500 health response must not count as healthy")
 	}
 }
 

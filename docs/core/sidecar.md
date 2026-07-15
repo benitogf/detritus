@@ -42,7 +42,7 @@ Requests carry the full input plus a derived short `Title`, and `deliver`/`targe
 
 ## Ports
 
-API on **:8888**, UI on **:8080** — the UI loads from :8080 but reads its data from the API on :8888. On a remote/WSL host forward **BOTH** ports; printing only the UI URL leaves the dashboard blank.
+API on **:8888**, UI on **:8080** by default — the UI loads from the SPA port but reads its data from the API port. These are defaults, not invariants: when a foreign app holds a default port, the launcher picks free ports and the sidecar advertises its actual endpoint in `~/.candyland/endpoint.json` (ports/pid/version, written at bind, removed on clean shutdown) — read that file to find a running sidecar rather than assuming :8888. On a remote/WSL host forward **BOTH** resolved ports; printing only the UI URL leaves the dashboard blank.
 
 ## Control — observe + stop only
 

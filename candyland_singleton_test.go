@@ -118,16 +118,67 @@ func TestDecideTakeover(t *testing.T) {
 		{"unknown installed, enforcement skipped → drive", full("v1", "window", 0, 0), "", true, takeoverDrive},
 		{"dev sidecar headless + display + idle → restart (UI still heals)", full("dev", "headless", 0, 0), "v2", true, takeoverRestart},
 	}
+	const dashURL = "http://localhost:53999"
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := decideTakeover(tc.id, tc.installed, tc.displayMarkers)
+			got := decideTakeover(tc.id, tc.installed, tc.displayMarkers, dashURL)
 			if got.action != tc.want {
 				t.Errorf("decideTakeover = %v (%q), want %v", got.action, got.reason, tc.want)
 			}
 			if got.action == takeoverFail && !strings.Contains(got.reason, "busy") {
 				t.Errorf("a fail verdict must name the running counts: %q", got.reason)
 			}
+			// The busy headless warn tells the user where the dashboard is — it must
+			// name the RESOLVED URL passed in, not a default-port guess.
+			if got.action == takeoverWarnProceed && !tc.id.preUpgrade && !strings.Contains(got.reason, dashURL) {
+				t.Errorf("busy headless warn must name the resolved dashboard URL: %q", got.reason)
+			}
 		})
+	}
+}
+
+// ensureCandylandUp must never shut a working sidecar down when no installed binary
+// exists to replace it (the restart would strand the user with nothing) — it errors
+// out first, leaving the sidecar untouched.
+func TestEnsureCandylandUpNoBinaryNeverKillsSidecar(t *testing.T) {
+	origMarkers := displayMarkersDetected
+	displayMarkersDetected = func() bool { return true }
+	defer func() { displayMarkersDetected = origMarkers }()
+
+	shutdownHit := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/health":
+			w.WriteHeader(http.StatusOK)
+			// Idle + headless + display markers → the ladder wants a restart.
+			_, _ = w.Write([]byte(`{"ok":true,"version":"v1","pid":9,"activeRuns":0,"activeQuests":0,"ui":"headless"}`))
+		case "/api/shutdown":
+			shutdownHit = true
+			w.WriteHeader(http.StatusOK)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	port := srv.Listener.Addr().(*net.TCPAddr).Port
+
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, ".candyland"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	epPath := filepath.Join(home, ".candyland", "endpoint.json")
+	if err := os.WriteFile(epPath, []byte(fmt.Sprintf(`{"apiPort":%d,"spaPort":9999,"pid":9,"version":"v1"}`, port)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// detritusPath in an empty temp dir → no candyland binary beside it.
+	err := ensureCandylandUp(filepath.Join(t.TempDir(), "detritus"))
+	if !errors.Is(err, errCandylandNotInstalled) {
+		t.Fatalf("ensureCandylandUp = %v, want errCandylandNotInstalled", err)
+	}
+	if shutdownHit {
+		t.Error("the running sidecar was shut down despite no installed binary to replace it")
 	}
 }
 
@@ -264,9 +315,9 @@ func TestBuildCandylandLaunchCmd(t *testing.T) {
 }
 
 // launchCandyland (D5) hands the built cmd — carrying the picked ports and
-// --openBrowser — to the spawn seam. The seam captures it so a launch can be
-// asserted without a real process (health resolution then times out fast here,
-// which is the expected "did not become healthy" path with no listener).
+// --openBrowser — to the spawn seam. The seam captures it and returns an error,
+// so launchCandyland returns before any health wait — the launch can be asserted
+// without a real process or a poll.
 func TestLaunchCandylandSpawnSeamCarriesPorts(t *testing.T) {
 	origSpawn := startDetachedProcess
 	defer func() { startDetachedProcess = origSpawn }()
@@ -302,9 +353,10 @@ func TestCandylandUIOutcomeLine(t *testing.T) {
 			t.Errorf("candylandUIOutcomeLine(ui=%q) = %q, want %q", ui, got, want)
 		}
 	}
-	// An empty/unknown mode degrades to the headless message (never a bare URL).
-	if got := candylandUIOutcomeLine(candylandIdentity{}, "http://x"); !strings.Contains(got, "no display available") {
-		t.Errorf("unknown UI mode = %q, want the headless message", got)
+	// An empty/unknown mode (pre-upgrade sidecar) prints the URL without claiming
+	// anything about the display — its state is not known.
+	if got := candylandUIOutcomeLine(candylandIdentity{}, "http://x"); got != "dashboard: http://x" {
+		t.Errorf("unknown UI mode = %q, want the plain dashboard URL", got)
 	}
 }
 

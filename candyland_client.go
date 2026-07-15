@@ -923,7 +923,7 @@ func ensureCandylandUp(detritusPath string) error {
 		if hasBin {
 			installed = installedVersionLookup(bin)
 		}
-		decision := decideTakeover(res.id, installed, displayMarkersPresent())
+		decision := decideTakeover(res.id, installed, displayMarkersDetected(), res.dashURL)
 		switch decision.action {
 		case takeoverDrive:
 			return adoptCandyland(res)
@@ -933,12 +933,14 @@ func ensureCandylandUp(detritusPath string) error {
 		case takeoverFail:
 			return fmt.Errorf("candyland: %s", decision.reason)
 		case takeoverRestart:
+			// Never shut down a working sidecar we cannot replace — with no
+			// installed binary the restart would strand the user with nothing.
+			if !hasBin {
+				return errCandylandNotInstalled
+			}
 			log.Printf("candyland: %s", decision.reason)
 			if err := shutdownCandyland(res.baseURL, 10*time.Second); err != nil {
 				return fmt.Errorf("candyland: graceful takeover of the stale sidecar failed: %w", err)
-			}
-			if !hasBin {
-				return errCandylandNotInstalled
 			}
 			// Relaunch the installed binary on the SAME ports the old one held.
 			return launchCandyland(detritusPath, bin, res.apiPort, res.spaPort)
@@ -950,7 +952,7 @@ func ensureCandylandUp(detritusPath string) error {
 	}
 
 	apiPort, spaPort := candylandDefaultAPIPort, candylandDefaultSPAPort
-	if foreignAppOnDefaultAPIPort(2 * time.Second) {
+	if defaultAPIPortHeld() {
 		p1, err1 := pickFreePort()
 		p2, err2 := pickFreePort()
 		if err1 != nil || err2 != nil {
@@ -1241,22 +1243,6 @@ func sweepStaleOriginMCPConfigFiles() {
 	}
 }
 
-// candylandHealthy reports whether the sidecar answers GET /api/health with 200.
-func candylandHealthy(timeout time.Duration) bool {
-	return candylandHealthyAt(candylandBaseURL, timeout)
-}
-
-// candylandHealthyAt is candylandHealthy against an explicit base URL (test seam).
-func candylandHealthyAt(baseURL string, timeout time.Duration) bool {
-	client := &http.Client{Timeout: timeout}
-	resp, err := client.Get(baseURL + "/api/health")
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
-}
-
 // candylandIdentity mirrors the sidecar's /api/health body (C1): who answered and
 // what it is doing. preUpgrade marks a 200+version response that predates the
 // identity fields (missing pid/activeRuns) — its idleness cannot be verified and it
@@ -1273,9 +1259,9 @@ type candylandIdentity struct {
 }
 
 // errCandylandForeignApp marks a health probe that got a 200 but a body that is not
-// candyland (missing ok/version) — a foreign app squatting the port, not a sidecar.
-// The launcher treats it distinctly from a refused connection (see D5: it triggers
-// the free-port fallback).
+// candyland (missing ok/version) — a foreign app squatting the port, not a sidecar
+// (D1: never trust a bare 200). The free-port fallback itself keys on the decisive
+// bind probe (defaultAPIPortHeld), which also covers 404-ing and non-HTTP squatters.
 var errCandylandForeignApp = errors.New("foreign app answered /api/health (not candyland)")
 
 // candylandIdentityAt verifies the sidecar's IDENTITY, not just a 200 (D1). It
@@ -1322,12 +1308,19 @@ func candylandIdentityAt(baseURL string, timeout time.Duration) (candylandIdenti
 	return id, nil
 }
 
-// foreignAppOnDefaultAPIPort reports whether the default API port is held by a
-// foreign app (a 200 that is not candyland), so the launcher steps to free ports.
-func foreignAppOnDefaultAPIPort(timeout time.Duration) bool {
-	base, _ := candylandURLs(candylandDefaultAPIPort, candylandDefaultSPAPort)
-	_, err := candylandIdentityAt(base, timeout)
-	return errors.Is(err, errCandylandForeignApp)
+// defaultAPIPortHeld reports whether SOMETHING holds the default API port, so the
+// launcher steps to free ports (D5). It is called only after resolveExistingCandyland
+// failed to verify a sidecar there, so any listener — an HTTP app that 404s
+// /api/health, a non-HTTP squatter — is by elimination foreign. A successful bind
+// (immediately released) is the decisive free-port check; the tiny TOCTOU window
+// before the launch rebinds is the same accepted race as pickFreePort.
+func defaultAPIPortHeld() bool {
+	l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", candylandDefaultAPIPort))
+	if err != nil {
+		return true
+	}
+	l.Close()
+	return false
 }
 
 // candylandURLs builds the REST base and dashboard URLs for a port pair.
@@ -1453,8 +1446,6 @@ var displayMarkersDetected = func() bool {
 	return false
 }
 
-func displayMarkersPresent() bool { return displayMarkersDetected() }
-
 // installedVersionLookup returns the version the installed candyland binary reports
 // via `--version` (D4), or "" (unknown) on any failure. A var so tests stub it.
 var installedVersionLookup = installedCandylandVersion
@@ -1487,7 +1478,9 @@ func versionEnforcement(sidecar, installed string) (skewed, enforce bool) {
 // sidecar is gracefully restarted. A pre-upgrade sidecar (missing identity fields)
 // can't have its idleness verified and has no shutdown endpoint, so it warns and
 // proceeds. Version enforcement is skipped (warn only) when either side is dev/unknown.
-func decideTakeover(id candylandIdentity, installedVersion string, displayMarkers bool) takeoverDecision {
+// dashURL is the RESOLVED dashboard URL of the sidecar under decision (the busy
+// warn names it), passed in so the ladder stays pure of the endpoint globals.
+func decideTakeover(id candylandIdentity, installedVersion string, displayMarkers bool, dashURL string) takeoverDecision {
 	if id.preUpgrade {
 		return takeoverDecision{takeoverWarnProceed, fmt.Sprintf("a stale sidecar (version %s) is running and predates identity reporting — cannot verify idleness or shut it down safely; run `detritus --setup` then restart it to refresh", id.Version)}
 	}
@@ -1506,7 +1499,7 @@ func decideTakeover(id candylandIdentity, installedVersion string, displayMarker
 		if idle {
 			return takeoverDecision{takeoverRestart, "sidecar is running headless but a display is available and it is idle — gracefully restarting so a window/browser surface opens"}
 		}
-		return takeoverDecision{takeoverWarnProceed, fmt.Sprintf("sidecar is running headless but a display is available; it is busy (%d running run(s), %d running quest(s)) so it will not be restarted — driving it as-is, dashboard: %s", id.ActiveRuns, id.ActiveQuests, candylandDashboardURL)}
+		return takeoverDecision{takeoverWarnProceed, fmt.Sprintf("sidecar is running headless but a display is available; it is busy (%d running run(s), %d running quest(s)) so it will not be restarted — driving it as-is, dashboard: %s", id.ActiveRuns, id.ActiveQuests, dashURL)}
 	}
 
 	// Version enforcement skipped (a dev/unknown build on one side) with the UI
@@ -1542,15 +1535,19 @@ func shutdownCandyland(baseURL string, deadline time.Duration) error {
 
 // candylandUIOutcomeLine prints the ACTUAL UI outcome (D6) from the driven sidecar's
 // reported mode: a window opened, a browser tab opened, or headless (no display) with
-// the dashboard URL to reach it manually.
+// the dashboard URL to reach it manually. An empty/unknown mode (a pre-upgrade
+// sidecar reports none) prints only the URL — its display state is not known, so
+// no claim is made about it.
 func candylandUIOutcomeLine(id candylandIdentity, dashURL string) string {
 	switch id.UI {
 	case "window":
 		return "candyland window opened"
 	case "browser":
 		return "dashboard opened in your browser"
-	default:
+	case "headless":
 		return fmt.Sprintf("no display available — dashboard: %s", dashURL)
+	default:
+		return fmt.Sprintf("dashboard: %s", dashURL)
 	}
 }
 
