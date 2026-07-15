@@ -54,7 +54,8 @@ the only hard stop is a true capability blocker (no `gh` auth), owned by `core/k
 
 Embed this verbatim; do not stumble on ports/keys. Mining reads structured records only — never scrape logs.
 
-- API `:8888`; UI `:8080`; db at `~/.candyland/db`.
+- API `:8888`; UI `:8080` (defaults — when a port conflict moved them, the live ports are advertised in
+  `~/.candyland/endpoint.json`; substitute those below); db at `~/.candyland/db`.
 - Live glob reads: `GET http://127.0.0.1:8888/runs/*` · `/quests/*` · `/audits/*`.
 - REST: `GET /api/runs/{id}` · `/api/runs/{id}/trace` · `/api/quests/{id}` · `/api/quests/{id}/runs`
   · `/api/quests/{id}/findings`.
