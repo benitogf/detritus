@@ -1,28 +1,29 @@
 ---
-description: Shared consult core — turn the issue under discussion into a single-page decision PDF for a human to act on. Resolves the issue from an explicit source (GitHub issue, /todo item, .plan file) or the live session, builds a cause→effect intermediate model, and renders it flowchart-first through D2 + Typst to .consult/<slug>.pdf. Do not invoke directly; composed by /consult-tech and /consult-simple, which pass an audience register.
+description: Shared decision-PDF engine — turn the issue under discussion into a single-page decision PDF for a human to act on. Resolves the issue from an explicit source (GitHub issue, /todo item, .plan file) or the live session, builds a cause→effect intermediate model, and renders it flowchart-first to .pdfs/<slug>.pdf. Builds on core/pdf-render for the render substrate. Do not invoke directly; composed by /pdf-tech and /pdf-management, which pass an audience register.
 triggers:
-  - consult core
+  - decision pdf engine
   - decision pdf
-  - consult engine
+  - pdf decision core
   - cause-effect model
   - single-page decision aid
-when: Internal. Loaded by /consult-tech or /consult-simple to define the input resolution, the cause→effect IR, the five PDF rules, the flowchart-vs-text gate, the D2→Typst render pipeline, and the two templates. The wrappers add only their audience register.
+when: Internal. Loaded by /pdf-tech or /pdf-management to define the input resolution, the cause→effect IR, the five PDF rules, the flowchart-vs-text gate, and the one-page decision template. Builds on core/pdf-render for the render pipeline + output location. The wrappers add only their audience register.
 related:
-  - flows/consult/consult-tech
-  - flows/consult/consult-simple
+  - core/pdf-render
+  - flows/pdf/pdf-tech
+  - flows/pdf/pdf-management
   - core/todo-import
   - flows/project/todo
   - flows/github/gh-issue-create
 ---
 
-# Consult Core — the single-page decision PDF
+# Decision-PDF Engine — the single-page decision PDF
 
-`/consult-tech` and `/consult-simple` are two **audience registers** over **one engine**: take the issue currently under discussion, frame it as a discrete set of choices, and emit a single-page PDF a human reads and decides from. This core owns input resolution, the cause→effect intermediate model, the PDF invariants, the flowchart-vs-text gate, the render pipeline, and the templates. The wrappers add only their register (see *Audience register*). Neither restates what's below.
+`/pdf-tech` and `/pdf-management` are two **audience registers** over **one engine**: take the issue currently under discussion, frame it as a discrete set of choices, and emit a single-page PDF a human reads and decides from. This engine **builds on `core/pdf-render`** (the shared render substrate — the Typst/D2 pipeline and the fixed output location) and adds the decision-specific layer: input resolution, the cause→effect intermediate model, the PDF invariants, the flowchart-vs-text gate, and the one-page template. The wrappers add only their register (see *Audience register*). Neither restates what's below.
 
 v1 is **one-shot**: produce the PDF and stop. There is no decision loop-back (the chosen option feeding back into the session is a deliberate v2 split).
 
 > ## ⛔ Do not invoke directly
-> No slash command. Loaded via `kb_get` by `/consult-tech` or `/consult-simple`.
+> No slash command. Loaded via `kb_get` by `/pdf-tech` or `/pdf-management`.
 
 ## 1. Input resolution (dynamic)
 
@@ -44,7 +45,7 @@ Resolve **the issue under discussion** from exactly one source, in this priority
 }
 ```
 
-Derive `slug` from the title (kebab-case, ≤ 40 chars). On an ambiguous or empty source, ask the user which issue to consult on rather than guessing.
+Derive `slug` from the title (kebab-case, ≤ 40 chars). On an ambiguous or empty source, ask the user which issue the decision PDF should cover rather than guessing.
 
 ## 2. The cause→effect intermediate model (IR)
 
@@ -90,23 +91,17 @@ Default to a **D2 flowchart**. Fall back to plain text blocks **only** when the 
 
 If any condition fails (a branch, ≥ 3 options, or a longer chain), render the flowchart. When in doubt, render the flowchart — it's the default.
 
-## 5. Render pipeline
+## 5. Render + output
 
-Bundled binaries: **D2** (flowchart → SVG) and **Typst** (one-page PDF). Both are installed beside the detritus binary by detritus setup. If either is missing, stop and tell the user to run `detritus --update` (the setup step fetches Typst + D2); do not attempt a manual install.
+Render + output per `core/pdf-render`: the bundled D2 + Typst binaries, the `.d2`→SVG→`.typ`→compile mechanics, and the fixed **`.pdfs/<slug>.pdf`** output location (never prompt for it) all live there and are inherited here. This engine specializes that pipeline with:
 
-Steps, all in the working dir (use a temp dir under `.consult/`):
+- The **decision flowchart** it authors (section 6 below), built from the IR — used unless the flowchart-vs-text gate chose text.
+- The **one-page Typst template** it compiles (section 7 below).
+- **Verify one page** — after compiling, if the PDF is > 1 page, return to rule 5 (re-summarize), regenerate, and recompile. Only then is the run done.
 
-1. **Author the flowchart** — write `.consult/<slug>.d2` from the IR using the *D2 skeleton* below (skip if the gate chose text).
-2. **Render to SVG** — `d2 .consult/<slug>.d2 .consult/<slug>.svg`.
-3. **Author the document** — write `.consult/<slug>.typ` from the *Typst skeleton*: it embeds `image("<slug>.svg")` (when present) and the issue + option cause/effect blocks.
-4. **Compile** — `typst compile .consult/<slug>.typ .consult/<slug>.pdf`.
-5. **Verify one page** — if the PDF is > 1 page, return to rule 5 (re-summarize), regenerate, recompile. Only then is the run done.
+## 6. Decision flowchart skeleton
 
-Output: **`.consult/<slug>.pdf`** (`.consult/` is gitignored). Report the path; do not open or commit it.
-
-## 6. D2 flowchart skeleton
-
-Minimal, runnable. Fill the labels from the IR. Shape: issue node → ordered genesis cause/effect nodes → a decision node fanning to one node per option, each option → its consequence.
+Specializes the general D2 skeleton in `core/pdf-render`. Fill the labels from the IR. Shape: issue node → ordered genesis cause/effect nodes → a decision node fanning to one node per option, each option → its consequence.
 
 ```d2
 direction: down
@@ -173,7 +168,7 @@ Fixed single page. Fill `<…>` from the IR. Drop the `image(...)` line when the
 
 The wrapper passes `register` (`tech` or `simple`); it controls how much technical detail enters the **issue block**, the **genesis labels**, and the **option/consequence wording** — same IR, same pipeline, different language.
 
-- **tech** (`/consult-tech`) — bare-minimum high-level technical framing. The reader knows the system; name components, files, and mechanisms tersely. Genesis and consequences may reference the actual moving parts.
-- **simple** (`/consult-simple`) — zero-codebase-knowledge stakeholder. State the **premise only**, in plain language; no file names, no jargon. Choices and consequences are framed in outcomes the stakeholder cares about, not implementation.
+- **tech** (`/pdf-tech`) — bare-minimum high-level technical framing. The reader knows the system; name components, files, and mechanisms tersely. Genesis and consequences may reference the actual moving parts.
+- **simple** (`/pdf-management`) — zero-codebase-knowledge stakeholder. State the **premise only**, in plain language; no file names, no jargon. Choices and consequences are framed in outcomes the stakeholder cares about, not implementation.
 
 The wrappers own the exact phrasing rules for their register; this core only guarantees the register threads through the IR build and into the rendered text.

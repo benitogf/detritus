@@ -216,7 +216,7 @@ func RunSetup(binaryPath string, dryRun bool) error {
 	// registered as an MCP). Best-effort: skips cleanly when there's no release yet.
 	fetchCandylandBinary(binaryPath, dryRun)
 
-	// Companion binaries for the /consult flow (Typst render, D2 diagrams),
+	// Companion binaries for the /pdf flows (Typst render, D2 diagrams),
 	// installed beside detritus. Best-effort like the candyland fetch.
 	fetchTypstBinary(binaryPath, dryRun)
 	fetchD2Binary(binaryPath, dryRun)
@@ -1128,7 +1128,7 @@ func generateVerdentSkills(skillsDir string, docs []docEntry) {
 func printVerification(home, binaryPath string) {
 	fmt.Println("\nPost-install verification:")
 
-	// Consult companion binaries (beside detritus)
+	// PDF companion binaries (beside detritus)
 	if _, ok := toolBinFor(binaryPath, "typst"); ok {
 		fmt.Println("  [PASS] Typst binary")
 	} else {
