@@ -4,8 +4,11 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"bufio"
+	"bytes"
 	"compress/gzip"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -20,6 +23,48 @@ import (
 	"time"
 )
 
+// releaseSigningPubKeyB64 is the base64-encoded 32-byte ed25519 public key whose
+// private half signs checksums.txt at release time (via cmd/sign in CI). The
+// updater refuses any release whose checksums.txt is unsigned or fails this
+// verification — this is deliberate downgrade protection, not verify-if-present.
+const releaseSigningPubKeyB64 = "AuShDfRa7XX8gmzIMcPQFWbFECpbjyNai8lmKRsG/zU="
+
+// sameRelease reports whether two release identifiers name the same release,
+// ignoring a leading "v". Release tags are "v3.43.0" but the embedded
+// main.version is "3.43.0" (goreleaser's {{.Version}} strips the "v").
+func sameRelease(a, b string) bool {
+	return strings.TrimPrefix(a, "v") == strings.TrimPrefix(b, "v")
+}
+
+// canonicalTag returns the v-prefixed form of a release tag. An empty tag (latest)
+// is returned unchanged. Accepts both "3.43.0" and "v3.43.0".
+func canonicalTag(tag string) string {
+	if tag == "" || strings.HasPrefix(tag, "v") {
+		return tag
+	}
+	return "v" + tag
+}
+
+// parseUpdateArgs parses the arguments after "--update". A self-mutating command
+// must not guess intent from a typo, so unknown flags and a second positional tag
+// are hard errors rather than silently ignored.
+func parseUpdateArgs(args []string) (pinTag string, dryRun bool, err error) {
+	for _, a := range args {
+		if a == "--dry-run" {
+			dryRun = true
+			continue
+		}
+		if strings.HasPrefix(a, "-") {
+			return "", false, fmt.Errorf("unknown flag %q for --update (usage: detritus --update [<tag>] [--dry-run])", a)
+		}
+		if pinTag != "" {
+			return "", false, fmt.Errorf("multiple tags given (%q and %q)", pinTag, a)
+		}
+		pinTag = a
+	}
+	return pinTag, dryRun, nil
+}
+
 // RunUpdate downloads and installs a release, then runs --setup. When pinTag is
 // empty it targets the latest release; otherwise it pins to that exact tag.
 // The release archive's SHA-256 is verified against the release's checksums.txt
@@ -28,6 +73,7 @@ import (
 func RunUpdate(currentBinary, pinTag string, dryRun bool) error {
 	fmt.Println("Checking for updates...")
 
+	pinTag = canonicalTag(pinTag)
 	target := pinTag
 	if target == "" {
 		latest, err := fetchLatestVersion()
@@ -37,7 +83,7 @@ func RunUpdate(currentBinary, pinTag string, dryRun bool) error {
 		target = latest
 	}
 
-	if version != "dev" && version == target {
+	if version != "dev" && sameRelease(version, target) {
 		fmt.Printf("Already up to date (%s)\n", version)
 		return nil
 	}
@@ -55,14 +101,20 @@ func RunUpdate(currentBinary, pinTag string, dryRun bool) error {
 	sumsURL := checksumsURL(target)
 	if dryRun {
 		fmt.Printf("[dry-run] Would download %s\n", url)
+		fmt.Printf("[dry-run] Would verify signature against %s.sig\n", sumsURL)
 		fmt.Printf("[dry-run] Would verify SHA-256 against %s\n", sumsURL)
 		fmt.Printf("[dry-run] Would replace %s\n", currentBinary)
 		fmt.Printf("[dry-run] Would run --setup\n")
 		return nil
 	}
 
+	pub, err := decodeSigningPubKey()
+	if err != nil {
+		return fmt.Errorf("load signing key: %w", err)
+	}
+
 	fmt.Printf("Downloading %s...\n", url)
-	newBin, err := downloadVerifiedBinary(url, sumsURL, archiveFileName())
+	newBin, err := downloadVerifiedBinary(url, sumsURL, archiveFileName(), pub)
 	if err != nil {
 		return fmt.Errorf("download: %w", err)
 	}
@@ -153,12 +205,35 @@ func checksumsURL(ver string) string {
 	)
 }
 
-// downloadVerifiedBinary downloads the release archive, verifies its SHA-256
-// against the release's checksums.txt entry for archiveName, and only then
-// extracts the binary. A missing checksums entry or a mismatch is a hard error
-// — the binary is never extracted or executed unverified.
-func downloadVerifiedBinary(archiveURL, sumsURL, archiveName string) (string, error) {
+// decodeSigningPubKey decodes the embedded base64 ed25519 public key.
+func decodeSigningPubKey() (ed25519.PublicKey, error) {
+	raw, err := base64.StdEncoding.DecodeString(releaseSigningPubKeyB64)
+	if err != nil {
+		return nil, fmt.Errorf("decode embedded public key: %w", err)
+	}
+	if len(raw) != ed25519.PublicKeySize {
+		return nil, fmt.Errorf("embedded public key is %d bytes, want %d", len(raw), ed25519.PublicKeySize)
+	}
+	return ed25519.PublicKey(raw), nil
+}
+
+// downloadVerifiedBinary downloads the release archive, verifies the release's
+// signed checksums.txt, verifies the archive's SHA-256 against its entry, and
+// only then extracts the binary. Nothing is extracted until both the signature
+// and the checksum pass — the binary is never extracted or executed unverified.
+func downloadVerifiedBinary(archiveURL, sumsURL, archiveName string, pub ed25519.PublicKey) (string, error) {
 	client := &http.Client{Timeout: 2 * time.Minute}
+
+	// Verify the signed checksums BEFORE downloading/extracting anything.
+	sums, err := verifiedChecksums(client, sumsURL, pub)
+	if err != nil {
+		return "", err
+	}
+	want, ok := sums[archiveName]
+	if !ok {
+		return "", fmt.Errorf("no checksum for %q in %s (refusing to run unverified binary)", archiveName, sumsURL)
+	}
+
 	resp, err := client.Get(archiveURL)
 	if err != nil {
 		return "", err
@@ -184,9 +259,8 @@ func downloadVerifiedBinary(archiveURL, sumsURL, archiveName string) (string, er
 	archive.Close()
 	gotSum := hex.EncodeToString(hasher.Sum(nil))
 
-	// Verify against the release's published checksums BEFORE extracting.
-	if err := verifyChecksum(client, sumsURL, archiveName, gotSum); err != nil {
-		return "", err
+	if !strings.EqualFold(want, gotSum) {
+		return "", fmt.Errorf("checksum mismatch for %s: got %s, want %s (refusing to run tampered binary)", archiveName, gotSum, want)
 	}
 	fmt.Printf("Verified SHA-256 %s\n", gotSum)
 
@@ -199,26 +273,34 @@ func downloadVerifiedBinary(archiveURL, sumsURL, archiveName string) (string, er
 	return extractFromTarGzFile(archivePath, binName)
 }
 
-// verifyChecksum fetches checksums.txt, finds the line for archiveName, and
-// fails unless its recorded hash matches gotSum (case-insensitive hex).
-func verifyChecksum(client *http.Client, sumsURL, archiveName, gotSum string) error {
-	sums, err := fetchChecksums(client, sumsURL)
+// verifiedChecksums fetches checksums.txt and its detached .sig, verifies the
+// ed25519 signature against pub, and returns the parsed checksum map. A failed
+// signature or a missing .sig (404) is a hard error — pre-signing releases and
+// signature-stripping tamper are both refused (downgrade protection).
+func verifiedChecksums(client *http.Client, sumsURL string, pub ed25519.PublicKey) (map[string]string, error) {
+	sumsBytes, err := fetchBytes(client, sumsURL)
 	if err != nil {
-		return fmt.Errorf("fetch checksums: %w", err)
+		return nil, fmt.Errorf("fetch checksums: %w", err)
 	}
-	want, ok := sums[archiveName]
-	if !ok {
-		return fmt.Errorf("no checksum for %q in %s (refusing to run unverified binary)", archiveName, sumsURL)
+
+	sigURL := sumsURL + ".sig"
+	sigB64, err := fetchBytes(client, sigURL)
+	if err != nil {
+		return nil, fmt.Errorf("fetch signature: %w (this release predates signed checksums or its signature is missing; refusing to install)", err)
 	}
-	if !strings.EqualFold(want, gotSum) {
-		return fmt.Errorf("checksum mismatch for %s: got %s, want %s (refusing to run tampered binary)", archiveName, gotSum, want)
+	sig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(sigB64)))
+	if err != nil {
+		return nil, fmt.Errorf("decode signature from %s: %w", sigURL, err)
 	}
-	return nil
+	if !ed25519.Verify(pub, sumsBytes, sig) {
+		return nil, fmt.Errorf("checksums signature verification failed for %s (refusing to install)", sumsURL)
+	}
+
+	return parseChecksums(sumsBytes)
 }
 
-// fetchChecksums downloads and parses a goreleaser checksums.txt into a map of
-// asset filename -> lowercase hex SHA-256. Each line is "<hex>  <filename>".
-func fetchChecksums(client *http.Client, url string) (map[string]string, error) {
+// fetchBytes fetches a URL fully into memory. A non-200 response is an error.
+func fetchBytes(client *http.Client, url string) ([]byte, error) {
 	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
@@ -227,9 +309,14 @@ func fetchChecksums(client *http.Client, url string) (map[string]string, error) 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %d fetching %s", resp.StatusCode, url)
 	}
+	return io.ReadAll(resp.Body)
+}
 
+// parseChecksums parses a goreleaser checksums.txt into a map of asset filename
+// -> lowercase hex SHA-256. Each line is "<hex>  <filename>".
+func parseChecksums(data []byte) (map[string]string, error) {
 	sums := make(map[string]string)
-	scanner := bufio.NewScanner(resp.Body)
+	scanner := bufio.NewScanner(bytes.NewReader(data))
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) != 2 {
@@ -242,7 +329,7 @@ func fetchChecksums(client *http.Client, url string) (map[string]string, error) 
 		return nil, err
 	}
 	if len(sums) == 0 {
-		return nil, fmt.Errorf("no checksum entries parsed from %s", url)
+		return nil, fmt.Errorf("no checksum entries parsed")
 	}
 	return sums, nil
 }

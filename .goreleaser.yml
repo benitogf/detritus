@@ -15,14 +15,20 @@ builds:
       - -s -w -X main.version={{.Version}}
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
 
 checksum:
   name_template: "checksums.txt"
+
+signs:
+  - cmd: go
+    args: ["run", "./cmd/sign", "${artifact}"]
+    artifacts: checksum
+    signature: "${artifact}.sig"
 
 changelog:
   sort: asc
