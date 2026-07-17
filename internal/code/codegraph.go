@@ -1,13 +1,18 @@
 package code
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
+	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -78,6 +83,64 @@ func BuildCodeGraph(q GraphQuery) (string, *GraphResult, error) {
 		scope = ResolveProjectRoot(wd)
 	}
 
+	pkgs, edges, failReason := loadGraph(scope)
+	if failReason != "" {
+		return graphFallback(scope, q.Symbol, failReason), newGraphResult(q.Symbol), nil
+	}
+
+	// Interface query first: if the symbol names an interface, list its implementers.
+	if iface, name := findInterface(pkgs, q.Symbol); iface != nil {
+		return renderImplementers(pkgs, name, iface), newGraphResult(q.Symbol), nil
+	}
+
+	targets := edges.byName[q.Symbol]
+	if len(targets) == 0 {
+		return fmt.Sprintf("symbol %q not found as a function or interface in %s", q.Symbol, scope), newGraphResult(q.Symbol), nil
+	}
+	text, res := renderFunctionGraph(edges, q.Symbol, targets)
+	return text, res, nil
+}
+
+// graphCacheEntry is one memoized load for a scope: the fingerprint of the
+// scope's Go sources and governing module manifests at load time, plus the
+// loaded packages and derived call graph. It is reused while the fingerprint
+// still matches.
+type graphCacheEntry struct {
+	fingerprint string
+	pkgs        []*packages.Package
+	edges       *callEdges
+}
+
+// graphCache memoizes the packages.Load + buildCallEdges result per scope for
+// the lifetime of the process. code_graph runs a full type-checking load over
+// ./... on every call, which is multi-second on a large module; each detritus
+// consumer spawns its own stdio child, so a process-lifetime memo keyed on the
+// scope's source-and-manifest fingerprint turns repeated queries within one
+// session into cache hits while still reloading the instant any .go file or
+// governing module manifest changes.
+var graphCache = struct {
+	mu      sync.Mutex
+	entries map[string]*graphCacheEntry
+}{entries: map[string]*graphCacheEntry{}}
+
+// loadGraph returns the loaded packages and the type-resolved call graph for
+// scope, reusing a cached load while the scope's Go sources and governing
+// module manifests are unchanged.
+// failReason is non-empty (and pkgs/edges nil) when the load should fall back
+// to the structural map — those transient/broken states are never cached, so a
+// later query re-checks once the package loads or compiles again.
+func loadGraph(scope string) (pkgs []*packages.Package, edges *callEdges, failReason string) {
+	fp := fingerprintScope(scope)
+
+	graphCache.mu.Lock()
+	defer graphCache.mu.Unlock()
+
+	if fp != "" {
+		if e, ok := graphCache.entries[scope]; ok && e.fingerprint == fp {
+			return e.pkgs, e.edges, ""
+		}
+	}
+
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
 			packages.NeedImports | packages.NeedDeps | packages.NeedTypes |
@@ -88,29 +151,143 @@ func BuildCodeGraph(q GraphQuery) (string, *GraphResult, error) {
 		Tests: true,
 		Dir:   scope,
 	}
-	pkgs, err := packages.Load(cfg, "./...")
+	loaded, err := packages.Load(cfg, "./...")
 	if err != nil {
-		return graphFallback(scope, q.Symbol, "package failed to load"), newGraphResult(q.Symbol), nil
+		return nil, nil, "package failed to load"
 	}
-	if len(pkgs) == 0 {
-		return graphFallback(scope, q.Symbol, "no Go packages in scope"), newGraphResult(q.Symbol), nil
+	if len(loaded) == 0 {
+		return nil, nil, "no Go packages in scope"
 	}
-	if pkgErrors(pkgs) {
-		return graphFallback(scope, q.Symbol, "package does not compile"), newGraphResult(q.Symbol), nil
-	}
-
-	// Interface query first: if the symbol names an interface, list its implementers.
-	if iface, name := findInterface(pkgs, q.Symbol); iface != nil {
-		return renderImplementers(pkgs, name, iface), newGraphResult(q.Symbol), nil
+	if pkgErrors(loaded) {
+		return nil, nil, "package does not compile"
 	}
 
-	edges := buildCallEdges(pkgs)
-	targets := edges.byName[q.Symbol]
-	if len(targets) == 0 {
-		return fmt.Sprintf("symbol %q not found as a function or interface in %s", q.Symbol, scope), newGraphResult(q.Symbol), nil
+	built := buildCallEdges(loaded)
+	if fp != "" {
+		graphCache.entries[scope] = &graphCacheEntry{fingerprint: fp, pkgs: loaded, edges: built}
 	}
-	text, res := renderFunctionGraph(edges, q.Symbol, targets)
-	return text, res, nil
+	return loaded, built, ""
+}
+
+// fingerprintScope hashes every Go source under scope (relative path + mtime +
+// size) plus the module manifests that govern it into a stable digest, so the
+// cache invalidates the moment any file is added, removed, or edited. It
+// returns "" if the scope cannot be walked, which disables caching for that
+// call rather than risking a stale hit.
+//
+// The manifests are folded in because packages.Load resolves imports through
+// them: a go.mod edit (go get -u, a replace) or a vendored-dep update changes
+// the loaded graph without touching any .go file under scope, and vendor/ is
+// pruned by the walk so vendor/modules.txt would otherwise never be seen. See
+// hashGoverningManifests for how they are located.
+//
+// Residual staleness bounds — changes that do NOT invalidate:
+//   - an edit *inside* a locally-replaced module's own sources: those live
+//     outside scope and shift no manifest;
+//   - adding/removing a NESTED module (its own go.mod) below scope, which
+//     carves packages out of the `./...` load set: that go.mod sits neither in
+//     the .go walk nor on scope's ancestor chain;
+//   - a nested module's vendor/modules.txt below scope (the walk prunes
+//     vendor/);
+//   - in a go.work workspace, an edit to a SIBLING module's go.mod (e.g. its
+//     local-path replace): sibling members govern the load via workspace MVS
+//     but sit on a different branch than scope's ancestor chain, and local
+//     replaces add no go.work.sum entry, so nothing on the hashed chain moves;
+//   - a change reached only through a GOWORK env override (GOWORK=<path> /
+//     GOWORK=off): that redirects the toolchain off the ancestor chain the
+//     walk follows.
+//
+// A caller relying on any of these must restart the process.
+func fingerprintScope(scope string) string {
+	h := sha256.New()
+	err := filepath.WalkDir(scope, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if path != scope && (name == ".git" || name == "node_modules" || name == "vendor" || name == "testdata" || strings.HasPrefix(name, ".")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".go") {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(scope, path)
+		if err != nil {
+			rel = path
+		}
+		fmt.Fprintf(h, "%s\x00%d\x00%d\n", rel, info.ModTime().UnixNano(), info.Size())
+		return nil
+	})
+	if err != nil {
+		return ""
+	}
+	hashGoverningManifests(h, scope)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// hashGoverningManifests folds the module manifests that govern scope into h.
+// The go toolchain resolves go.mod/go.work by searching UPWARD from the load
+// Dir, so the files that decide what packages.Load returns can sit at any
+// ancestor of scope: the module root at or above scope, and — in a workspace —
+// the go.work root above the module root. Walking up from scope and hashing
+// every manifest found (keyed by its path relative to scope) therefore catches
+// a go.mod/go.sum/go.work/go.work.sum or vendored-dep change anywhere on
+// scope's own ancestor chain, not just when it happens to sit at scope. It does
+// NOT reach manifests off that chain — see the residual bounds on
+// fingerprintScope for the workspace-sibling and GOWORK-override cases.
+//
+// The walk stops at the first ancestor holding a go.work: that is the workspace
+// boundary, and nothing above it is consulted by the toolchain. Absent any
+// go.work the walk runs to the filesystem root; hashing an ancestor manifest
+// that does not actually govern scope only over-invalidates (a spurious miss,
+// never a stale hit), so the upward over-reach is safe.
+//
+// scope is resolved to an absolute path first: packages.Load resolves go.mod
+// upward through the absolute chain regardless of how the Dir is spelled, so a
+// relative scope must be normalized or the walk would stop at the working
+// directory (filepath.Dir(".") == ".") and miss governing manifests above it —
+// a stale hit in exactly the ancestor case this function exists to cover. If
+// the absolute path cannot be resolved, fall back to scope as given rather than
+// hashing nothing.
+func hashGoverningManifests(h io.Writer, scope string) {
+	names := []string{"go.mod", "go.sum", "go.work", "go.work.sum", filepath.Join("vendor", "modules.txt")}
+	if abs, err := filepath.Abs(scope); err == nil {
+		scope = abs
+	}
+	dir := scope
+	for {
+		foundWork := false
+		for _, name := range names {
+			full := filepath.Join(dir, name)
+			info, err := os.Stat(full)
+			if err != nil {
+				continue
+			}
+			rel, err := filepath.Rel(scope, full)
+			if err != nil {
+				rel = full
+			}
+			fmt.Fprintf(h, "%s\x00%d\x00%d\n", rel, info.ModTime().UnixNano(), info.Size())
+			if name == "go.work" {
+				foundWork = true
+			}
+		}
+		if foundWork {
+			return
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return
+		}
+		dir = parent
+	}
 }
 
 // pkgErrors reports whether any PRODUCTION package failed to load or type-check.
