@@ -113,3 +113,31 @@ func TestFingerprintScopeChangesWithAncestorManifest(t *testing.T) {
 		t.Fatal("fingerprint did not change after editing an ancestor go.mod")
 	}
 }
+
+// TestFingerprintScopeRelativeCatchesAncestorManifest guards the relative-scope
+// path: packages.Load resolves go.mod upward through the absolute chain no
+// matter how the scope Dir is spelled, so a relative scope must be normalized
+// before the ancestor walk — otherwise the walk stops at the working directory
+// (filepath.Dir(".") == ".") and a go.mod above cwd never enters the digest,
+// serving a stale graph. cwd is the package subtree; the governing go.mod sits
+// one level up, out of reach of a naive relative walk.
+func TestFingerprintScopeRelativeCatchesAncestorManifest(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "go.mod", "module fp\n\ngo 1.25\n")
+	sub := filepath.Join(root, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeGo(t, sub, "a.go", "package sub\n\nfunc A() {}\n")
+
+	t.Chdir(sub)
+	fp1 := fingerprintScope(".")
+	if fp1 == "" {
+		t.Fatal("fingerprint empty for a walkable relative scope")
+	}
+
+	writeGo(t, root, "go.mod", "module fp\n\ngo 1.25\n\nrequire example.com/dep v1.2.3\n")
+	if fingerprintScope(".") == fp1 {
+		t.Fatal("fingerprint did not change after editing a go.mod above cwd")
+	}
+}

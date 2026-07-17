@@ -102,8 +102,9 @@ func BuildCodeGraph(q GraphQuery) (string, *GraphResult, error) {
 }
 
 // graphCacheEntry is one memoized load for a scope: the fingerprint of the
-// scope's Go sources at load time, plus the loaded packages and derived call
-// graph. It is reused while the fingerprint still matches.
+// scope's Go sources and governing module manifests at load time, plus the
+// loaded packages and derived call graph. It is reused while the fingerprint
+// still matches.
 type graphCacheEntry struct {
 	fingerprint string
 	pkgs        []*packages.Package
@@ -114,15 +115,17 @@ type graphCacheEntry struct {
 // the lifetime of the process. code_graph runs a full type-checking load over
 // ./... on every call, which is multi-second on a large module; each detritus
 // consumer spawns its own stdio child, so a process-lifetime memo keyed on the
-// scope's source fingerprint turns repeated queries within one session into
-// cache hits while still reloading the instant any .go file changes.
+// scope's source-and-manifest fingerprint turns repeated queries within one
+// session into cache hits while still reloading the instant any .go file or
+// governing module manifest changes.
 var graphCache = struct {
 	mu      sync.Mutex
 	entries map[string]*graphCacheEntry
 }{entries: map[string]*graphCacheEntry{}}
 
 // loadGraph returns the loaded packages and the type-resolved call graph for
-// scope, reusing a cached load while the scope's Go sources are unchanged.
+// scope, reusing a cached load while the scope's Go sources and governing
+// module manifests are unchanged.
 // failReason is non-empty (and pkgs/edges nil) when the load should fall back
 // to the structural map — those transient/broken states are never cached, so a
 // later query re-checks once the package loads or compiles again.
@@ -185,7 +188,14 @@ func loadGraph(scope string) (pkgs []*packages.Package, edges *callEdges, failRe
 //     carves packages out of the `./...` load set: that go.mod sits neither in
 //     the .go walk nor on scope's ancestor chain;
 //   - a nested module's vendor/modules.txt below scope (the walk prunes
-//     vendor/).
+//     vendor/);
+//   - in a go.work workspace, an edit to a SIBLING module's go.mod (e.g. its
+//     local-path replace): sibling members govern the load via workspace MVS
+//     but sit on a different branch than scope's ancestor chain, and local
+//     replaces add no go.work.sum entry, so nothing on the hashed chain moves;
+//   - a change reached only through a GOWORK env override (GOWORK=<path> /
+//     GOWORK=off): that redirects the toolchain off the ancestor chain the
+//     walk follows.
 //
 // A caller relying on any of these must restart the process.
 func fingerprintScope(scope string) string {
@@ -228,16 +238,29 @@ func fingerprintScope(scope string) string {
 // ancestor of scope: the module root at or above scope, and — in a workspace —
 // the go.work root above the module root. Walking up from scope and hashing
 // every manifest found (keyed by its path relative to scope) therefore catches
-// a go.mod/go.sum/go.work/go.work.sum or vendored-dep change wherever the
-// governing file lives, not just when it happens to sit at scope.
+// a go.mod/go.sum/go.work/go.work.sum or vendored-dep change anywhere on
+// scope's own ancestor chain, not just when it happens to sit at scope. It does
+// NOT reach manifests off that chain — see the residual bounds on
+// fingerprintScope for the workspace-sibling and GOWORK-override cases.
 //
 // The walk stops at the first ancestor holding a go.work: that is the workspace
 // boundary, and nothing above it is consulted by the toolchain. Absent any
 // go.work the walk runs to the filesystem root; hashing an ancestor manifest
 // that does not actually govern scope only over-invalidates (a spurious miss,
 // never a stale hit), so the upward over-reach is safe.
+//
+// scope is resolved to an absolute path first: packages.Load resolves go.mod
+// upward through the absolute chain regardless of how the Dir is spelled, so a
+// relative scope must be normalized or the walk would stop at the working
+// directory (filepath.Dir(".") == ".") and miss governing manifests above it —
+// a stale hit in exactly the ancestor case this function exists to cover. If
+// the absolute path cannot be resolved, fall back to scope as given rather than
+// hashing nothing.
 func hashGoverningManifests(h io.Writer, scope string) {
 	names := []string{"go.mod", "go.sum", "go.work", "go.work.sum", filepath.Join("vendor", "modules.txt")}
+	if abs, err := filepath.Abs(scope); err == nil {
+		scope = abs
+	}
 	dir := scope
 	for {
 		foundWork := false
