@@ -166,9 +166,19 @@ func loadGraph(scope string) (pkgs []*packages.Package, edges *callEdges, failRe
 }
 
 // fingerprintScope hashes every Go source under scope (relative path + mtime +
-// size) into a stable digest, so the cache invalidates the moment any file is
-// added, removed, or edited. It returns "" if the scope cannot be walked, which
-// disables caching for that call rather than risking a stale hit.
+// size) plus the module manifests into a stable digest, so the cache
+// invalidates the moment any file is added, removed, or edited. It returns ""
+// if the scope cannot be walked, which disables caching for that call rather
+// than risking a stale hit.
+//
+// The manifests (go.mod/go.sum/go.work/go.work.sum and vendor/modules.txt) are
+// folded in because packages.Load resolves imports through them: a go.mod edit
+// (go get -u, a replace) or a vendored-dep update changes the loaded graph
+// without touching any .go file under scope, and vendor/ is pruned by the walk
+// so vendor/modules.txt would otherwise never be seen. Residual staleness
+// bound: an edit *inside* a locally-replaced module's own sources lives outside
+// scope and does not shift any manifest, so it still won't invalidate — a
+// caller editing a replace target must restart the process.
 func fingerprintScope(scope string) string {
 	h := sha256.New()
 	err := filepath.WalkDir(scope, func(path string, d os.DirEntry, err error) error {
@@ -198,6 +208,13 @@ func fingerprintScope(scope string) string {
 	})
 	if err != nil {
 		return ""
+	}
+	for _, rel := range []string{"go.mod", "go.sum", "go.work", "go.work.sum", filepath.Join("vendor", "modules.txt")} {
+		info, err := os.Stat(filepath.Join(scope, rel))
+		if err != nil {
+			continue
+		}
+		fmt.Fprintf(h, "%s\x00%d\x00%d\n", rel, info.ModTime().UnixNano(), info.Size())
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }

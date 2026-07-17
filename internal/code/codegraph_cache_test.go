@@ -60,3 +60,26 @@ func TestFingerprintScopeChangesWithSource(t *testing.T) {
 		t.Fatal("fingerprint did not change after editing a source file")
 	}
 }
+
+// TestFingerprintScopeChangesWithManifest confirms a go.mod edit shifts the
+// fingerprint even though no .go file changed. packages.Load resolves imports
+// through the module manifests, so a manifest-only change (go get -u, a
+// replace, a vendored-dep update) alters the loaded graph and must bust the
+// cache — otherwise a tree broken by a go.mod-only edit keeps serving a healthy
+// cached graph instead of the "package does not compile" fallback. The edit
+// grows go.mod so the digest shifts regardless of mtime granularity.
+func TestFingerprintScopeChangesWithManifest(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "go.mod", "module fp\n\ngo 1.25\n")
+	writeGo(t, root, "a.go", "package fp\n\nfunc A() {}\n")
+
+	fp1 := fingerprintScope(root)
+	if fp1 == "" {
+		t.Fatal("fingerprint empty for a walkable scope")
+	}
+
+	writeGo(t, root, "go.mod", "module fp\n\ngo 1.25\n\nrequire example.com/dep v1.2.3\n")
+	if fingerprintScope(root) == fp1 {
+		t.Fatal("fingerprint did not change after editing go.mod")
+	}
+}
