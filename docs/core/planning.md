@@ -29,9 +29,20 @@ A settled plan captures, in plain language:
 
 - **Feature spec** — what is being built and why.
 - **Acceptance criteria** — a checklist, each item objectively verifiable by test, command output, UI check, or a documented manual check — and **safely agent-executable**: the delivering agent can run every criterion without mutating live user infrastructure (spawning real agent trees, sending external messages, touching production data). When only a live path proves the behavior, the plan names the harness (stub executor, create-then-cancel, dry-run flag). A criterion the agent must skip for safety is a planning defect.
+- **Surroundings survey** — the existence check and composition map per the *Surroundings survey* section below: who already owns this responsibility, and which shared mechanisms the feature composes.
 - **User-stated rules** — verbatim constraints from the conversation.
 - **Decisions made on the user's behalf** — each non-trivial technical choice with a one-line why (the audit trail a reviewer needs in place of a conversation they didn't see).
 - **Feature-splits & blockers** — genuinely separate features and hard blockers per `core/completion`'s three dispositions. This is **not** a parking lot for in-scope work, which is always built (disposition 1). Disposition is intake-specific: `/plan` records genuinely-separate features for the developer to triage; `/dream` (autonomous, non-technical path) resolves in-scope concerns into the plan and splits genuinely-separate features into their own plans rather than handing the user a note they can't action (`core/dream` → *Hazards — deal with them, never defer*).
+
+## Surroundings survey
+
+A plan is built *from* the codebase, not beside it. Before designing anything, the survey answers one question first and maps the composition second:
+
+- **Existence first.** Does this responsibility already have an owner — built, shipped, or in flight? Search four sources, none optional: the **working tree**; **git history** (removed or renamed components pending restore); **open and merged PRs + issues**; **`.plan/` contracts**. A legitimate settled outcome is **no work** — the plan resolves to adopting the existing component, or closing the request as superseded.
+- **Composition map.** For the feature that survives the existence check: name each cross-cutting mechanism it composes — service/server skeleton, auth/authorization gates, transport & state delivery (REST/WS), persistence & rehydration, configuration surface, CI & lint policy, docs home & conventions, deploy/gateway registration, frontend data access (shared client lib vs hand-rolled fetch/WS), dev harnesses & tooling — **each cited from a named sibling** ("service X does this via Y").
+- **New mechanisms are decisions.** Every mechanism or convention the plan introduces carries a recorded decision naming the existing alternative and why it doesn't fit. A convention is repo-owned: a plan never establishes one unilaterally as a side effect of a feature.
+
+Reinvention doesn't just duplicate — it re-opens bug classes the shared mechanism already paid for, and its internal test/review rigor cannot detect the misfit because the module is only ever reviewed against itself.
 
 ## Readiness check
 
@@ -42,6 +53,7 @@ A plan is ready only when:
 - **Constraint capture** — user-stated rules, repo guidance, KB guidance, and known external constraints are captured as rules or decisions, not left as chat-only context.
 - **One-feature boundary** — the spec fits one coherent feature; independent features split into separate plans.
 - **Delivery packaging is independent** — every PR the plan emits passes the independence gate below; no criterion requires the agent to touch live infrastructure to verify (name the harness instead).
+- **Surroundings survey holds** — a plan that overlaps an existing component's responsibility, or introduces a parallel instance of an existing mechanism, without the corresponding recorded decision, is **not ready**.
 
 ## Delivery packaging — split only what is fully independent
 
@@ -70,6 +82,7 @@ A plan or task spec is **decision-complete** when the implementer makes **zero**
 - **Every file is named** — the exact files/modules to create or edit, not "the relevant handler".
 - **Every choice is resolved** — each non-trivial technical decision is either made in the spec or explicitly delegated **with the decision rule attached** (the rule the implementer applies to decide, not a bare "your call").
 - **Acceptance checks are runnable verbatim** — the commands/tests that prove the task done are written out, not described.
+- **Shared mechanisms are named** — task specs name the shared mechanisms the task composes (from the survey's composition map), so a low-effort coder never guesses infrastructure.
 
 This applies uniformly to every artifact that hands work to an executor: `.plan/<slug>.md` contracts, tech-lead partitions, and quest work items. The system runs low-effort executors precisely because the decisions are made upstream — an underspecified spec pushes a decision onto an agent chosen for cheapness, which either stalls (escalation) or guesses (drift). Decision-completeness is what makes the executor's low effort safe.
 
