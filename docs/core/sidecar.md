@@ -29,6 +29,8 @@ related:
 
 detritus owns the sidecar lifecycle in Go (candyland is not an MCP server): health-check `GET /api/health`; if down, start the installed binary **detached, inheriting the environment** so `gh`/`HOME`/`GH_*` credentials propagate to the spawned agents; poll until it answers; if it can't come up, fail honestly. If the binary isn't installed, say so and fall back to the in-process flow rather than pretending.
 
+Candyland gates run/quest creation on a **delivery-capable gh** — authenticated, and carrying the `repo` + `workflow` scopes when the token's scopes are inspectable (a fine-grained token exposes none, so the gate fails open with a warning rather than blocking on a guess). This guards the class of push-authorization constraints checkable before work burns (the `workflow` scope is the example, not the whole rule), and the dashboard's system panel shows the standing gh capability state.
+
 ## REST launch surface
 
 Each launcher writes its input to a file (keeps large text off argv), then detritus creates and begins the work over REST. Folders default to the **cwd**; every folder is a **candidate repo** — candyland branches and delivers in each folder that receives changes (`core/build` → *Multi-repo delivery*).
