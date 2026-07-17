@@ -72,7 +72,7 @@ Apply these steps in order to the resolved item. If a step blocks, stop and repo
 
 7. **gofmt the changed files.** `gofmt -l` to detect drift, `gofmt -w` on the touched files only. Don't reformat unrelated files inside a single-item PR.
 
-8. **Open issue + PR via `/gh`**. Let the router dispatch to `gh-issue-create` then `gh-issue-work`. Issue body is product-focused (no code identifiers); PR body describes the final state. The `plane` label is applied automatically by `gh-issue-create`. **Skip this step if `--no-pr` was passed.**
+8. **Open issue + PR via `/gh`**. Let the router dispatch to `gh-issue-create` then `gh-issue-work`. Issue body is product-focused (no code identifiers); PR body describes the final state. **Skip this step if `--no-pr` was passed.**
 
 9. **Mark the item done via `/todo done <id>`.** This is the protocol's terminal step. The item is removed from the store (eviction — no retained `done` status), the forkSession lock (if any) is released with it, and the next-up survivors are re-ranked per the quick re-rank in `flows/project/todo` → */todo done*.
 

@@ -89,7 +89,7 @@ lessons never collide.
    ```
    (`<flow>` ∈ `grow` / `learn` / `absorb` / `optimize`; `<ref>` is the source signal — a candyland unit
    id, a PR URL, or a session tag). This is the sole minting site for the footer; `flows/github/gh`
-   convention #12 only preserves it on later body rewrites.
+   convention #11 only preserves it on later body rewrites.
 6. `git -C <base> worktree remove <base>-wt-<slug>` when the PR is open. The base stays on a clean
    default branch.
 
