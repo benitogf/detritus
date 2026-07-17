@@ -12,7 +12,6 @@ import (
 	"unicode"
 
 	"github.com/benitogf/detritus/internal/chunk"
-	"github.com/blevesearch/bleve/v2"
 )
 
 type ChunkMeta struct {
@@ -28,7 +27,6 @@ type DocEntry struct {
 
 type GeneratedData struct {
 	Chunks      []ChunkMeta
-	BlevePath   string
 	ToolDesc    string
 	DocMetadata []DocEntry
 }
@@ -63,16 +61,6 @@ func main() {
 	chunks := chunk.ChunkDocs(docs)
 	log.Printf("chunked into %d sections", len(chunks))
 
-	log.Println("building bleve index...")
-	blevePath := filepath.Join(outputDir, "search.bleve")
-	os.RemoveAll(blevePath)
-	index, err := buildBleveIndex(blevePath, docs, chunks)
-	if err != nil {
-		log.Fatalf("bleve index: %v", err)
-	}
-	index.Close()
-	log.Printf("bleve index built at %s", blevePath)
-
 	docMetadata := buildDocMetadata(docs)
 	toolDesc := buildToolDescription(docs)
 
@@ -87,7 +75,6 @@ func main() {
 
 	data := GeneratedData{
 		Chunks:      metas,
-		BlevePath:   blevePath,
 		ToolDesc:    toolDesc,
 		DocMetadata: docMetadata,
 	}
@@ -104,54 +91,6 @@ func main() {
 	log.Printf("wrote %s", dataPath)
 
 	log.Println("done")
-}
-
-func buildBleveIndex(path string, docs []chunk.Doc, chunks []chunk.Chunk) (bleve.Index, error) {
-	mapping := bleve.NewIndexMapping()
-
-	docMapping := bleve.NewDocumentMapping()
-	docMapping.AddFieldMappingsAt("doc_name", bleve.NewTextFieldMapping())
-	docMapping.AddFieldMappingsAt("section", bleve.NewTextFieldMapping())
-	docMapping.AddFieldMappingsAt("content", bleve.NewTextFieldMapping())
-	docMapping.AddFieldMappingsAt("triggers", bleve.NewTextFieldMapping())
-	docMapping.AddFieldMappingsAt("category", bleve.NewTextFieldMapping())
-	mapping.AddDocumentMapping("chunk", docMapping)
-	mapping.DefaultMapping = docMapping
-
-	index, err := bleve.New(path, mapping)
-	if err != nil {
-		return nil, fmt.Errorf("bleve new: %w", err)
-	}
-
-	triggerMap := map[string]string{}
-	for _, doc := range docs {
-		triggerMap[doc.Name] = strings.Join(doc.Frontmatter.Triggers, " ")
-	}
-
-	batch := index.NewBatch()
-	for i, c := range chunks {
-		id := fmt.Sprintf("%s#%d", c.DocName, c.Position)
-		doc := map[string]string{
-			"doc_name": c.DocName,
-			"section":  c.Section,
-			"content":  c.Content,
-			"triggers": triggerMap[c.DocName],
-		}
-		batch.Index(id, doc)
-		if (i+1)%100 == 0 {
-			if err := index.Batch(batch); err != nil {
-				return nil, fmt.Errorf("bleve batch: %w", err)
-			}
-			batch = index.NewBatch()
-		}
-	}
-	if batch.Size() > 0 {
-		if err := index.Batch(batch); err != nil {
-			return nil, fmt.Errorf("bleve batch final: %w", err)
-		}
-	}
-
-	return index, nil
 }
 
 func buildDocMetadata(docs []chunk.Doc) []DocEntry {
