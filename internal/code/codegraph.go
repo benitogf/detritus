@@ -7,6 +7,7 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -166,19 +167,27 @@ func loadGraph(scope string) (pkgs []*packages.Package, edges *callEdges, failRe
 }
 
 // fingerprintScope hashes every Go source under scope (relative path + mtime +
-// size) plus the module manifests into a stable digest, so the cache
-// invalidates the moment any file is added, removed, or edited. It returns ""
-// if the scope cannot be walked, which disables caching for that call rather
-// than risking a stale hit.
+// size) plus the module manifests that govern it into a stable digest, so the
+// cache invalidates the moment any file is added, removed, or edited. It
+// returns "" if the scope cannot be walked, which disables caching for that
+// call rather than risking a stale hit.
 //
-// The manifests (go.mod/go.sum/go.work/go.work.sum and vendor/modules.txt) are
-// folded in because packages.Load resolves imports through them: a go.mod edit
-// (go get -u, a replace) or a vendored-dep update changes the loaded graph
-// without touching any .go file under scope, and vendor/ is pruned by the walk
-// so vendor/modules.txt would otherwise never be seen. Residual staleness
-// bound: an edit *inside* a locally-replaced module's own sources lives outside
-// scope and does not shift any manifest, so it still won't invalidate — a
-// caller editing a replace target must restart the process.
+// The manifests are folded in because packages.Load resolves imports through
+// them: a go.mod edit (go get -u, a replace) or a vendored-dep update changes
+// the loaded graph without touching any .go file under scope, and vendor/ is
+// pruned by the walk so vendor/modules.txt would otherwise never be seen. See
+// hashGoverningManifests for how they are located.
+//
+// Residual staleness bounds — changes that do NOT invalidate:
+//   - an edit *inside* a locally-replaced module's own sources: those live
+//     outside scope and shift no manifest;
+//   - adding/removing a NESTED module (its own go.mod) below scope, which
+//     carves packages out of the `./...` load set: that go.mod sits neither in
+//     the .go walk nor on scope's ancestor chain;
+//   - a nested module's vendor/modules.txt below scope (the walk prunes
+//     vendor/).
+//
+// A caller relying on any of these must restart the process.
 func fingerprintScope(scope string) string {
 	h := sha256.New()
 	err := filepath.WalkDir(scope, func(path string, d os.DirEntry, err error) error {
@@ -209,14 +218,53 @@ func fingerprintScope(scope string) string {
 	if err != nil {
 		return ""
 	}
-	for _, rel := range []string{"go.mod", "go.sum", "go.work", "go.work.sum", filepath.Join("vendor", "modules.txt")} {
-		info, err := os.Stat(filepath.Join(scope, rel))
-		if err != nil {
-			continue
-		}
-		fmt.Fprintf(h, "%s\x00%d\x00%d\n", rel, info.ModTime().UnixNano(), info.Size())
-	}
+	hashGoverningManifests(h, scope)
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// hashGoverningManifests folds the module manifests that govern scope into h.
+// The go toolchain resolves go.mod/go.work by searching UPWARD from the load
+// Dir, so the files that decide what packages.Load returns can sit at any
+// ancestor of scope: the module root at or above scope, and — in a workspace —
+// the go.work root above the module root. Walking up from scope and hashing
+// every manifest found (keyed by its path relative to scope) therefore catches
+// a go.mod/go.sum/go.work/go.work.sum or vendored-dep change wherever the
+// governing file lives, not just when it happens to sit at scope.
+//
+// The walk stops at the first ancestor holding a go.work: that is the workspace
+// boundary, and nothing above it is consulted by the toolchain. Absent any
+// go.work the walk runs to the filesystem root; hashing an ancestor manifest
+// that does not actually govern scope only over-invalidates (a spurious miss,
+// never a stale hit), so the upward over-reach is safe.
+func hashGoverningManifests(h io.Writer, scope string) {
+	names := []string{"go.mod", "go.sum", "go.work", "go.work.sum", filepath.Join("vendor", "modules.txt")}
+	dir := scope
+	for {
+		foundWork := false
+		for _, name := range names {
+			full := filepath.Join(dir, name)
+			info, err := os.Stat(full)
+			if err != nil {
+				continue
+			}
+			rel, err := filepath.Rel(scope, full)
+			if err != nil {
+				rel = full
+			}
+			fmt.Fprintf(h, "%s\x00%d\x00%d\n", rel, info.ModTime().UnixNano(), info.Size())
+			if name == "go.work" {
+				foundWork = true
+			}
+		}
+		if foundWork {
+			return
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return
+		}
+		dir = parent
+	}
 }
 
 // pkgErrors reports whether any PRODUCTION package failed to load or type-check.

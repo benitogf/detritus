@@ -1,6 +1,10 @@
 package code
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 // TestLoadGraphCachesAndInvalidates proves code_graph does not repay the full
 // packages.Load on repeated queries against an unchanged scope, and that any
@@ -81,5 +85,31 @@ func TestFingerprintScopeChangesWithManifest(t *testing.T) {
 	writeGo(t, root, "go.mod", "module fp\n\ngo 1.25\n\nrequire example.com/dep v1.2.3\n")
 	if fingerprintScope(root) == fp1 {
 		t.Fatal("fingerprint did not change after editing go.mod")
+	}
+}
+
+// TestFingerprintScopeChangesWithAncestorManifest confirms a manifest edit
+// invalidates even when scope is a subdirectory and the go.mod governing it
+// lives at an ancestor. The go toolchain resolves go.mod upward from the load
+// Dir, so a code_graph scoped to a package subtree must still bust its cache
+// when the module's manifest changes — otherwise a go get -u at the module root
+// leaves every sub-scope serving a stale graph.
+func TestFingerprintScopeChangesWithAncestorManifest(t *testing.T) {
+	root := t.TempDir()
+	writeGo(t, root, "go.mod", "module fp\n\ngo 1.25\n")
+	sub := filepath.Join(root, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeGo(t, sub, "a.go", "package sub\n\nfunc A() {}\n")
+
+	fp1 := fingerprintScope(sub)
+	if fp1 == "" {
+		t.Fatal("fingerprint empty for a walkable sub-scope")
+	}
+
+	writeGo(t, root, "go.mod", "module fp\n\ngo 1.25\n\nrequire example.com/dep v1.2.3\n")
+	if fingerprintScope(sub) == fp1 {
+		t.Fatal("fingerprint did not change after editing an ancestor go.mod")
 	}
 }
