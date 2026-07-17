@@ -15,7 +15,7 @@ import (
 	"github.com/ulikunitz/xz"
 )
 
-// The /consult flow renders Typst documents and D2 diagrams, so detritus bundles
+// The /pdf flows render Typst documents and D2 diagrams, so detritus bundles
 // both companion binaries beside its own during --setup (mirroring the candyland
 // fetch). Releases ship as archives with the binary inside a subdirectory, so the
 // extractors below match by basename rather than exact path.
