@@ -35,3 +35,4 @@ jobs:
           args: release --clean --skip=validate
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DETRITUS_SIGNING_KEY: ${{ secrets.DETRITUS_SIGNING_KEY }}

@@ -48,9 +48,16 @@ func main() {
 			fmt.Fprintln(os.Stderr, "--init is deprecated; use --setup instead")
 			os.Exit(1)
 		case "--update":
-			dryRun := len(os.Args) > 2 && os.Args[2] == "--dry-run"
+			// Usage: --update [<tag>] [--dry-run]. A non-flag argument pins the
+			// update to that release tag; otherwise the latest release is used.
+			// Unknown flags and a second tag are hard errors, not guesses.
+			pinTag, dryRun, err := parseUpdateArgs(os.Args[2:])
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
 			self, _ := os.Executable()
-			if err := RunUpdate(self, dryRun); err != nil {
+			if err := RunUpdate(self, pinTag, dryRun); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
@@ -159,7 +166,7 @@ func main() {
 			fmt.Println("  detritus --candyland-up                               Bring the candyland sidecar online (no run)")
 			fmt.Println("  detritus --candyland-run <prompt-file> [folder ...]   Start a candyland sidecar build run over REST")
 			fmt.Println("  detritus --quest-run <objective-file> [--per-finding] [folder ...]  Start a candyland-native quest over REST (--per-finding: open-ended)")
-			fmt.Println("  detritus --update [--dry-run]                         Self-update to latest release")
+			fmt.Println("  detritus --update [<tag>] [--dry-run]                 Self-update (verifies checksum + signature; optional tag pins the release)")
 			fmt.Println("  detritus --todo-guard                                 PreToolUse hook handler (internal; installed by --setup)")
 			fmt.Println("  detritus --upsert-mcp <file> <key> <cmd>              Upsert MCP config entry")
 			fmt.Println("  detritus --upsert-vscode-settings <file>              Upsert VS Code settings")
