@@ -74,6 +74,31 @@ func writePluginCommands(dir string) error {
 	}
 	want := pluginCommandFiles()
 	for fname, content := range want {
+		if err := os.WriteFile(filepath.Join(dir, fname), []byte(content), 0o644); err != nil {
+			return err
+		}
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") || want[e.Name()] != "" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err == nil && strings.Contains(string(data), pluginCommandGeneratedMarker) {
+			os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+	return nil
+}
+
+// writeOpenCodeCommands installs flow commands without replacing user-owned
+// commands that share a name in OpenCode's global command directory.
+func writeOpenCodeCommands(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	want := pluginCommandFiles()
+	for fname, content := range want {
 		path := filepath.Join(dir, fname)
 		if existing, err := os.ReadFile(path); err == nil && !strings.Contains(string(existing), pluginCommandGeneratedMarker) {
 			continue

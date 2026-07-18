@@ -211,11 +211,12 @@ func RunSetup(binaryPath string, dryRun bool) error {
 	// placed binary.
 	binaryPath = selfPlace(binaryPath, dryRun)
 
+	// OpenCode comes first so other host-specific setup failures cannot prevent
+	// slash-command installation.
+	setupOpenCode(home, binaryPath, dryRun)
+
 	// Windsurf
 	setupWindsurf(home, binaryPath, docs, dryRun)
-
-	// GitHub Copilot CLI
-	setupCopilotCLI(home, binaryPath, dryRun)
 
 	// VS Code
 	setupVSCode(home, binaryPath, docs, dryRun)
@@ -226,11 +227,11 @@ func RunSetup(binaryPath string, dryRun bool) error {
 	// Claude Code
 	setupClaudeCode(home, binaryPath, docs, dryRun)
 
-	// OpenCode
-	setupOpenCode(home, binaryPath, dryRun)
-
 	// Codex
 	setupCodex(home, binaryPath, docs, dryRun)
+
+	// GitHub Copilot CLI
+	setupCopilotCLI(home, binaryPath, dryRun)
 
 	// Verdent
 	if verdentDetected(home) {
@@ -270,7 +271,7 @@ func setupOpenCode(home, binaryPath string, dryRun bool) {
 	}
 
 	upsertOpenCodeMCPConfig(configFile, binaryPath)
-	if err := writePluginCommands(commandsDir); err != nil {
+	if err := writeOpenCodeCommands(commandsDir); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: OpenCode commands dir: %v\n", err)
 		return
 	}
