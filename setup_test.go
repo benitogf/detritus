@@ -45,6 +45,238 @@ func TestSetupDoesNotRegisterCandylandMCP(t *testing.T) {
 	}
 }
 
+func TestUpsertCopilotCLIMCPWritesExpectedShape(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "mcp-config.json")
+	if err := upsertCopilotCLIMCP(file, "/usr/local/bin/detritus"); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("read %s: %v", file, err)
+	}
+	var data map[string]any
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatalf("parse %s: %v", file, err)
+	}
+	servers, ok := data["mcpServers"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing mcpServers in %s", file)
+	}
+	entry, ok := servers["detritus"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing detritus entry in %s", file)
+	}
+	if entry["type"] != "local" {
+		t.Fatalf("expected type=local, got %v", entry["type"])
+	}
+	if entry["command"] != "/usr/local/bin/detritus" {
+		t.Fatalf("expected command to be preserved, got %v", entry["command"])
+	}
+	args, ok := entry["args"].([]any)
+	if !ok || len(args) != 0 {
+		t.Fatalf("expected args=[], got %T %v", entry["args"], entry["args"])
+	}
+	tools, ok := entry["tools"].([]any)
+	if !ok || len(tools) != 1 || tools[0] != "*" {
+		t.Fatalf("expected tools=[\"*\"], got %T %v", entry["tools"], entry["tools"])
+	}
+}
+
+func TestSetupOpenCodeWritesMCPAndCommands(t *testing.T) {
+	home := t.TempDir()
+	config := filepath.Join(home, ".config", "opencode", "opencode.json")
+	if err := os.MkdirAll(filepath.Dir(config), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config, []byte(`{"username":"me","mcp":{"other":{"type":"local","command":["other"]}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	setupOpenCode(home, "/usr/local/bin/detritus", false)
+
+	raw, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data map[string]any
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatal(err)
+	}
+	if data["username"] != "me" {
+		t.Fatalf("unrelated config was not preserved: %v", data["username"])
+	}
+	if data["$schema"] != "https://opencode.ai/config.json" {
+		t.Fatalf("schema missing: %v", data["$schema"])
+	}
+	mcp, ok := data["mcp"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing mcp config: %v", data)
+	}
+	detritus, ok := mcp["detritus"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing detritus MCP config: %v", mcp)
+	}
+	if detritus["type"] != "local" || detritus["enabled"] != true {
+		t.Fatalf("invalid detritus MCP config: %v", detritus)
+	}
+	command, ok := detritus["command"].([]any)
+	if !ok || len(command) != 1 || command[0] != "/usr/local/bin/detritus" {
+		t.Fatalf("invalid detritus command: %v", detritus["command"])
+	}
+
+	plan, err := os.ReadFile(filepath.Join(home, ".config", "opencode", "commands", "plan.md"))
+	if err != nil {
+		t.Fatalf("plan command was not written: %v", err)
+	}
+	if !strings.Contains(string(plan), `name="flows/plan/plan"`) || !strings.Contains(string(plan), "$ARGUMENTS") {
+		t.Fatalf("plan command has unexpected content:\n%s", plan)
+	}
+
+	truthseeker, err := os.ReadFile(filepath.Join(home, ".config", "opencode", "commands", "truthseeker.md"))
+	if err != nil {
+		t.Fatalf("truthseeker command was not written: %v", err)
+	}
+	if !strings.Contains(string(truthseeker), `name="flows/principles/truthseeker"`) {
+		t.Fatalf("truthseeker command has unexpected content:\n%s", truthseeker)
+	}
+}
+
+func TestOpenCodeConfigFileUsesExistingJSONC(t *testing.T) {
+	home := t.TempDir()
+	config := filepath.Join(home, ".config", "opencode", "opencode.jsonc")
+	if err := os.MkdirAll(filepath.Dir(config), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config, []byte(`{"$schema":"https://opencode.ai/config.json"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	setupOpenCode(home, "/usr/local/bin/detritus", false)
+
+	if !fileExists(config) {
+		t.Fatal("existing JSONC config was not retained")
+	}
+	if fileExists(filepath.Join(filepath.Dir(config), "opencode.json")) {
+		t.Fatal("setup created opencode.json beside an existing JSONC config")
+	}
+	if !fileContains(config, `"detritus"`) {
+		t.Fatal("detritus MCP entry was not added to JSONC config")
+	}
+}
+
+func TestOpenCodeConfigPrefersJSONCAndSupportsComments(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".config", "opencode")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "opencode.json"), []byte(`{"mcp":{"detritus":{"enabled":false}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	config := filepath.Join(dir, "opencode.jsonc")
+	if err := os.WriteFile(config, []byte("{\n  // User settings\n  \"mcp\": {\n    \"other\": {\"type\": \"local\", \"command\": [\"other\"],},\n  },\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	setupOpenCode(home, "/usr/local/bin/detritus", false)
+
+	raw, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data map[string]any
+	if err := json.Unmarshal(raw, &data); err != nil {
+		t.Fatalf("parse rewritten JSONC config: %v", err)
+	}
+	mcp := data["mcp"].(map[string]any)
+	if _, ok := mcp["other"]; !ok {
+		t.Fatalf("unrelated JSONC MCP config was not preserved: %v", mcp)
+	}
+	detritus, ok := mcp["detritus"].(map[string]any)
+	if !ok || detritus["enabled"] != true {
+		t.Fatalf("detritus config was not updated in effective JSONC file: %v", mcp)
+	}
+}
+
+func TestOpenCodeConfigDirUsesXDGConfigHome(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+
+	got := openCodeConfigDir(t.TempDir())
+	want := filepath.Join(configHome, "opencode")
+	if got != want {
+		t.Fatalf("OpenCode config dir = %q, want %q", got, want)
+	}
+}
+
+func TestOpenCodeConfigDirUsesOpenCodeOverride(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("OPENCODE_CONFIG_DIR", configDir)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	if got := openCodeConfigDir(t.TempDir()); got != configDir {
+		t.Fatalf("OpenCode config dir = %q, want %q", got, configDir)
+	}
+}
+
+func TestOpenCodeConfigFileUsesOpenCodeOverride(t *testing.T) {
+	config := filepath.Join(t.TempDir(), "custom.jsonc")
+	t.Setenv("OPENCODE_CONFIG", config)
+
+	if got := openCodeConfigFile(t.TempDir()); got != config {
+		t.Fatalf("OpenCode config file = %q, want %q", got, config)
+	}
+}
+
+func TestSetupOpenCodePrunesOnlyGeneratedCommands(t *testing.T) {
+	home := t.TempDir()
+	commands := filepath.Join(home, ".config", "opencode", "commands")
+	if err := os.MkdirAll(commands, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(commands, "removed.md")
+	if err := os.WriteFile(stale, []byte("Call the detritus MCP tool `kb_get` with `name=\"removed\"`"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	custom := filepath.Join(commands, "custom.md")
+	if err := os.WriteFile(custom, []byte("My own command that can call kb_get."), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	setupOpenCode(home, "/usr/local/bin/detritus", false)
+
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale generated command was not pruned: %v", err)
+	}
+	if _, err := os.Stat(custom); err != nil {
+		t.Fatalf("custom command was removed: %v", err)
+	}
+}
+
+func TestSetupOpenCodePreservesCustomCommandWithConflictingName(t *testing.T) {
+	home := t.TempDir()
+	commands := filepath.Join(home, ".config", "opencode", "commands")
+	if err := os.MkdirAll(commands, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	custom := filepath.Join(commands, "plan.md")
+	const content = "My custom plan command."
+	if err := os.WriteFile(custom, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	setupOpenCode(home, "/usr/local/bin/detritus", false)
+
+	got, err := os.ReadFile(custom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != content {
+		t.Fatalf("custom command was overwritten: %q", got)
+	}
+}
+
 // TestRemoveMCPServerStripsStaleCandyland verifies that removeMCPServer deletes a
 // stale candyland entry while leaving detritus and any other server untouched.
 func TestRemoveMCPServerStripsStaleCandyland(t *testing.T) {

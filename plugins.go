@@ -74,7 +74,11 @@ func writePluginCommands(dir string) error {
 	}
 	want := pluginCommandFiles()
 	for fname, content := range want {
-		if err := os.WriteFile(filepath.Join(dir, fname), []byte(content), 0o644); err != nil {
+		path := filepath.Join(dir, fname)
+		if existing, err := os.ReadFile(path); err == nil && !strings.Contains(string(existing), pluginCommandGeneratedMarker) {
+			continue
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 			return err
 		}
 	}
