@@ -3,6 +3,8 @@ description: Drive a settled plan to a PR with a parallel tech-lead + coders imp
 argument-hint: "[plan slug or .plan/<slug>.md path]"
 ---
 
+<!-- detritus-generated-command -->
+
 The user invoked this command with: $ARGUMENTS
 
 Call the detritus MCP tool `kb_get` with `name="flows/build/forge"` and follow the returned guidance.

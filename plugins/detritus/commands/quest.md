@@ -3,6 +3,8 @@ description: The one flexible, persistent iterative loop in the candyland sideca
 argument-hint: "[objective] [--per-finding] [folder ...]"
 ---
 
+<!-- detritus-generated-command -->
+
 The user invoked this command with: $ARGUMENTS
 
 Call the detritus MCP tool `kb_get` with `name="flows/build/quest"` and follow the returned guidance.

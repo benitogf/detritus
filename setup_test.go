@@ -236,7 +236,7 @@ func TestSetupOpenCodePrunesOnlyGeneratedCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	stale := filepath.Join(commands, "removed.md")
-	if err := os.WriteFile(stale, []byte("Call the detritus MCP tool `kb_get` with `name=\"removed\"`"), 0o644); err != nil {
+	if err := os.WriteFile(stale, []byte(pluginCommandGeneratedMarker), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	custom := filepath.Join(commands, "custom.md")
@@ -262,6 +262,29 @@ func TestSetupOpenCodePreservesCustomCommandWithConflictingName(t *testing.T) {
 	}
 	custom := filepath.Join(commands, "plan.md")
 	const content = "My custom plan command."
+	if err := os.WriteFile(custom, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	setupOpenCode(home, "/usr/local/bin/detritus", false)
+
+	got, err := os.ReadFile(custom)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != content {
+		t.Fatalf("custom command was overwritten: %q", got)
+	}
+}
+
+func TestSetupOpenCodePreservesCustomCommandThatUsesKBGet(t *testing.T) {
+	home := t.TempDir()
+	commands := filepath.Join(home, ".config", "opencode", "commands")
+	if err := os.MkdirAll(commands, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	custom := filepath.Join(commands, "truthseeker.md")
+	const content = "Call the detritus MCP tool `kb_get` with `name=\"custom\"`."
 	if err := os.WriteFile(custom, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}

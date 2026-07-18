@@ -3,6 +3,8 @@ description: Recurring loop that takes a feature from /plan all the way to an op
 argument-hint: <feature description> [interval] [--platform auto|codex|claude-code|github-actions|cursor|windsurf|generic]
 ---
 
+<!-- detritus-generated-command -->
+
 The user invoked this command with: $ARGUMENTS
 
 Call the detritus MCP tool `kb_get` with `name="flows/build/smith"` and follow the returned guidance.
