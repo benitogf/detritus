@@ -16,7 +16,7 @@ const pluginCommandsDir = "plugins/detritus/commands"
 
 // pluginCommandGeneratedMarker identifies a shim this generator owns, so the
 // prune step never deletes a hand-authored command file.
-const pluginCommandGeneratedMarker = "Call the detritus MCP tool `kb_get`"
+const pluginCommandGeneratedMarker = "<!-- detritus-generated-command -->"
 
 // extractFrontmatterField returns the first `field: value` from a doc's YAML
 // frontmatter, or "" if absent.
@@ -42,6 +42,7 @@ func pluginCommandContent(name, desc, hint string) string {
 		fmt.Fprintf(&b, "argument-hint: %s\n", hint)
 	}
 	b.WriteString("---\n\n")
+	b.WriteString(pluginCommandGeneratedMarker + "\n\n")
 	b.WriteString("The user invoked this command with: $ARGUMENTS\n\n")
 	fmt.Fprintf(&b, "Call the detritus MCP tool `kb_get` with `name=\"%s\"` and follow the returned guidance.\n", name)
 	return b.String()
@@ -89,4 +90,40 @@ func writePluginCommands(dir string) error {
 		}
 	}
 	return nil
+}
+
+// writeOpenCodeCommands installs flow commands without replacing user-owned
+// commands that share a name in OpenCode's global command directory.
+func writeOpenCodeCommands(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	want := pluginCommandFiles()
+	for fname, content := range want {
+		path := filepath.Join(dir, fname)
+		if existing, err := os.ReadFile(path); err == nil && !isGeneratedOpenCodeCommand(string(existing), content) {
+			continue
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			return err
+		}
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".md") || want[e.Name()] != "" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err == nil && strings.Contains(string(data), pluginCommandGeneratedMarker) {
+			os.Remove(filepath.Join(dir, e.Name()))
+		}
+	}
+	return nil
+}
+
+func isGeneratedOpenCodeCommand(existing, generated string) bool {
+	if strings.Contains(existing, pluginCommandGeneratedMarker) {
+		return true
+	}
+	return existing == strings.Replace(generated, pluginCommandGeneratedMarker+"\n\n", "", 1)
 }

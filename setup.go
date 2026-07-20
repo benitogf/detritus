@@ -211,15 +211,9 @@ func RunSetup(binaryPath string, dryRun bool) error {
 	// placed binary.
 	binaryPath = selfPlace(binaryPath, dryRun)
 
-	// Fetch the candyland sidecar binary beside detritus so the launcher can
-	// start it on demand (the build flows drive it over REST; it is not
-	// registered as an MCP). Best-effort: skips cleanly when there's no release yet.
-	fetchCandylandBinary(binaryPath, dryRun)
-
-	// Companion binaries for the /pdf flows (Typst render, D2 diagrams),
-	// installed beside detritus. Best-effort like the candyland fetch.
-	fetchTypstBinary(binaryPath, dryRun)
-	fetchD2Binary(binaryPath, dryRun)
+	// OpenCode comes first so other host-specific setup failures cannot prevent
+	// slash-command installation.
+	setupOpenCode(home, binaryPath, dryRun)
 
 	// Windsurf
 	setupWindsurf(home, binaryPath, docs, dryRun)
@@ -236,12 +230,21 @@ func RunSetup(binaryPath string, dryRun bool) error {
 	// Codex
 	setupCodex(home, binaryPath, docs, dryRun)
 
+	// GitHub Copilot CLI
+	setupCopilotCLI(home, binaryPath, dryRun)
+
 	// Verdent
 	if verdentDetected(home) {
 		setupVerdent(home, binaryPath, docs, dryRun)
 	} else {
 		fmt.Println("Verdent not detected; skipping Verdent setup.")
 	}
+
+	// Fetch optional companion binaries after host configuration so a slow or
+	// unavailable release download cannot delay installing MCP and slash commands.
+	fetchCandylandBinary(binaryPath, dryRun)
+	fetchTypstBinary(binaryPath, dryRun)
+	fetchD2Binary(binaryPath, dryRun)
 
 	// Bootstrap cache: scripts/detritus-mcp.js re-downloads the binary only when
 	// the cached file is missing, so invalidate it here or the in-repo MCP server
@@ -254,6 +257,177 @@ func RunSetup(binaryPath string, dryRun bool) error {
 	}
 
 	return nil
+}
+
+// ---- OpenCode --------------------------------------------------------------
+
+func setupOpenCode(home, binaryPath string, dryRun bool) {
+	configFile := openCodeConfigFile(home)
+	commandsDir := filepath.Join(openCodeConfigDir(home), "commands")
+	if dryRun {
+		fmt.Printf("[dry-run] Would upsert detritus into %s (mcp, type=local)\n", configFile)
+		fmt.Printf("[dry-run] Would write OpenCode slash commands to %s\n", commandsDir)
+		return
+	}
+
+	upsertOpenCodeMCPConfig(configFile, binaryPath)
+	if err := writeOpenCodeCommands(commandsDir); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: OpenCode commands dir: %v\n", err)
+		return
+	}
+	fmt.Printf("OpenCode commands: %s\n", commandsDir)
+	fmt.Println("Restart OpenCode to discover Detritus slash commands such as /truthseeker.")
+}
+
+// openCodeConfigFile selects the effective global config. OpenCode loads JSONC
+// after JSON, so it wins when both files define the same setting.
+func openCodeConfigFile(home string) string {
+	if file := os.Getenv("OPENCODE_CONFIG"); file != "" {
+		return file
+	}
+	dir := openCodeConfigDir(home)
+	jsoncFile := filepath.Join(dir, "opencode.jsonc")
+	if fileExists(jsoncFile) {
+		return jsoncFile
+	}
+	return filepath.Join(dir, "opencode.json")
+}
+
+// openCodeConfigDir matches OpenCode's XDG config resolution on every platform.
+func openCodeConfigDir(home string) string {
+	if dir := os.Getenv("OPENCODE_CONFIG_DIR"); dir != "" {
+		return dir
+	}
+	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
+		return filepath.Join(dir, "opencode")
+	}
+	return filepath.Join(home, ".config", "opencode")
+}
+
+// upsertOpenCodeMCPConfig configures detritus using OpenCode's local MCP
+// schema while preserving the user's other OpenCode settings and servers.
+func upsertOpenCodeMCPConfig(file, command string) {
+	data := map[string]any{}
+	if raw, err := os.ReadFile(file); err == nil && len(raw) > 0 {
+		if err := json.Unmarshal(jsoncToJSON(raw), &data); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to parse %s: %v\n", file, err)
+			return
+		}
+	}
+	if _, ok := data["$schema"]; !ok {
+		data["$schema"] = "https://opencode.ai/config.json"
+	}
+
+	mcp, ok := data["mcp"].(map[string]any)
+	if !ok {
+		mcp = map[string]any{}
+	}
+	mcp["detritus"] = map[string]any{
+		"type":    "local",
+		"command": []any{command},
+		"enabled": true,
+	}
+	data["mcp"] = mcp
+
+	out, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to marshal OpenCode config: %v\n", err)
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: OpenCode config dir: %v\n", err)
+		return
+	}
+	if err := os.WriteFile(file, append(out, '\n'), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not write %s: %v\n", file, err)
+		return
+	}
+	fmt.Printf("OpenCode MCP config: %s\n", file)
+}
+
+// jsoncToJSON removes JSONC comments and trailing commas before unmarshalling.
+// The config is rewritten as formatted JSON after a successful update.
+func jsoncToJSON(raw []byte) []byte {
+	withoutComments := make([]byte, 0, len(raw))
+	inString := false
+	escaped := false
+	for i := 0; i < len(raw); i++ {
+		c := raw[i]
+		if inString {
+			withoutComments = append(withoutComments, c)
+			if escaped {
+				escaped = false
+				continue
+			}
+			if c == '\\' {
+				escaped = true
+			} else if c == '"' {
+				inString = false
+			}
+			continue
+		}
+		if c == '"' {
+			inString = true
+			withoutComments = append(withoutComments, c)
+			continue
+		}
+		if c == '/' && i+1 < len(raw) && raw[i+1] == '/' {
+			i++
+			for i+1 < len(raw) && raw[i+1] != '\n' {
+				i++
+			}
+			continue
+		}
+		if c == '/' && i+1 < len(raw) && raw[i+1] == '*' {
+			i += 2
+			for i < len(raw) && (raw[i] != '*' || i+1 == len(raw) || raw[i+1] != '/') {
+				if raw[i] == '\n' {
+					withoutComments = append(withoutComments, '\n')
+				}
+				i++
+			}
+			if i < len(raw) {
+				i++
+			}
+			continue
+		}
+		withoutComments = append(withoutComments, c)
+	}
+
+	withoutTrailingCommas := make([]byte, 0, len(withoutComments))
+	inString = false
+	escaped = false
+	for i, c := range withoutComments {
+		if inString {
+			withoutTrailingCommas = append(withoutTrailingCommas, c)
+			if escaped {
+				escaped = false
+				continue
+			}
+			if c == '\\' {
+				escaped = true
+			} else if c == '"' {
+				inString = false
+			}
+			continue
+		}
+		if c == '"' {
+			inString = true
+			withoutTrailingCommas = append(withoutTrailingCommas, c)
+			continue
+		}
+		if c == ',' {
+			j := i + 1
+			for j < len(withoutComments) && (withoutComments[j] == ' ' || withoutComments[j] == '\t' || withoutComments[j] == '\n' || withoutComments[j] == '\r') {
+				j++
+			}
+			if j < len(withoutComments) && (withoutComments[j] == '}' || withoutComments[j] == ']') {
+				continue
+			}
+		}
+		withoutTrailingCommas = append(withoutTrailingCommas, c)
+	}
+	return withoutTrailingCommas
 }
 
 // ---- Windsurf ---------------------------------------------------------------
@@ -270,6 +444,58 @@ func setupWindsurf(home, binaryPath string, _ []docEntry, dryRun bool) {
 	}
 	upsertMCP(cfgFile, "mcpServers", binaryPath)
 	removeMCPServer(cfgFile, "mcpServers", "candyland")
+}
+
+// ---- GitHub Copilot CLI ----------------------------------------------------
+
+func setupCopilotCLI(home, binaryPath string, dryRun bool) {
+	cfgFile := filepath.Join(home, ".copilot", "mcp-config.json")
+	if dryRun {
+		fmt.Printf("[dry-run] Would upsert detritus into %s (mcpServers, type=local)\n", cfgFile)
+		fmt.Printf("[dry-run] Would remove stale candyland MCP entry from %s\n", cfgFile)
+		return
+	}
+	if err := upsertCopilotCLIMCP(cfgFile, binaryPath); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: Copilot CLI MCP config: %v\n", err)
+		return
+	}
+	removeMCPServer(cfgFile, "mcpServers", "candyland")
+}
+
+// upsertCopilotCLIMCP writes the Copilot CLI shape exactly as expected:
+// mcpServers.detritus = { type:"local", command:"...", args:[], tools:["*"] }.
+func upsertCopilotCLIMCP(file, command string) error {
+	data := map[string]any{}
+	if raw, err := os.ReadFile(file); err == nil && len(raw) > 0 {
+		if err := json.Unmarshal(raw, &data); err != nil {
+			return fmt.Errorf("parse %s: %w", file, err)
+		}
+	}
+
+	parent, ok := data["mcpServers"].(map[string]any)
+	if !ok {
+		parent = map[string]any{}
+	}
+	parent["detritus"] = map[string]any{
+		"type":    "local",
+		"command": command,
+		"args":    []any{},
+		"tools":   []any{"*"},
+	}
+	data["mcpServers"] = parent
+
+	out, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal %s: %w", file, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		return fmt.Errorf("create directory for %s: %w", file, err)
+	}
+	if err := os.WriteFile(file, append(out, '\n'), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", file, err)
+	}
+	fmt.Printf("Updated detritus in %s\n", file)
+	return nil
 }
 
 // ---- VS Code ----------------------------------------------------------------
@@ -294,10 +520,12 @@ func vscodeUserDirs(home string) []string {
 
 func setupVSCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 	dirs := vscodeUserDirs(home)
+	configured := false
 	for _, dir := range dirs {
 		if !dirExists(dir) {
 			continue
 		}
+		configured = true
 		if dryRun {
 			fmt.Printf("[dry-run] Would upsert detritus into %s/mcp.json (servers)\n", dir)
 			fmt.Printf("[dry-run] Would remove stale candyland MCP entry from %s/mcp.json\n", dir)
@@ -313,6 +541,9 @@ func setupVSCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 	generateSharedPrompts(home, docs, dryRun)
 	generateInlineCommandInstructions(home, docs, dryRun)
 	generateAgentFile(home, dryRun)
+	if configured && !dryRun {
+		fmt.Println("Reload the VS Code window to discover Detritus prompts such as /plan.")
+	}
 }
 
 func generateSharedPrompts(home string, docs []docEntry, dryRun bool) {
@@ -1169,6 +1400,26 @@ func printVerification(home, binaryPath string) {
 		fmt.Println("  [PASS] Copilot shared prompts/instructions")
 	} else {
 		fmt.Println("  [WARN] Copilot shared prompts/instructions")
+	}
+	copilotCLIFile := filepath.Join(home, ".copilot", "mcp-config.json")
+	if fileContains(copilotCLIFile, `"detritus"`) {
+		fmt.Println("  [PASS] Copilot CLI MCP entry")
+	} else {
+		fmt.Println("  [WARN] Copilot CLI MCP entry not found")
+	}
+
+	// OpenCode
+	openCodeConfig := openCodeConfigFile(home)
+	openCodeCommands := filepath.Join(openCodeConfigDir(home), "commands")
+	if fileContains(openCodeConfig, `"detritus"`) {
+		fmt.Println("  [PASS] OpenCode MCP entry")
+	} else {
+		fmt.Println("  [WARN] OpenCode MCP entry not found")
+	}
+	if fileExists(filepath.Join(openCodeCommands, "plan.md")) {
+		fmt.Println("  [PASS] OpenCode slash commands")
+	} else {
+		fmt.Println("  [WARN] OpenCode slash commands not found")
 	}
 
 	// Verdent
