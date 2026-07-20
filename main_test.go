@@ -474,13 +474,15 @@ func TestGeneratedArtifactsAreTracked(t *testing.T) {
 			t.Errorf("generated plugin shim %s is not tracked in git (gitignored or unstaged) — a .gitignore slip would ship a broken plugin", p)
 		}
 	}
-	// The embedded KB blob is the opposite case: it is a deterministic build
-	// artifact (regenerated from docs/ by `go generate`, which the release
-	// workflow runs before building) and is deliberately NOT committed, so
-	// doc-touching branches don't binary-conflict on it. Assert it stays out of
-	// the index — a future accidental commit would revive that recurring conflict.
-	if tracked("generated/data.gob")["generated/data.gob"] {
-		t.Error("generated/data.gob must NOT be tracked in git — it is a gitignored //go:embed artifact built by `go generate`; committing it reintroduces per-branch binary merge conflicts")
+	// The generated/ dir is the opposite case: it holds only build artifacts
+	// (the embedded KB blob data.gob, regenerated from docs/ by `go generate`,
+	// which the release workflow runs before building) and is deliberately NOT
+	// committed, so doc-touching branches don't binary-conflict on it. Assert
+	// the whole dir stays out of the index — an accidental commit would revive
+	// that recurring conflict, and stray local artifacts (e.g. an on-disk
+	// search index from an older build) must never ride along either.
+	for p := range tracked("generated") {
+		t.Errorf("%s must NOT be tracked in git — generated/ holds only gitignored build artifacts (`go generate`); committing them reintroduces per-branch binary merge conflicts", p)
 	}
 }
 
