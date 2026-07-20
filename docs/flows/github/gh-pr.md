@@ -187,7 +187,7 @@ Structure the body:
    - It restates information visible from the diff or PR body without adding analysis.
    - It's "no test for this" when the surrounding code has no test surface to extend (file the follow-up issue separately, don't pad the review).
 
-   **Excluded ≠ discarded.** The list above governs the **posted review body** only. Every verified finding it excludes (pre-existing, out of scope, nit-class) is still reported to the user in the session summary alongside the review, and each real, actionable defect among them gets its own tracked issue via `/gh-issue-create` (`core/review-rigor` → RV-F5). A finding may be kept out of the review; it may never silently vanish.
+   **Excluded ≠ discarded.** The list above governs the **posted review body** only. Every verified finding it excludes (pre-existing, out of scope, nit-class) is still reported to the user in the session summary alongside the review, and each real, actionable defect among them gets its own tracked issue via `/gh-issue-create`, labeled `icebox` as an out-of-scope finding parked mid-work (`core/icebox`; `core/review-rigor` → RV-F5). A finding may be kept out of the review; it may never silently vanish.
 
    Two items is a lot. Four is almost always padding. Zero is the right answer more often than the structure suggests.
 
@@ -273,7 +273,7 @@ Then return the working tree to the repo's default branch so the user is left on
 - In-scope cleanups (commented-out code, stale comments referencing removed symbols, vestigial config from a removal, debug prints added in this PR) are blockers, not non-blockers. Do not downgrade them.
 - Never pad the review with filler strengths to cushion criticism, filler blockers to look thorough, or filler non-blockers to look diligent. "Nothing to flag" is a valid finding.
 - Never cap the blocker list. List every blocker you found, however many that is.
-- Never include a non-blocker you've qualified with "pre-existing", "standard for this repo", "out of scope", "trivial", etc. — those qualifiers are you arguing against your own item. Exclusion is from the review body only: surface the excluded finding to the user and route real defects to a tracked issue — never silently discard (`core/review-rigor` → RV-F5).
+- Never include a non-blocker you've qualified with "pre-existing", "standard for this repo", "out of scope", "trivial", etc. — those qualifiers are you arguing against your own item. Exclusion is from the review body only: surface the excluded finding to the user and route real defects to a tracked issue labeled `icebox` as an out-of-scope finding parked mid-work (`core/icebox`) — never silently discard (`core/review-rigor` → RV-F5).
 - Never restate a point already made in the PR body, a prior review, a commit message, or the linked issue (Phase 4b).
 - Never omit the attribution footer.
 - Never quote secrets inline even when flagging — point at the line and describe the class.

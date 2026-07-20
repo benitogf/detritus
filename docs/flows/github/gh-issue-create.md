@@ -11,6 +11,7 @@ when: User invokes /gh-issue-create to capture something being discussed (bug, f
 related:
   - flows/github/gh-issue-work
   - flows/github/gh-feedback-work
+  - core/icebox
 ---
 
 # /gh-issue-create — Draft & File a GitHub Issue
@@ -33,6 +34,7 @@ This applies to issue bodies, PR bodies, comment bodies, release notes. It does 
 - `<owner>/<repo>` — target a specific repo. Otherwise default to the cwd repo.
 - Free-text topic hint — focus the draft on a specific aspect of the conversation.
 - Nothing at all — use the current conversation + the cwd repo.
+- Icebox origin signal — an optional deferral flag propagated from the invoking chain (via `flows/github/gh` Phase 2) marking this as a mid-work deferral. Reinforcement only; classification happens regardless (see Phase 4.5).
 
 ## Phase 0: Locate target repo
 
@@ -122,6 +124,17 @@ Print title + body exactly as they will be posted.
 
 When in doubt about whether the instruction was explicit, ask. The gate's purpose is letting the user see the drafted content before it goes public, not extracting a yes to a request they already made.
 
+## Phase 4.5: Classify origin (icebox)
+
+Decide which kind of issue this is:
+
+- **(a) PRIMARY ASK** — the thing this session was asked to create or work: user-directed creation, a `/smith` delivery seed issue, or a maintainer-flow KB-delta issue.
+- **(b) MID-WORK DEFERRAL** — an out-of-scope finding an agent surfaced while doing other work: RV-F5 review routing, a `core/completion` disposition-2 feature-split, or an out-of-scope feedback/follow-up/ask.
+
+Default rule, applied EVEN WHEN no caller signal was passed: was this session/agent asked to do this work, or is it about to do it now? No to both → mid-work deferral → icebox. A propagated icebox signal or an explicit deferral handoff confirms (b); ambiguity → ask.
+
+Case (b) → the Phase 5 POST applies the `icebox` label per `core/icebox`. Case (a) → no label.
+
 ## Phase 5: Post
 
 Use the REST API (not `gh issue create`, which can surface the Projects-classic GraphQL warning as a failure on some repos):
@@ -130,6 +143,16 @@ Use the REST API (not `gh issue create`, which can surface the Projects-classic 
 gh api --method POST repos/<owner>/<repo>/issues \
   -f title="<title>" \
   -f body="$(cat /tmp/issue-body.md)" \
+  --jq '{number, html_url}'
+```
+
+When Phase 4.5 classified this as a deferral: first ensure the `icebox` label exists (idempotent ensure-label step per `core/icebox`), then add `-f "labels[]=icebox"` to the POST above:
+
+```
+gh api --method POST repos/<owner>/<repo>/issues \
+  -f title="<title>" \
+  -f body="$(cat /tmp/issue-body.md)" \
+  -f "labels[]=icebox" \
   --jq '{number, html_url}'
 ```
 
@@ -165,4 +188,5 @@ https://github.com/<owner>/<repo>/issues/<n>
 - Don't open obvious duplicates — warn on near-match titles.
 - The attribution footer goes on the body, never the title.
 - The issue body is the single source of truth for this ask. If the user refines scope in later turns, edit the body in place (`gh api --method PATCH .../issues/<n>`) — don't leave a comment trail that duplicates what the body already says.
+- A mid-work deferral issue filed without the `icebox` label is a doctrine miss; a primary-ask issue that carries it is too. Classification is owned by Phase 4.5 (`core/icebox`).
 - **Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") surfaced while drafting the issue is an incident — detect and route per `core/ego` (→ `/grow`), after finishing the deliverable.

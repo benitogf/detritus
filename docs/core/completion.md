@@ -90,7 +90,8 @@ fourth option — it is retired as a catch-all and resolves only to disposition 
    own PR in that repo (`core/build` → *Multi-repo delivery*: one feature → a PR per impacted repo, N≥1,
    no cap), never demoted to a feature-split or a blocker because it crosses a repo boundary.
 2. **Genuinely separate feature (outside the agreed scope) → FEATURE-SPLIT.** A distinct, named new
-   plan or issue — never a silent park.
+   plan or issue — never a silent park. When the feature-split becomes a GitHub issue rather than a
+   plan, it is filed as an icebox issue (`core/icebox`).
    - Developer-facing (`/plan`, `/forge`, `/smith`): surface it for triage in the State block's
      *Blockers & feature-splits* section.
    - Autonomous (`/vibe`): the architect decides, records, and splits a truly separate feature into its

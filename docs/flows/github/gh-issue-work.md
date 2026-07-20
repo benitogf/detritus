@@ -263,7 +263,7 @@ Print the PR URL on its own line, then a one-sentence summary of what was done. 
 After the PR is open, the user may give additional input in the same chat session (not as a GitHub review comment). Handle it based on scope:
 
 - **Same scope** (refinement, clarification, correction of the original ask) — edit the issue body in place via `gh api --method PATCH repos/<owner>/<repo>/issues/<n> -f body=...` to reflect the final state. Add follow-up commits to the existing PR branch. Do NOT leave chat-originated changes in the issue's comment thread or as PR comments — the issue body stays the single source of truth.
-- **Out-of-scope** (a new problem surfaced while reviewing the first) — open a separate issue via `/gh-issue-create` and a separate PR. Do not expand the current PR.
+- **Out-of-scope** (a new problem surfaced while reviewing the first) — open a separate issue via `/gh-issue-create` — an icebox deferral, labeled `icebox` (`core/icebox`) — and a separate PR. Do not expand the current PR.
 - **Ambiguous** — ask the user which bucket the input falls into before touching the issue body or adding commits.
 
 GitHub-review-comment feedback (posted on the PR itself) is handled by `/gh-feedback-work`, not here.
