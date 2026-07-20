@@ -106,7 +106,7 @@ For each post-last-commit feedback item, pick exactly one label:
 |---|---|---|
 | **actionable** | asks for a concrete code change | implement in Phase 3 |
 | **in-body** | question answerable by clarifying the PR body | answer in Phase 6 rewrite |
-| **out-of-scope** | valid but belongs in a separate issue/PR | capture as a follow-up; offer to run `/gh-issue-create` afterwards |
+| **out-of-scope** | valid but belongs in a separate issue/PR | capture as a follow-up icebox issue (`core/icebox`); offer to run `/gh-issue-create` afterwards |
 
 Present the classification to the user. If more than 2 items are **actionable**, WAIT for confirmation before touching code.
 
@@ -196,7 +196,7 @@ Working a blocker on a detritus-authored PR means the blocker survived the `/gh-
 Print, in the terminal (not to GitHub):
 - PR URL on its own line.
 - A one-line summary of which feedback items were addressed and in which commits.
-- If any items were **out-of-scope**, list them and offer to run `/gh-issue-create` to capture each one.
+- If any items were **out-of-scope**, list them and offer to run `/gh-issue-create` to capture each one as an icebox issue (`core/icebox`).
 
 ## Guardrails
 

@@ -44,7 +44,7 @@ The triage produced by this skill (and by `gh-issue-work` Phase 8a, which embeds
 | `/gh-self-review` (and `gh-issue-work` 8a) | You, on your own diff | Pre-merge mechanics | **Local triage → drives your own edits.** Never posted. |
 | `/gh-pr` | You, on someone else's PR | Settled PR | **`gh api ... /reviews` (APPROVE or REQUEST_CHANGES).** Posted. |
 
-Posting your own self-review to your own PR pollutes the review surface with author noise that real reviewers must filter past, and it conflates self-audit (drives fixes before the PR settles) with peer-review (the verdict on a settled PR). If the triage surfaces a **genuinely out-of-scope** item a reviewer should know about, fold it into the PR body as a "Known non-blockers" section (and file a tracked issue for it) — do not post it as a comment / review. This is only for items out of scope for the change; anything you can fix in-scope must be fixed before opening, not parked here (see *Phase 5* stop conditions).
+Posting your own self-review to your own PR pollutes the review surface with author noise that real reviewers must filter past, and it conflates self-audit (drives fixes before the PR settles) with peer-review (the verdict on a settled PR). If the triage surfaces a **genuinely out-of-scope** item a reviewer should know about, fold it into the PR body as a "Known non-blockers" section (and file a tracked issue for it, labeled `icebox` as an out-of-scope finding parked mid-work — `core/icebox`) — do not post it as a comment / review. This is only for items out of scope for the change; anything you can fix in-scope must be fixed before opening, not parked here (see *Phase 5* stop conditions).
 
 ## Phase 1: Resolve scope
 
@@ -133,6 +133,8 @@ Check each claim against the diff per the rigor doc's "Verify the change's claim
 ### Non-blockers — separate issue candidates
 - **<title>** — <file:line>. <Evidence>. Why deferred: <reason>.
 
+Each candidate here that survives to a filed issue is an out-of-scope finding parked mid-work — filed as an icebox issue (`core/icebox`).
+
 Omit any section that's empty. Don't pad. "Nothing to flag" is a valid finding.
 
 ## The change (pull it live)
@@ -165,7 +167,7 @@ A single sub-agent pass can miss regressions a fix introduces. Fixing one blocke
 Stop conditions:
 
 - Sub-agent's triage is empty.
-- The only remaining items are **genuinely out of scope** for this change — a separate feature, a repo-wide cleanup the change didn't touch. A finding you *can* address in-scope is **not** deferrable: fix it and re-loop. Do not converge with handle-able findings unaddressed, and do not park them in a "Known non-blockers" PR section to ship around them — that is the deferral `core/completion`'s exit gate forbids (disposition 1: handle-able in-scope work is done now), applied to your own delivery. Out-of-scope items that survive get a **tracked issue** (via `/gh-issue-create`), not just a loose body line.
+- The only remaining items are **genuinely out of scope** for this change — a separate feature, a repo-wide cleanup the change didn't touch. A finding you *can* address in-scope is **not** deferrable: fix it and re-loop. Do not converge with handle-able findings unaddressed, and do not park them in a "Known non-blockers" PR section to ship around them — that is the deferral `core/completion`'s exit gate forbids (disposition 1: handle-able in-scope work is done now), applied to your own delivery. Out-of-scope items that survive get a **tracked issue** (via `/gh-issue-create`), labeled `icebox` as an out-of-scope finding parked mid-work (`core/icebox`), not just a loose body line.
 - Loop has run 3 iterations. A finding still standing after three review rounds — held open by the continued reviewer against three fix attempts — is not being resolved by iteration; surface the persistence to the dev for accept / defer / escalate.
 
 The test for "can I defer this?" is **not** "is it a blocker?" — it is "is it out of scope for this change?" If you could fix it with the same tools in the same diff, it is in scope, and shipping it as a known non-blocker is a punt.
