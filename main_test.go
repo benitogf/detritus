@@ -482,7 +482,7 @@ func TestGeneratedArtifactsAreTracked(t *testing.T) {
 	// that recurring conflict, and stray local artifacts (e.g. an on-disk
 	// search index from an older build) must never ride along either.
 	for p := range tracked("generated") {
-		t.Errorf("%s must NOT be tracked in git — generated/ holds only gitignored build artifacts (`go generate`); committing them reintroduces per-branch binary merge conflicts", p)
+		t.Errorf("%s must NOT be tracked in git — generated/ holds only gitignored local artifacts (the `go generate` blob and strays from older builds); committing them reintroduces per-branch binary merge conflicts", p)
 	}
 }
 
