@@ -51,6 +51,8 @@ Code context is zero-setup (no pack, no index — see `flows/project/code`):
 - native Grep for text/keyword search across files
 - Identify files/packages that will need changes; understand current patterns and conventions
 
+Research includes the surroundings survey (`core/planning` → *Surroundings survey*) as a hard gate: its existence-check outcome — "already built / in flight / superseded" — is a valid analysis result to surface to the user instead of a build plan.
+
 ## 3. Create Implementation Plan
 
 Call `update_plan` with concrete steps:

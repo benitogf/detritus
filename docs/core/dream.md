@@ -48,6 +48,10 @@ related:
 - **No question cap — it's scenario-based.** Ask as many as it takes; ask none if it's already clear. Match the count to the ambiguity.
 - **When the requirement is vague, don't stop — narrow it.** Drive multiple-choice / multiple-select questions that progressively pin down what the user wants. Vagueness is a cue to offer better options, not a reason to bail.
 
+## The architect owns the surroundings survey
+
+The stakeholder cannot know the surroundings, so the survey (`core/planning` → *Surroundings survey*) is a hard gate the **architect** runs — the multiple-choice questions never delegate existence or composition to the user. If the requirement already exists (fully or partially), the intake's answer is that finding, not a plan to rebuild it.
+
 ## Decisions made on your behalf
 
 Because the user is not reviewing the technical layer, record every non-trivial architect decision in plain language as part of the plan — what was chosen and the one-line why (`core/planning` deliverable field). When `dream` is composed by `/vibe`, these decisions travel with the plan into the PR body's `## Decisions made on your behalf` section.

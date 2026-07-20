@@ -34,9 +34,13 @@ Checkable prohibitions for a coder. A single row fired = the coder is off-contra
 | CO-F2 | Asking the user anything (a decision, a clarification, "which way?") | Emit the fenced `BLOCKED {json:{question, correlationId}}` line to the **tech-lead** | Post-plan no decision reaches the user; the tech-lead is the coder's one tier up (`core/coordination`, `core/completion`). |
 | CO-F3 | Integrating branches, resolving cross-task conflicts, or opening a PR | Leave it — the tech-lead integrates sequentially and delivers | A coder integrating erases the test-defined contract and hides regressions. |
 | CO-F4 | Using `blocked` for a *decision* (ambiguity, difficulty, "unclear how"), or to skip root-cause analysis | Escalate the decision to the tech-lead; investigate the root cause before any `blocked` | `blocked` is **capability-failure only** and a last breath, not a shortcut past work or investigation (`core/completion`). |
+| CO-F5 | Hand-rolling a cross-cutting mechanism (the list at `core/planning` → *Surroundings survey*) when the task spec names a shared one — or when the spec is silent but a sibling-composed mechanism exists | Compose the mechanism the spec names; when the spec is silent and nothing seems to fit, **search first** (grep / `code_map` / git history), then escalate to the tech-lead as a *decision* via the fenced `BLOCKED {json}` line — never decide alone that the repo "has no way to do X" | Reinvention forks the repo's one way of doing things and re-opens bug classes the shared mechanism already paid for. |
 
 ✅ Interface `X` is undefined in my boundary → emit `BLOCKED {"question":"interface X is undefined in my boundary — provide it or widen scope?","correlationId":"task-export-3"}` to the tech-lead.
 ❌ Interface `X` is undefined → open the file outside my boundary and define it myself (CO-F1), or ask the user which signature to use (CO-F2).
+
+✅ Task needs live state delivery to clients; the repo's server library already broadcasts state on keys → compose it.
+❌ Write a custom WebSocket upgrader + origin checks + connection caps inside the task (CO-F5).
 
 ## Inputs a coder receives
 
