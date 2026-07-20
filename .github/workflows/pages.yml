@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
     paths: ['site/**', '.github/workflows/pages.yml']
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -17,12 +20,21 @@ concurrency:
 
 jobs:
   deploy:
+    # On a Release run, only publish once the release actually succeeded.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Inject latest release version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0)
+          echo "Injecting site version: $VERSION"
+          sed -i "s/{{VERSION}}/${VERSION}/g" site/index.html
       - uses: actions/configure-pages@v5
         with:
           enablement: true
