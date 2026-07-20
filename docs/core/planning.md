@@ -75,6 +75,14 @@ Before declaring ready:
 - Every acceptance criterion is safely agent-executable (no live-infrastructure mutation); any criterion that would need a live path names its harness or is rewritten.
 - Helpful but out-of-scope work is handled per the intake's disposition rule (`core/completion`) — a genuinely separate feature is split out, never silently folded into the plan; in-scope work is built, never parked.
 
+### Driving-artifact discrepancies
+
+Research will sometimes prove the driving artifact wrong — an issue/ticket/spec whose text contradicts verified code reality (wrong counts or names of topics/endpoints/variants, stale file paths, acceptance criteria referencing things that don't exist). The mismatch is a **question plus an artifact fix**, never a silent re-scope:
+
+- Surface it as an explicit **question** with the evidence and the proposed correction — not merely as an insight the plan quietly works around. Whether the artifact or the code reflects the intent is a decision, and it is surfaced, never taken silently (the "wrong" text may encode a planned-but-unbuilt requirement).
+- Offer to **correct the source artifact** (edit the issue/ticket body) so artifact and plan agree for every later reader and agent. Developer intake (`/plan`): the user confirms the fix. Executive intake (`/dream`): correct it autonomously and record it under decisions.
+- ❌ Anti-pattern: the plan consumes the verified reality (e.g. 3 Kafka topics where the issue claims 4) and mentions the discrepancy only under Insights — the plan is right but the artifact stays wrong, and the decision was taken from the user silently.
+
 ## Decision-completeness
 
 A plan or task spec is **decision-complete** when the implementer makes **zero** choices. The bar is a single question: *could a low-effort agent implement this without asking anything?* Concretely:
