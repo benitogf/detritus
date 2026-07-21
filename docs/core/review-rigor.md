@@ -276,6 +276,10 @@ Skip this entire subsection unless the diff actually touches Godot files. If onl
 - `WeakRef` for back-references to avoid cycles when both nodes hold strong refs to each other.
 - `_exit_tree` cleanup for things `_ready` set up — timers, autoload subscriptions, file handles.
 
+**Reference semantics.**
+
+- A `Dictionary` / `Array` returned by an accessor is a **reference**, not a copy. When the source mutates it **in place** — a live record a backend/WS layer patches field-by-field (e.g. an ooo-streamed device/state record) — storing that reference and later comparing it against a fresh read of the same source is **always equal**: both sides are the same object mutating together. Any change-detection built on that comparison (a de-dup guard, an "only react when it changed" cache, `if new == _last: return`) **silently never fires**, so the UI keeps the first value forever. The tell: code does `_last = accessor()` (or `_current`, `_prev`) where `accessor()` reaches into a live-patched store, then guards on `x == _last`. Fix: **snapshot before storing** — `_last = value.duplicate()` (deep `duplicate(true)` only if the payload nests containers; shallow suffices for a flat dict). A test that fabricates its own input dicts cannot reproduce this — it only surfaces against the real, in-place-mutated source, so "verified with an injected payload" is not verification of the aliasing path.
+
 **Performance.**
 
 - Per-frame allocations in `_process` / `_physics_process`: avoid `String + String`, repeated `get_node`, `Array.new()` calls. Cache node refs in `_ready`, accumulate strings via `PackedStringArray`.
