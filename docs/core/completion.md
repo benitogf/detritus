@@ -85,7 +85,13 @@ For ANY work a builder or loop encounters, exactly one disposition applies. This
 fourth option — it is retired as a catch-all and resolves only to disposition 2 or 3.
 
 1. **In-scope & handle-able now → DO IT NOW.** The default; it covers the vast majority. No phases, no
-   "future work", no `TODO`, no follow-up issue, no workplan-instead-of-work. Work that is in-scope but
+   "future work", no `TODO`, no follow-up issue, no workplan-instead-of-work. **This covers actions, not
+   just code** — an action the agent can itself perform (rendering an artifact via an existing pipeline,
+   running a documented command, closing/superseding a PR this change obsoletes, updating a tracker) is
+   disposition 1: done now, or — when it is outward-facing/irreversible — surfaced for confirmation and
+   then done, never relegated to a "follow-up (human)" / "next steps" / "optional" note. A human-follow-up
+   list carries ONLY actions requiring an authority the agent cannot exercise (merging, a production
+   deploy, an irreversible external decision the user reserved). Work that is in-scope but
    lands in **another repo** (a co-required cross-repo change) is still disposition 1 — delivered as its
    own PR in that repo (`core/build` → *Multi-repo delivery*: one feature → a PR per impacted repo, N≥1,
    no cap), never demoted to a feature-split or a blocker because it crosses a repo boundary.
@@ -142,6 +148,14 @@ the escalation ladder (`core/coordination`).
 - Handling only the obvious instances of a named pattern/class while leaving others unchanged — with no
   final search proving the set is empty (see *Definition of done* 1a, `grep-to-zero`).
 - Producing a "workplan" / "next steps" doc *in place of* doing the work.
+- Relegating a **handle-able action** to a PR's "follow-up (human)" / "next steps" / "optional" section
+  instead of performing it — rendering an artifact a sibling already has a pipeline for, running a
+  documented command, closing a PR this change supersedes, updating a tracker. The agent's own
+  capability makes it disposition 1; a human-follow-up list holds only actions needing an authority the
+  agent lacks (merging, production deploys, an irreversible external decision the user reserved). An
+  outward-facing action the agent *can* perform is surfaced for confirmation and then done — never parked
+  as a passive note for someone else (e.g. a delivered PR that lists "close the PR this supersedes" and
+  "render the PDF" as human/optional follow-ups when both are one command away).
 - Using "hazard" as a parking lot for handle-able in-scope work.
 - Shipping a placeholder / stub / "simplified for now" implementation of in-scope behavior — a stub is
   deferral in disguise. **Dead-in-prod code — wired only by its own test, or by nothing — is the same
