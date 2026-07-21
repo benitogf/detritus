@@ -167,6 +167,9 @@ the escalation ladder (`core/coordination`).
 - Parking an orchestrator in terminal `blocked` on the **first** failing review/verdict while the gap
   is still finishable within the remediation budget — deferral at the supervisor level (see *The exit
   gate*).
+- Terminating `blocked` on a **no-op remediation pass whose findings are already satisfied at the current
+  integrated HEAD** — a finding computed against a superseded branch base is stale, objective-met-deduped,
+  and delivered, never a blocker (the mirror of parking on the first failure; see *The exit gate*).
 - Treating a co-required **cross-repo** change as a feature-split or blocker to exit one repo's PR
   sooner — it is in-scope (disposition 1), delivered as a PR per impacted repo (`core/build` →
   *Multi-repo delivery*).
@@ -204,6 +207,20 @@ gap that survives the budget is a disposition-3 capability blocker. Parking in t
 **orchestrator / supervisor level**, forbidden exactly as it is at the single-unit level. This binds a
 program-level supervisor reviewing per-commitment verdicts (e.g. a quest's intent review) as much as
 a per-task coder loop — an orchestrator never parks with finishable in-scope work undone.
+
+**A no-op remediation is a delivery signal, not a block — re-verify findings at the integrated HEAD.**
+A review / verification finding is a claim about a *specific* tree. Before a finding drives a remediation
+round — and before a remediation pass that produced **no change** is read as a failure — re-verify it
+against the **current integrated HEAD** (the tree that will ship), not the branch base it was computed
+against. A finding that no longer reproduces at HEAD is **stale** — superseded by an integration merge, a
+sibling fix, or work already landed — and is **objective-met-deduped** (resolved from that evidence, see
+*The durable ledger* → *Objective-met dedup*): never re-fed to the fixer, never the basis for a `blocked`
+terminal. Consequently a remediation pass that makes **no changes because every finding is already
+satisfied at HEAD** is a **resolve-and-deliver** signal, the exact opposite of a block. A "no changes
+after K attempts" guard may terminate `blocked` only when a finding **still reproduces** at the current
+HEAD after the remediation budget; terminating `blocked` on a correct no-op over already-satisfied
+(stale-base) findings strands complete, deliverable work and is the mirror-image false negative of
+parking on the first failure.
 
 The only legitimate hand-backs are three: **milestone / PR-open**, a **capability blocker** (disposition
 3, postmortem-backed), or an **explicit user halt**. A **decision is not a legitimate hand-back** — it
