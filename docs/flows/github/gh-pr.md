@@ -1,5 +1,5 @@
 ---
-description: Hard-review a GitHub PR under truthseeker rigor — verify the PR's own claims, hunt for fragility, demand evidence before flagging OR approving, and post an APPROVE or REQUEST_CHANGES review via `gh api`. Auto-posts without a confirmation gate.
+description: Hard-review a GitHub PR under truthseeker rigor — verify the PR's own claims, hunt for fragility, demand evidence before flagging OR approving, and post an APPROVE or REQUEST_CHANGES review via `gh api`. Auto-posts without a confirmation gate, then keeps watching and re-reviewing the PR until it is merged or closed (`--once` for a single verdict).
 triggers:
   - gh-pr
   - review pr
@@ -8,11 +8,14 @@ triggers:
   - code review
   - review pull request
   - hard review
-when: User wants a rigorous review posted to a GitHub PR. Accepts a full PR URL, `<owner>/<repo>#<n>`, or bare `#<n>` when cwd is a clone of the target repo.
+argument-hint: "[pr] [--once]"
+when: User wants a rigorous review posted to a GitHub PR. By default the skill posts the verdict then keeps watching and re-reviewing the PR until it is merged or closed; `--once` (or "review once" / "just review it") posts one verdict and stops. Accepts a full PR URL, `<owner>/<repo>#<n>`, or bare `#<n>` when cwd is a clone of the target repo.
 related:
   - flows/github/gh
   - flows/github/gh-self-review
+  - flows/github/babysit
   - core/review-rigor
+  - core/janitor-platforms
   - flows/principles/truthseeker
 ---
 
@@ -21,6 +24,8 @@ related:
 Posts an APPROVE or REQUEST_CHANGES review on a posted GitHub PR. The analysis itself — principles, claim verification, second-pass checklist, correctness / fragility / performance / tests / security / scope / conventions / Godot subsections — lives in `core/review-rigor` and is **shared verbatim** with `/gh-self-review`. Same checklist, applied to whichever diff is in scope.
 
 Auto-posts the review — no confirmation gate. The review decision (APPROVE vs. REQUEST_CHANGES vs. COMMENT) is yours to own.
+
+**The default is to keep watching.** After posting the verdict, the skill does not stop — it arms an event-watch on the PR and **re-reviews on each new push or discussion**, re-posting a fresh `commit_id`-pinned verdict **only when the verdict changes**, until the PR is merged or closed (Phase 8). This is the reviewer-seat analogue of `/babysit`'s watch-to-merge: same out-of-band event-watch primitive, but this skill **re-reviews and re-posts a verdict — it never merges, never fixes** (merging is `/babysit`'s job). Pass **`--once`** to post one verdict and stop — today's one-shot behavior; Phases 1–7 run identically, only the watch (Phase 8) is skipped and Phase 7 returns to the default branch immediately.
 
 ## Inputs
 
@@ -46,7 +51,7 @@ Anything else → ask the user which PR via `AskUserQuestion`. Do not guess.
 
 ## Phase 0: Track progress
 
-Initialize a `TodoWrite` list mirroring phases 1–7. Update in real time.
+Initialize a `TodoWrite` list mirroring phases 1–7 (add Phase 8 under the default watch; omit it under `--once`). Update in real time.
 
 ## Phase 1: Resolve target
 
@@ -253,13 +258,43 @@ Capture `html_url` from the response.
 
 Print the review URL on its own line. Follow with one sentence naming the verdict. Nothing else — no recap of the phases, no offer of next steps.
 
-Then return the working tree to the repo's default branch so the user is left on a clean slate (the PR's branch is not their work). Read the default branch from the metadata fetched in Phase 2.
+**Return-to-default timing depends on the mode.** The checkout below returns the working tree to the repo's default branch so the user is left on a clean slate (the PR's branch is not their work). Read the default branch from the metadata fetched in Phase 2.
+
+- **`--once`** — do the return-to-default checkout now, immediately after the single post. This is today's behavior; the skill ends here.
+- **Default (watch)** — do **not** `git checkout <default_branch>` yet. The watch (Phase 8) keeps running against this PR, so the return happens when the watch **terminates** (merged / closed / hand-back), not after the first post. Under watch, this phase reports the first verdict and hands to Phase 8; the branch return is the last thing the watch does on termination.
 
 - Skip the checkout if the user is already on the default branch.
 - Skip the checkout if cwd is not a git repo (e.g. `/gh-pr` was invoked with a fully-qualified `<owner>/<repo>#<n>` from outside any clone).
 - Otherwise: run `git checkout <default_branch>`. Plain checkout — no stash, no force.
   - If it succeeds: confirm with one short line ("← back on master").
   - If git refuses (conflict between uncommitted changes and master): leave the user on the current branch and surface git's exact error message. Do not stash, do not force-discard. Git's refusal is the safety net; the user decides what to do with their tree.
+
+## Phase 8: Watch & re-review (default; skipped under `--once`)
+
+Skip this phase entirely under `--once` (the skill ended at Phase 7). Otherwise, after the first verdict is posted, **keep watching and re-reviewing the PR until it is merged or closed**. This is the reviewer-seat analogue of `/babysit`'s watch-to-merge — same event-watch primitive, but this skill **re-reviews and re-posts a verdict; it never merges, never fixes, never comments outside a review**.
+
+> ### ⛔ The watch must never stall
+>
+> While the PR is open, a live event-watch MUST be armed — the automatic event-watch (the default), or, *only* when no watch primitive is available, an explicit labeled **degraded-fallback** re-invoke hand-off. "Waiting for the next push" is the watch's normal state, not a stop: the watch stays armed and wakes on the next change. Yielding on an open PR with **neither** an armed watch **nor** a stated degraded hand-off is the stall this contract forbids (mirrors `flows/github/babysit` → *The loop must never stall*). Control returns to the user only on a terminal (merged / closed) or a hand-back.
+
+**Arm the watch — delegate the primitive.** Load `core/janitor-platforms` and arm its **event-watch adapter** on this PR — the same out-of-band poll `/babysit` uses, which wakes the model only on a change and is idle (token-cheap) between events. Do **not** name or hardcode a watch primitive here; the adapter owns it (portability rule — `/babysit` delegates the same way). Report the effective cadence in human terms (e.g. "re-reviewing on each push; checking every 60s"). The adapter's review-watch emit set — a new push / HEAD move, a new discussion (comment), merged, closed — is documented in `core/janitor-platforms`' event-watch adapter section.
+
+**On each emitted event** — the event is a hint, not authority: **re-fetch live PR state** (`gh api`, never `gh pr view` — `flows/github/gh` convention #2), reading the current `head.sha` plus reviews / comments the way Phase 3 does. Then:
+
+1. **Merged or closed?** → terminal. Stop the watch, do the deferred Phase-7 return-to-default checkout, and report the outcome (merged / closed-without-merge). This mirrors `/babysit`'s terminal.
+2. **HEAD moved (new push) or new discussion landed since the last review?** → **re-run the review rigor (Phases 3–6) against the new head SHA**, reusing `core/review-rigor` → *Re-review continuity*: held context (the diff understanding, brief, and evidence trail already established), fresh evidence (re-diff the new commits, re-verify against the live tree). This is a **delta re-verify, not a cold re-derive** — the verdict-integrity rules apply unchanged.
+3. **Post only when the verdict changes.** Compute the new verdict. If it differs from the last posted verdict — e.g. a standing `REQUEST_CHANGES` whose blockers a fixing push now clears → **auto-flip to `APPROVE`** and post a fresh `commit_id`-pinned verdict (Phase 6 post template, pinned to the *new* head SHA). If the verdict is **unchanged**, re-review **silently — no post** (the anti-review-spam rule: a re-review that reaches the same verdict adds nothing and must not re-post). Record the last-posted verdict + the SHA it covered so the next event compares against it.
+4. **Otherwise idle** — the event brought no HEAD move and no new discussion (nothing to re-review), or a silent re-review (step 3) reached no verdict change → **confirm the event-watch is still armed** and yield. This is the watch's normal state, not a terminal.
+
+**Notify-only — the watch re-reviews and re-posts a review, nothing more.** It NEVER merges, NEVER comments outside a review, NEVER edits the PR body or branch, NEVER updates-from-base. Merging is `/babysit`'s job; this is the reviewer seat. (Mirrors the adapter's own notify-only rule — `core/janitor-platforms`.)
+
+**No-stall / hand-back rules (adapted from `flows/github/babysit`):**
+
+- While the PR is open, a live watch MUST be armed (automatic event-watch default), or a clearly-labeled degraded-fallback re-invoke hand-off stated when the host can arm no watch primitive (the self-continuation contract in `flows/github/babysit` → *Self-continuation*; verify the primitive is genuinely unavailable before degrading, per `core/janitor-platforms`' availability-verify note). Never refuse to run; degrade instead.
+- **No idle-timeout hand-back by default.** An open PR is never abandoned — with no time budget set, the watch stays armed indefinitely, re-reviewing every change until terminal.
+- **Hand back on total silence only if the user set a time budget, and the timer RESETS on every event.** The watch hands back only after the *whole budget window* elapses with no event at all; any emitted event (a push, a comment, a mergeability transition) resets the clock. On the budget elapsing in silence: report the PR's current state and tell the user to re-invoke `/gh-pr <pr>` to resume watching — a pause, not an abandonment.
+
+**Every event emits one status line** so the watch is observably alive — naming the event handled, whether HEAD moved, the recomputed verdict, whether it posted or re-reviewed silently, and — on any non-terminal wake — the continuation path (the live event-watch confirmed armed, or the labeled degraded hand-off). A wake that reports without an action AND without a confirmed live watch is the stall signature.
 
 ## Guardrails
 
@@ -281,4 +316,9 @@ Then return the working tree to the repo's default branch so the user is left on
 - Never ask the user something researchable. The repo, the KB, and the GitHub API are all reachable.
 - Never leave the user on the PR's branch when the skill ends if a plain `git checkout <default_branch>` would succeed. Don't stash, don't force — if git refuses, leave them put and report.
 - If `gh auth status` fails, surface the error and stop.
+- **The watch is notify-only.** Under the default watch (Phase 8) the skill re-reviews and re-posts a REVIEW only — it NEVER merges, NEVER comments outside a review, NEVER edits the PR body or branch. Merging is `/babysit`'s job; this is the reviewer seat.
+- **Re-post only on a verdict change.** Under watch, an event that re-reviews to the *same* verdict re-reviews **silently** — no post (anti-review-spam). Post a fresh `commit_id`-pinned verdict only when the verdict actually changes (e.g. blockers cleared → auto-flip to APPROVE).
+- **The watch must never stall.** While the PR is open, a live event-watch MUST be armed (automatic default) or a labeled degraded-fallback re-invoke stated — never yield on an open PR with no watch and no hand-off. No idle-timeout hand-back by default (an open PR is never abandoned); hand back on total silence only if the user set a time budget, and the budget timer RESETS on every event.
+- **Delegate the watch primitive — never name it here.** Phase 8 arms `core/janitor-platforms`' event-watch adapter; this skill never names or hardcodes the underlying watch primitive (portability rule; `/babysit` delegates the same way).
+- **`--once` is the one-shot opt-out.** `--once` (or "review once" / "just review it") posts one verdict, returns to the default branch, and stops — Phase 8 is skipped. Watch is the default otherwise.
 - **Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.
