@@ -22,7 +22,7 @@ This is `/gh-pr` plus one guarantee: the clone it runs from is left **exactly as
 
 Call `kb_get` with `name="flows/github/gh-pr"` and follow it **end to end**: resolve target, fetch metadata + short-circuit checks, gather context, timeline cross-check + prior-signal inventory, apply `core/review-rigor`, compose the terse review, and post the `APPROVE` / `REQUEST_CHANGES` / `COMMENT` review pinned to `head_sha` with the attribution footer. Everything in that document applies unchanged **except** where an override below contradicts it.
 
-Because it runs `/gh-pr` end to end, `/gh-pr-safe` **inherits the watch-by-default and `--once`** from `/gh-pr` for free: after the first verdict it keeps watching and re-reviewing the PR until it is merged or closed (`/gh-pr` Phase 8), re-posting a `commit_id`-pinned verdict only on a verdict change; `--once` posts one verdict and stops.
+Because it runs `/gh-pr` end to end, `/gh-pr-safe` **inherits the watch-by-default and `--once`** from `/gh-pr` for free: after the first verdict it keeps watching and re-reviewing the PR until it is merged or closed (`/gh-pr` Phase 8), re-posting a `commit_id`-pinned verdict whenever the verdict materially changes — a tier flip or a changed blocker set — and staying silent only on an identical re-review; `--once` posts one verdict and stops.
 
 ## Step 2 — workspace-safety overrides (these win on any conflict)
 
