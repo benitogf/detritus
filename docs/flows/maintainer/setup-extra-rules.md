@@ -47,6 +47,7 @@ Generate rules ONLY for languages/frameworks actually found. Overwrite existing 
 - **Communication rules**: Match directness/detail to apparent user expertise (infer from code complexity, git history, toolchain sophistication).
 - **Show-reasoning rule**: Makes Claude cite `[rule: file#section]` when rules shape decisions.
 - **Update-context rule**: Keeps CLAUDE.md current after changes.
+- **Checkpoint boundary nudge**: generated ONLY when the user has adopted `/checkpoint` (`flows/project/checkpoint`). An ambient rule that nudges a `/checkpoint` at semantic boundaries — a delivery landed, a plan settled, a pivot. Labeled best-effort: the model has no context-fullness signal and boundary-detection is a judgment call, so it can miss — it supplements `/checkpoint`'s manual path, never replaces it. Overwrite the existing `detritus-*` rule in place on re-run; skip generation entirely if `/checkpoint` is not adopted.
 
 ## Phase 3: Hooks (`~/.claude/hooks/detritus-*` + register in `settings.json`)
 
@@ -57,7 +58,8 @@ Generate hooks ONLY for tools confirmed installed.
 - **Auto-format** (PostToolUse, matcher: `Edit|Write`): gofmt for Go, prettier for JS/TS, black for Python, rustfmt for Rust. Script must check file extension before formatting.
 - **Session context** (SessionStart): Inject working dir, branch, language versions, running containers — only for installed tools.
 - **Task completion** (Stop): Prompt-based hook verifying tests ran and build was checked for code changes.
-- **Context preservation** (PreCompact): If user has infrastructure (servers, deploy targets), preserve those details. Ask before including IPs/hostnames/credentials.
+- **Context preservation** (PreCompact): If user has infrastructure (servers, deploy targets), preserve those details. Ask before including IPs/hostnames/credentials. When the user has adopted `/checkpoint` (`flows/project/checkpoint`), this hook ALSO defensively preserves the checkpoint-doc pointer / infra details before a compact. It CANNOT write the checkpoint (shell-only, no model turn, cannot block or guide compaction) — capture is the model writing the doc at a boundary, not this hook. This hook is purely defensive and is **not required** for `/checkpoint` to work: the flow's resume is pull/name-based (below), so a missing PreCompact hook loses nothing but the belt-and-braces pointer preservation.
+- **Checkpoint topic list** (SessionStart, matchers `clear`/`startup`): an **optional convenience** hook, generated only when the user has adopted `/checkpoint`. On a fresh or just-cleared session it surfaces the **active-topics list** — the same thing `/checkpoint list` shows on demand: each active `.checkpoint/*.md` newest-first (`ls -t`) as `slug · age · one-line orientation` — so the user sees what's resumable, then pulls one by name. It injects the **list**, NOT a specific doc's content: `/checkpoint`'s resume is a pull (name-based / content-match, always propose-and-confirm), so the hook never auto-injects "the right doc" as a resume default and there is no branch-match (the workspace is multiversal — no single branch key). **The skill works fully without this hook**; it is a nicety that shows the list without the user asking. Still a new hook TYPE, not a new mechanism: it rides the same platform detection, `settings.json` registration, orphan-sweep, and `cleanup-extra-rules` teardown documented below.
 
 ### Platform-specific scripts
 
