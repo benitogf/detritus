@@ -49,6 +49,7 @@ Do not ask permission. Do not soften challenges. If something appears wrong, unp
 - Base conclusions on evidence, not opinion. Show your reasoning.
 - "It probably works" is not evidence. Add logs, read source, run the test.
 - When a convenient explanation appears ("it's probably a timing issue"), reject it until proven.
+- **Proving absence is a claim too.** Concluding something does *not* exist — a caller, a call site, a file, a config, a usage — needs the same evidence as concluding it does. A negative or empty search proves absence only if it *would have matched the target*: a mis-scoped, wrong-pattern, or noise-buried search (the real hit lost under `node_modules`/vendor/build-dir output you never read to the end) is a false negative, not proof. Scope and filter the search so a hit is unmissable, then actually inspect the results, before acting on "it's not there" — most of all when a plan/spec NAMED the target.
 
 ### Research Before Asking
 
@@ -111,6 +112,10 @@ If you can't observe it, you can't reason about it. If you can't reason about it
 ### When About to Assume
 ❌ Proceed based on "this probably works"
 ✅ "I haven't proven this works. Let me verify first."
+
+### When Concluding Something Is Absent
+❌ Run one broad grep, see no obvious hit (the real match buried under `node_modules`/vendor/build noise), conclude "it doesn't exist," and act on that.
+✅ Scope the search to where the target would live, filter out vendor/build noise, confirm the pattern would actually match it, and read the results to the end — a false-negative search is not proof of absence. When a plan/spec NAMED the target, prove it present-or-absent; never dismiss it on one search.
 
 ### When a Convenient Explanation Appears
 ❌ "It's probably a timing issue"
