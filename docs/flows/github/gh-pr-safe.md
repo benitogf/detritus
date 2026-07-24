@@ -1,5 +1,5 @@
 ---
-description: Hard-review a posted GitHub PR with the same truthseeker rigor as /gh-pr and auto-post an APPROVE or REQUEST_CHANGES review, but never mutate the working tree of the clone it runs from. Reads via `gh api` or read-only git and isolates any build or test in a throwaway detached worktree; use it instead of /gh-pr when reviewing from a clone you actively work in.
+description: Hard-review a posted GitHub PR with the same truthseeker rigor as /gh-pr and auto-post an APPROVE or REQUEST_CHANGES review, then keep watching and re-reviewing until it is merged or closed (`--once` for a single verdict) — all without mutating the working tree of the clone it runs from. Reads via `gh api` or read-only git and isolates any build or test in a throwaway detached worktree; use it instead of /gh-pr when reviewing from a clone you actively work in.
 triggers:
   - gh-pr-safe
   - safe pr review
@@ -22,6 +22,8 @@ This is `/gh-pr` plus one guarantee: the clone it runs from is left **exactly as
 
 Call `kb_get` with `name="flows/github/gh-pr"` and follow it **end to end**: resolve target, fetch metadata + short-circuit checks, gather context, timeline cross-check + prior-signal inventory, apply `core/review-rigor`, compose the terse review, and post the `APPROVE` / `REQUEST_CHANGES` / `COMMENT` review pinned to `head_sha` with the attribution footer. Everything in that document applies unchanged **except** where an override below contradicts it.
 
+Because it runs `/gh-pr` end to end, `/gh-pr-safe` **inherits the watch-by-default and `--once`** from `/gh-pr` for free: after the first verdict it keeps watching and re-reviewing the PR until it is merged or closed (`/gh-pr` Phase 8), re-posting a `commit_id`-pinned verdict whenever the verdict materially changes — a tier flip or a changed blocker set — and staying silent only on an identical re-review; `--once` posts one verdict and stops.
+
 ## Step 2 — workspace-safety overrides (these win on any conflict)
 
 1. **Never mutate the working tree.** No `git checkout` / `git switch` / `git reset` in the clone; never leave it on a branch other than the one you found; never regenerate its build caches.
@@ -33,11 +35,13 @@ Call `kb_get` with `name="flows/github/gh-pr"` and follow it **end to end**: res
    - run the build/test inside `<tmp>/pr-<n>`
    - clean up on **every** exit path — clean finish, abort, error (build broken → COMMENT, repo unreachable, auth failure), or a `422` re-run: `git -C <clone> worktree remove --force <tmp>/pr-<n> 2>/dev/null; git -C <clone> worktree prune`
 
-   The worktree reuses the clone's object store (fast) and touches only throwaway metadata under `.git/worktrees`, leaving the user's branch, source, and caches untouched. It is created **at most once** per invocation on a fixed `pr-<n>` path, so it cannot accumulate into a forest.
+   The worktree reuses the clone's object store (fast) and touches only throwaway metadata under `.git/worktrees`, leaving the user's branch, source, and caches untouched. There is **at most one live worktree at a time** on the fixed `pr-<n>` path — created for a re-review pass, torn down on that pass's exit, and (under the watch default, where one invocation spans many events at different head SHAs) recreated at the new `head_sha` for the next event that needs a checked-out tree. It never accumulates into a forest: teardown always precedes the next create.
 
 4. **Report phase — no checkout on the way out.** Do **not** run `git checkout <default_branch>` to "return to default." Because Step 2 never switched the clone's branch, there is nothing to return — the clone is already on whatever branch the user left it on, and that checkout would itself be the mutation this skill forbids. Print the review URL on its own line + one sentence naming the verdict, then run the worktree cleanup from override 3 if you created one.
 
 5. **Track the cleanup.** Add an explicit "remove worktree (if created)" item to the progress list so it runs even if the review short-circuits.
+
+6. **The watch's per-event re-reviews stay read-only / detached-worktree.** Each Phase-8 re-review obeys overrides 1 and 2 as written and override 3 per its across-events form: fetch the new head's content via `gh api` / read-only git, and isolate any build or test the re-review needs in the throwaway detached worktree — one live worktree at a time on the `pr-<n>` path, torn down on each pass's exit and recreated at the new event's `head_sha` (override 3), never the clone's tree. Override 4's "no checkout on the way out" already covers the watch: because Step 2 never switched the clone's branch, there is nothing to return when the watch terminates — the deferred `/gh-pr` Phase-7 return-to-default is a no-op here.
 
 ## Why this is a separate skill, not a change to /gh-pr
 

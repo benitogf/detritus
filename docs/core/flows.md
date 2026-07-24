@@ -69,6 +69,8 @@ In-session bounded homologues of quest are `/smith` (single agent) and `/forge` 
 
 `/babysit` (`flows/github/babysit`) is the pipeline's single **watch-to-merge** step — the one place any flow's work reaches `merged`. It composes, it does not merge on its own authority: on each change it dispatches `/gh-feedback-work` for reviewer feedback and merges only when an `APPROVED` review's `commit_id` equals the current HEAD SHA (a push invalidates every prior approval). It is a **terminating loop** — merge is the exit — not a maintenance loop.
 
+Don't conflate this **merge-watch** with the **review-watch**: `/gh-pr` / `/gh-pr-safe` (once a verdict is posted) keep re-reviewing the PR and re-post a verdict on each material verdict-change (a tier flip or a changed blocker set), and **never merge** — that is the reviewer seat, a different job from `/babysit`'s single watch-to-merge. Both borrow the same event-watch primitive (`core/janitor-platforms`); only `/babysit` reaches `merged`.
+
 Because merge is irreversible and gated on a human's review, watch is **opt-in and uniform** across every PR-opening flow; the flow chooses how it offers the phase, but the merge gate is identical:
 
 - **Offer-only flows** — `/smith` and `/forge` open the PR, report the URL, and **offer** `/babysit` as the one-command continuation that watches it to merge. They do not auto-run it: a developer often merges these by hand, and starting a watch loop unbidden would expand the flow's own scope.
