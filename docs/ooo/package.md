@@ -830,8 +830,8 @@ Remote operations only work if the target server has appropriate filters configu
 
 ```go
 // Server side - must have filter for path
-server.OpenFilter("baccarat/burn/starter")  // Enables read/write/delete
+server.OpenFilter("items/electronics/phones/*")  // Enables read/write/delete
 
 // Client side - now RemoteSet will work
-io.RemoteSet(cfg, "baccarat/burn/starter", card)
+io.RemoteSet(cfg, "items/electronics/phones/abc123", item)
 ```

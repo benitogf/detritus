@@ -25,7 +25,7 @@ related:
 
 `/checkpoint` serializes the **load-bearing** context of a **workstream topic** to a durable doc (`.checkpoint/<slug>.md`) at a semantic boundary, so a `/clear` after it is lossless and a fresh session — minutes or **weeks** later — resumes that topic from the doc alone. It is the **priority-aware alternative** to `/compact`'s lossy uniform summarization: it keeps what matters (a fixed schema of load-bearing fields) and drops the re-derivable bulk.
 
-It **composes `core/loop`** — the checkpoint-then-`/clear` discipline and the State-block spine (overwrite-not-append, pruning) are defined there and referenced here, not restated. Where `core/loop` scopes that discipline to recurring/partitioned loops (`/janitor`, `/smith`, `/forge`'s `.plan/PROGRESS-<slug>.md` ledger) keyed on a loop slug, `/checkpoint` brings the *same* spine to any in-session effort with no loop ledger — a `/gh-pr` review-watch, an ad-hoc multi-step task, a debugging session — and derives its slug differently: **from the topic**, not from `core/loop`'s whole-repo/whole-workspace slug table (see *Identity*). The State-block spine reference stands; the slug rule does not carry over.
+It **composes `core/loop`** — the checkpoint-then-`/clear` discipline and the State-block spine (overwrite-not-append, pruning) are defined there and referenced here, not restated. Where `core/loop` scopes that discipline to recurring/partitioned loops (`/janitor`, `/smith`, `/forge`'s `.plan/PROGRESS-<slug>.md` ledger) keyed on a loop slug, `/checkpoint` brings the *same* spine to any in-session effort with no loop ledger — a `/caregiver` review-watch, an ad-hoc multi-step task, a debugging session — and derives its slug differently: **from the topic**, not from `core/loop`'s whole-repo/whole-workspace slug table (see *Identity*). The State-block spine reference stands; the slug rule does not carry over.
 
 ## Identity — one long-lived topic per file
 
@@ -36,7 +36,7 @@ A checkpoint is **one durable, long-lived topic** that spans many sessions: open
 
 ### Slug — agent-derived from the topic
 
-The **slug is agent-derived from the topic of the work**, kebab-case and **human-readable** so a dev can find the file and hand it to another dev: `xstadium-godot`, `checkpoint-skill`, `pivot-deploy-perf`. Readability is the point — a person names their topic, not an opaque key.
+The **slug is agent-derived from the topic of the work**, kebab-case and **human-readable** so a dev can find the file and hand it to another dev: `inventory-ui`, `checkpoint-skill`, `fleet-deploy-perf`. Readability is the point — a person names their topic, not an opaque key.
 
 - **Not the session id** — opaque, and it changes on resume, which would break the round-trip.
 - **Not the git branch** — the workspace is **multi-repo with worktrees** ("multiversal"): a single topic spans several repos/branches, so there is no one branch key to name the file by.
@@ -52,7 +52,7 @@ Schema (the load-bearing set — **multi-repo aware**):
 - **Decisions + why** — the calls made and the reasoning that selected each, so a resume doesn't relitigate them.
 - **Repos / worktrees touched** — each repo/worktree the topic spans. First-class because the workspace is multi-repo; a resume must re-orient across *all* of them, not one.
 - **Artifacts — portable pointers** — **repo + branch + SHA + PR URL** for each artifact. **Never absolute local worktree paths** — they mean nothing on another machine or to another dev. Portability is what makes dev-to-dev handoff and repo-filtering (`/checkpoint list <repo>`) work.
-- **In-flight watches & background tasks (to re-arm on resume)** — every session-scoped live thing: an armed `/babysit` or `/gh-pr` review-watch, background tasks, sub-agents. See *In-flight state safety*.
+- **In-flight watches & background tasks (to re-arm on resume)** — every session-scoped live thing: an armed `/babysit` or `/caregiver` review-watch, background tasks, sub-agents. See *In-flight state safety*.
 - **Next move** — the concrete first action the resumed session takes.
 - **Open questions** — unresolved threads the next session must not drop.
 - **Last user directive** — the most recent pivot or scope change, **dated**.
@@ -75,15 +75,24 @@ After writing, the skill ends with the literal line `checkpoint complete — saf
 Resume is a **pull**: the user reaches for a topic; nothing is injected or greeted at them. There is **no proactive greeting on session start** (host-neutral, needs no hook), and **no silent auto-load** — in a multiversal workspace, loading the *wrong* topic's context is the worst outcome.
 
 - **Primary — `/checkpoint resume <slug>`.** The user names the topic. They know their topics, and the slugs are readable, so naming is the fast path.
-- **Smart assist — content-match, propose then confirm.** If the user just *describes* the work instead of naming it, the agent content-matches their intent against each checkpoint's *Current orientation* + *Last user directive* lines and **proposes** a topic — "looks like `xstadium-godot` — resume?" — then waits for confirmation. It **always proposes and confirms; it never silently auto-loads**.
+- **Smart assist — content-match, propose then confirm.** If the user just *describes* the work instead of naming it, the agent content-matches their intent against each checkpoint's *Current orientation* + *Last user directive* lines and **proposes** — surfacing the ranked candidates through the resume-list picker below (best match first). A single confident match may be proposed inline ("looks like `inventory-ui` — resume?"); more than one candidate goes through the picker. It **always proposes and confirms; it never silently auto-loads**.
 - **Re-orient across ALL repos, re-arm all watches.** On resume the session re-orients to **every** repo/worktree in *Repos / worktrees touched* and the portable *Artifacts* pointers — not just one repo — and **re-arms** the in-flight watches recorded in the doc (see *In-flight state safety*).
+
+### The resume-list picker
+
+When resume surfaces a *choice* — a bare `/checkpoint` on a fresh session, or a content-match with more than one candidate — present it as an **`AskUserQuestion`** selection, not a prose list the user has to read and then type a slug back from. The structured picker *is* the propose-and-confirm gate: the user selects, they don't retype, and the safe path (never silently loading the wrong topic) is the easy one. `AskUserQuestion` is the same host primitive the `gh-*` flows reach for when a choice must not be guessed.
+
+- **Options = the top 4 topics**, newest-first (for a content-match, the ranked candidates first). Four is the tool's cap and matches *Set hygiene*'s index-not-a-flat-dump rule — never every topic at once.
+- **Each option carries a briefing to read before picking**: label = the slug; description = `age · one-line Current orientation · repos touched` — the fields *`/checkpoint list`* renders (age, one-line orientation) plus repos touched, with the slug as the option label (age derived from the file, orientation and repos from the doc's own fields). This is what lets the user recognize the right topic without opening files.
+- **"Other" covers the rest.** The tool's free-text *Other* handles naming an older slug beyond the top 4, or "starting new work instead". When more than 4 active topics exist, say so in the question text ("…and N more — pick Other and name one, or run `/checkpoint list`").
+- **Fallback — prose list.** In a non-interactive context (or a host without `AskUserQuestion`), degrade to the plain prose list + "resume by name" — the same content, unstructured. The picker is the default presentation, not the only one.
 
 ### Bare `/checkpoint` — state-aware dispatch
 
 Bare `/checkpoint` does the right thing on either side of a `/clear`:
 
 - **Session HAS meaningful state to serialize** → it **writes** (the normal case).
-- **Session is fresh / just-cleared with nothing worth saving** → it treats the invocation as **resume intake**: shows the active-topics list (per *`/checkpoint list`*) and offers to resume one.
+- **Session is fresh / just-cleared with nothing worth saving** → it treats the invocation as **resume intake**: surfaces the active topics through *the resume-list picker* (an `AskUserQuestion` selection, briefing per option) and offers to resume one.
 
 One verb, dispatched by whether there is state to save.
 
@@ -98,11 +107,11 @@ Checkpoints **persist indefinitely** — a topic can revive anytime — and are 
 
 The **entire flow works with zero `flows/maintainer/setup-extra-rules`**: manual write, name-based and content-match resume, list, and archive are all host-neutral and need no hook (the opt-in best-effort auto-write is the one setup-extra-rules-gated extra, and it is not required). Two paths do the **writing** (manual, primary + that opt-in best-effort auto-write), and name / content-match does the **resume**. That is the whole model.
 
-Because resume is a pull — no auto-inject, no greeting — the SessionStart hook's role shrinks to almost nothing. It is a **footnote, not a layer**: optionally, a SessionStart hook (via `flows/maintainer/setup-extra-rules`) can *surface your active-topics list* on a fresh session so you see what's resumable — but it is **not required**; bare `/checkpoint` does exactly this on demand. The hook surfaces the list; it does **not** auto-inject any specific doc as the resume mechanism.
+Because resume is a pull — no auto-inject, no greeting — the SessionStart hook's role shrinks to almost nothing. It is a **footnote, not a layer**: optionally, a SessionStart hook (via `flows/maintainer/setup-extra-rules`) can *surface your active-topics list* on a fresh session so you see what's resumable — but it is **not required**; bare `/checkpoint` does this on demand (via *the resume-list picker*). The hook surfaces the list; it does **not** auto-inject any specific doc as the resume mechanism.
 
 ## In-flight state safety
 
-> `/clear` **kills** session-scoped live state — an armed event-watch (`/babysit` or a `/gh-pr` review-watch), background tasks, sub-agents — that `/compact` would have kept alive. A replacement for `/compact` must not silently drop what `/compact` preserved.
+> `/clear` **kills** session-scoped live state — an armed event-watch (`/babysit` or a `/caregiver` review-watch), background tasks, sub-agents — that `/compact` would have kept alive. A replacement for `/compact` must not silently drop what `/compact` preserved.
 
 The **In-flight watches & background tasks** field captures every such live thing, and **resume re-arms them**. A silently-dropped watch is the exact stall class `flows/github/babysit`'s no-stall contract forbids: a PR left open with **no event-watch armed** never wakes again. So checkpointing before a `/clear` must record the watch, and the resumed session must re-arm it — otherwise checkpoint-then-`/clear` quietly kills the loop. Never checkpoint a session with a live watch without recording it here.
 

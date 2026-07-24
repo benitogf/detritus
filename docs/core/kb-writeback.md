@@ -69,6 +69,11 @@ lessons never collide.
    base is a direct upstream clone).
 2. Edit `docs/` — the usual surface. `generated/` is gitignored and the search index regenerates at
    release — **no Go toolchain is needed** to ship a pure docs change.
+   **Generalized content only.** The KB is public and product-agnostic: every example, sample, slug,
+   and instruction written into a doc uses generic/fictional placeholders — never a real internal
+   product, customer, org, device, venue, or domain name, and never the incident's own specific
+   names. The `/gh` private-name scrub (guardrail below) covers delivery metadata — issue / PR /
+   branch / commit; THIS rule covers the doc CONTENT itself, which the metadata scrub never inspects.
    **Doctrine does not live in `docs/` alone** — detritus embeds it in Go string literals (the
    installer's agent/rule definitions and prompts). A lesson that deletes or renames a doc, or
    changes a model other docs or agents state, sweeps the whole reference surface per
@@ -102,3 +107,7 @@ lessons never collide.
   confirms the lesson touches no Go-embedded doctrine; a doc deletion/rename or model change that
   hits embedded strings is a code+docs writeback and runs the Go verification.
 - Public repo: scrub private names from every issue / PR / branch / commit (per `/gh`).
+- Generalized doc content: every example, sample, slug, and instruction written into a doc uses
+  generic/fictional placeholders — never a real internal product, customer, org, device, venue, or
+  domain name, and never the incident's own specific names (recipe step 2). The `/gh` scrub covers
+  delivery metadata; this covers the doc CONTENT itself.

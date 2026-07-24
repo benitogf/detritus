@@ -89,6 +89,7 @@ The delta must encode the **underlying rule**, not the specific incident that su
 - Ask "what is the *class* of changes that share this failure mode?" and write the rule for that class.
 - If the delta only fires for the exact situation that prompted the `/grow`, it is **overfit** — widen it until a reviewer hitting a *different* instance of the same problem still matches.
 - An example earns its place only as a parenthetical `e.g.`. If the example is doing the load-bearing work, the rule above it is too narrow — lift the general principle out of it.
+- The illustrative `e.g.` must ITSELF be generic — the triggering incident's product / customer / org / domain names never enter the written doc. This is the public-KB content rule owned by `core/kb-writeback` recipe step 2 (Generalized content only); honor it, don't restate it.
 
 ### Prefer editing existing docs
 - If a relevant doc already covers the topic but is missing the specific guidance, propose an edit:

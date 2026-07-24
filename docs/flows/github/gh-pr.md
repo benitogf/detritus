@@ -1,5 +1,5 @@
 ---
-description: Hard-review a GitHub PR under truthseeker rigor — verify the PR's own claims, hunt for fragility, demand evidence before flagging OR approving, and post an APPROVE or REQUEST_CHANGES review via `gh api`. Auto-posts without a confirmation gate, then keeps watching and re-reviewing the PR until it is merged or closed (`--once` for a single verdict).
+description: Hard-review a GitHub PR under truthseeker rigor — verify the PR's own claims, hunt for fragility, demand evidence before flagging OR approving, and post an APPROVE or REQUEST_CHANGES review via `gh api`. Auto-posts without a confirmation gate.
 triggers:
   - gh-pr
   - review pr
@@ -8,24 +8,19 @@ triggers:
   - code review
   - review pull request
   - hard review
-argument-hint: "[pr] [--once]"
-when: User wants a rigorous review posted to a GitHub PR. By default the skill posts the verdict then keeps watching and re-reviewing the PR until it is merged or closed; `--once` (or "review once" / "just review it") posts one verdict and stops. Accepts a full PR URL, `<owner>/<repo>#<n>`, or bare `#<n>` when cwd is a clone of the target repo.
+when: User wants a rigorous review posted to a GitHub PR. Accepts a full PR URL, `<owner>/<repo>#<n>`, or bare `#<n>` when cwd is a clone of the target repo.
 related:
   - flows/github/gh
   - flows/github/gh-self-review
-  - flows/github/babysit
   - core/review-rigor
-  - core/janitor-platforms
   - flows/principles/truthseeker
 ---
 
 # /gh-pr — Hard PR review under truthseeker rigor
 
-Posts an APPROVE or REQUEST_CHANGES review on a posted GitHub PR. The analysis itself — principles, claim verification, second-pass checklist, correctness / fragility / performance / tests / security / scope / conventions / Godot subsections — lives in `core/review-rigor` and is **shared verbatim** with `/gh-self-review`. Same checklist, applied to whichever diff is in scope.
+Posts an APPROVE or REQUEST_CHANGES review on a posted GitHub PR. The analysis itself — principles, claim verification, second-pass checklist, correctness / fragility / performance / tests / security / scope / conventions / engine/language-specific review reference (loaded via kb_get when the diff matches) — lives in `core/review-rigor` and is **shared verbatim** with `/gh-self-review`. Same checklist, applied to whichever diff is in scope.
 
 Auto-posts the review — no confirmation gate. The review decision (APPROVE vs. REQUEST_CHANGES vs. COMMENT) is yours to own.
-
-**The default is to keep watching.** After posting the verdict, the skill does not stop — it arms an event-watch on the PR and **re-reviews on each new push or discussion**, re-posting a fresh `commit_id`-pinned verdict **only when the verdict materially changes** — a tier flip or a changed blocker set (Phase 8 defines it) — until the PR is merged or closed. This is the reviewer-seat analogue of `/babysit`'s watch-to-merge: same out-of-band event-watch primitive, but this skill **re-reviews and re-posts a verdict — it never merges, never fixes** (merging is `/babysit`'s job). Pass **`--once`** to post one verdict and stop — today's one-shot behavior; Phases 1–7 run identically, only the watch (Phase 8) is skipped and Phase 7 returns to the default branch immediately.
 
 ## Inputs
 
@@ -47,11 +42,11 @@ Anything else → ask the user which PR via `AskUserQuestion`. Do not guess.
 
   The footer goes **inside** the heredoc (see the post template in Phase 6). Do not append it after the heredoc closes — that introduces stray newlines and can land outside the body.
 - **Code refs are fine in review bodies** (unlike issue/PR bodies). File paths, line numbers, function names, specific symbols — include them so the author can act. This is the one carve-out from the otherwise product-focused-bodies rule the rest of the `gh-*` family follows.
-- **Cross-repo references** (citing a sibling repo's PR or issue) default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `idnerdidx/bulk#311` smears into nested autolinks via the `idx` substring). Write `[bulk PR #311](https://github.com/idnerdidx/bulk/pull/311)` with the `<owner>/<repo>` pattern kept out of the label. Same-repo bare `#<n>` is unaffected. See the cross-repo-refs convention in `flows/github/gh`.
+- **Cross-repo references** (citing a sibling repo's PR or issue) default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `acme-tools/widgets#311` smears into nested autolinks via the `acme` substring). Write `[widgets PR #311](https://github.com/acme-tools/widgets/pull/311)` with the `<owner>/<repo>` pattern kept out of the label. Same-repo bare `#<n>` is unaffected. See the cross-repo-refs convention in `flows/github/gh`.
 
 ## Phase 0: Track progress
 
-Initialize a `TodoWrite` list mirroring phases 1–7 (add Phase 8 under the default watch; omit it under `--once`). Update in real time.
+Initialize a `TodoWrite` list mirroring phases 1–7. Update in real time.
 
 ## Phase 1: Resolve target
 
@@ -164,7 +159,7 @@ Then follow it end-to-end against the PR's diff (combined from the `/files` patc
 - Classifying scope (docs / deps / generated / code; language gating).
 - The "don't stop at easy findings" second pass.
 - Correctness / fragility / performance / tests / security / scope-discipline / conventions checklists.
-- The Godot subsection (gated on `.gd` / `.tscn` / etc. files in the diff).
+- The engine/language-specific review reference (loaded via kb_get when the diff matches).
 - Large-diff handling (>500 lines → prioritize + say so).
 
 Skip nothing. If a subsection's scope didn't fire in the diff, note it didn't apply rather than silently dropping it from your audit.
@@ -173,7 +168,7 @@ Skip nothing. If a subsection's scope didn't fire in the diff, note it didn't ap
 
 **Be terse.** Every point is a single short bullet — one sentence stating *what* and *where* (file:line). If the *why* isn't obvious, add one short sub-line; otherwise stop. No paragraphs. No "I checked X and verified Y by doing Z" prose. The author can read the diff — your job is to point at things, not explain them. If a finding needs more than two sentences to land, you haven't found the core of it yet.
 
-**Cross-repo refs in the review body** default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `idnerdidx/bulk#311` smears into nested autolinks via the `idx` substring). When citing a sibling repo's PR or issue from a review, write `[bulk PR #311](https://github.com/idnerdidx/bulk/pull/311)`, keeping the `<owner>/<repo>` pattern out of the label. File:line code refs and same-repo bare `#<n>` are unaffected. See the cross-repo-refs convention in `flows/github/gh`.
+**Cross-repo refs in the review body** default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `acme-tools/widgets#311` smears into nested autolinks via the `acme` substring). When citing a sibling repo's PR or issue from a review, write `[widgets PR #311](https://github.com/acme-tools/widgets/pull/311)`, keeping the `<owner>/<repo>` pattern out of the label. File:line code refs and same-repo bare `#<n>` are unaffected. See the cross-repo-refs convention in `flows/github/gh`.
 
 Structure the body:
 
@@ -258,47 +253,13 @@ Capture `html_url` from the response.
 
 Print the review URL on its own line. Follow with one sentence naming the verdict. Nothing else — no recap of the phases, no offer of next steps.
 
-**Return-to-default timing depends on the mode.** The checkout below returns the working tree to the repo's default branch so the user is left on a clean slate (the PR's branch is not their work). Read the default branch from the metadata fetched in Phase 2.
-
-- **`--once`** — do the return-to-default checkout now, immediately after the single post. This is today's behavior; the skill ends here.
-- **Default (watch)** — do **not** `git checkout <default_branch>` yet. The watch (Phase 8) keeps running against this PR, so the return happens when the watch **terminates** (merged / closed / hand-back), not after the first post. Under watch, this phase reports the first verdict and hands to Phase 8; the branch return is the last thing the watch does on termination.
+Then return the working tree to the repo's default branch so the user is left on a clean slate (the PR's branch is not their work). Read the default branch from the metadata fetched in Phase 2.
 
 - Skip the checkout if the user is already on the default branch.
 - Skip the checkout if cwd is not a git repo (e.g. `/gh-pr` was invoked with a fully-qualified `<owner>/<repo>#<n>` from outside any clone).
 - Otherwise: run `git checkout <default_branch>`. Plain checkout — no stash, no force.
   - If it succeeds: confirm with one short line ("← back on master").
   - If git refuses (conflict between uncommitted changes and master): leave the user on the current branch and surface git's exact error message. Do not stash, do not force-discard. Git's refusal is the safety net; the user decides what to do with their tree.
-
-## Phase 8: Watch & re-review (default; skipped under `--once`)
-
-Skip this phase entirely under `--once` (the skill ended at Phase 7). Otherwise, after the first verdict is posted, **keep watching and re-reviewing the PR until it is merged or closed**. This is the reviewer-seat analogue of `/babysit`'s watch-to-merge — same event-watch primitive, but this skill **re-reviews and re-posts a verdict; it never merges, never fixes, never comments outside a review**.
-
-> ### ⛔ The watch must never stall
->
-> While the PR is open, a live event-watch MUST be armed — the automatic event-watch (the default), or, *only* when no watch primitive is available, an explicit labeled **degraded-fallback** re-invoke hand-off. "Waiting for the next push" is the watch's normal state, not a stop: the watch stays armed and wakes on the next change. Yielding on an open PR with **neither** an armed watch **nor** a stated degraded hand-off is the stall this contract forbids (mirrors `flows/github/babysit` → *The loop must never stall*). Control returns to the user only on a terminal (merged / closed) or a hand-back.
-
-**Arm the watch — delegate the primitive.** Load `core/janitor-platforms` and arm its **event-watch adapter** on this PR — the same out-of-band poll `/babysit` uses, which wakes the model only on a change and is idle (token-cheap) between events. Do **not** name or hardcode a watch primitive here; the adapter owns it (portability rule — `/babysit` delegates the same way). Report the effective cadence in human terms (e.g. "re-reviewing on each push; checking every 60s"). The adapter's review-watch emit set — a new push / HEAD move, a new discussion (comment), merged, closed — is documented in `core/janitor-platforms`' event-watch adapter section.
-
-**On each emitted event** — the event is a hint, not authority: **re-fetch live PR state** (`gh api`, never `gh pr view` — `flows/github/gh` convention #2), reading the current `head.sha` plus reviews / comments the way Phase 3 does. Then:
-
-1. **Merged or closed?** → terminal. Stop the watch, do the deferred Phase-7 return-to-default checkout, and report the outcome (merged / closed-without-merge). This mirrors `/babysit`'s terminal.
-2. **HEAD moved (new push) or new discussion landed since the last review?** → **re-run the review rigor (Phases 3–6) against the new head SHA**, reusing `core/review-rigor` → *Re-review continuity*: held context (the diff understanding, brief, and evidence trail already established), fresh evidence (re-diff the new commits, re-verify against the live tree). This is a **delta re-verify, not a cold re-derive** — the verdict-integrity rules apply unchanged.
-3. **Post only when the verdict materially changes.** The "verdict" here is the whole review outcome — **the tier (`APPROVE` / `REQUEST_CHANGES`) *and* its blocker set**, not the tier alone. Compute the new verdict and compare it to the last posted one; re-post a fresh `commit_id`-pinned verdict (Phase 6 post template, pinned to the *new* head SHA) whenever **either** changed materially:
-   - **Tier flip** — e.g. a standing `REQUEST_CHANGES` whose blockers a fixing push now clears → **auto-flip to `APPROVE`** and post.
-   - **Same tier, different blocker set** — the tier stays `REQUEST_CHANGES` but the blockers changed: a push fixed blocker A and introduced regression B, so the standing review now lists a *resolved* blocker and is silent on a *new* one. This **must re-post** — the outcome the author reads has materially changed. Treating same-tier as "nothing new" is the trap: it leaves a misleading standing review (still citing the now-fixed A) and lets a push-introduced regression (B) go unreported.
-
-   Re-review **silently — no post** **only** when the new verdict is *identical* to the last posted one — same tier **and** an unchanged blocker set (a resolved item is a change; a still-open item carried verbatim is not). That is the sole anti-review-spam case: an identical re-review adds nothing. Record the last-posted verdict **including its blocker set** + the SHA it covered, so the next event compares the full outcome, not just the tier.
-4. **Otherwise idle** — the event brought no HEAD move and no new discussion (nothing to re-review), or a silent re-review (step 3) produced an *identical* verdict (same tier, same blocker set) → **confirm the event-watch is still armed** and yield. This is the watch's normal state, not a terminal.
-
-**Notify-only — the watch re-reviews and re-posts a review, nothing more.** It NEVER merges, NEVER comments outside a review, NEVER edits the PR body or branch, NEVER updates-from-base. Merging is `/babysit`'s job; this is the reviewer seat. (Mirrors the adapter's own notify-only rule — `core/janitor-platforms`.)
-
-**No-stall / hand-back rules (adapted from `flows/github/babysit`):**
-
-- While the PR is open, a live watch MUST be armed (automatic event-watch default), or a clearly-labeled degraded-fallback re-invoke hand-off stated when the host can arm no watch primitive (the self-continuation contract in `flows/github/babysit` → *Self-continuation*; verify the primitive is genuinely unavailable before degrading, per `core/janitor-platforms`' availability-verify note). Never refuse to run; degrade instead.
-- **No idle-timeout hand-back by default.** An open PR is never abandoned — with no time budget set, the watch stays armed indefinitely, re-reviewing every change until terminal.
-- **Hand back on total silence only if the user set a time budget, and the timer RESETS on every event.** The watch hands back only after the *whole budget window* elapses with no event at all; any emitted event (a push, a comment, a mergeability transition) resets the clock. On the budget elapsing in silence: report the PR's current state and tell the user to re-invoke `/gh-pr <pr>` to resume watching — a pause, not an abandonment.
-
-**Every event emits one status line** so the watch is observably alive — naming the event handled, whether HEAD moved, the recomputed verdict, whether it posted or re-reviewed silently, and — on any non-terminal wake — the continuation path (the live event-watch confirmed armed, or the labeled degraded hand-off). A wake that reports without an action AND without a confirmed live watch is the stall signature.
 
 ## Guardrails
 
@@ -316,13 +277,8 @@ Skip this phase entirely under `--once` (the skill ended at Phase 7). Otherwise,
 - Never restate a point already made in the PR body, a prior review, a commit message, or the linked issue (Phase 4b).
 - Never omit the attribution footer.
 - Never quote secrets inline even when flagging — point at the line and describe the class.
-- Don't write bare `<owner>/<repo>#<n>` cross-repo shortcuts in the review body when the org slug contains another repo name in the same org as a substring. Default to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)`, keeping the `<owner>/<repo>` pattern out of the label, or GitHub's autolinker will mangle the render. File:line code refs and same-repo bare `#<n>` are unaffected.
+- Don't write bare `<owner>/<repo>#<n>` cross-repo shortcuts in the review body when the org slug contains another repo name in the same org as a substring. Default to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)`, keeping the `<owner>/<repo>` pattern out of the label, or GitHub's autolinker will mangle the render. File:line code refs and same-repo bare `#<n>` are unaffected. See the cross-repo-refs convention in `flows/github/gh`.
 - Never ask the user something researchable. The repo, the KB, and the GitHub API are all reachable.
 - Never leave the user on the PR's branch when the skill ends if a plain `git checkout <default_branch>` would succeed. Don't stash, don't force — if git refuses, leave them put and report.
 - If `gh auth status` fails, surface the error and stop.
-- **The watch is notify-only.** Under the default watch (Phase 8) the skill re-reviews and re-posts a REVIEW only — it NEVER merges, NEVER comments outside a review, NEVER edits the PR body or branch. Merging is `/babysit`'s job; this is the reviewer seat.
-- **Re-post on a material verdict change; stay silent only on an identical one.** The verdict is the tier **and** its blocker set. Post a fresh `commit_id`-pinned verdict whenever either changed — a tier flip (blockers cleared → auto-flip to APPROVE) **or** the same tier with a different blocker set (A fixed / B introduced still stays `REQUEST_CHANGES`, but the outcome changed, so it re-posts — otherwise the standing review misleads and a push-introduced regression goes unreported). Re-review **silently** only when the new verdict is *identical* (same tier, same open blockers) — that is the sole anti-review-spam case.
-- **The watch must never stall.** While the PR is open, a live event-watch MUST be armed (automatic default) or a labeled degraded-fallback re-invoke stated — never yield on an open PR with no watch and no hand-off. No idle-timeout hand-back by default (an open PR is never abandoned); hand back on total silence only if the user set a time budget, and the budget timer RESETS on every event.
-- **Delegate the watch primitive — never name it here.** Phase 8 arms `core/janitor-platforms`' event-watch adapter; this skill never names or hardcodes the underlying watch primitive (portability rule; `/babysit` delegates the same way).
-- **`--once` is the one-shot opt-out.** `--once` (or "review once" / "just review it") posts one verdict, returns to the default branch, and stops — Phase 8 is skipped. Watch is the default otherwise.
 - **Incident hook.** A self-acknowledged mistake/doctrine violation ("you are right, I …", "I didn't follow …", "I ignored /…") or a blocker surfacing on a PR this flow authored is an incident — detect and route per `core/ego` (→ `/grow` / `/absorb`), after finishing the deliverable.
