@@ -5,7 +5,6 @@ go 1.25.0
 require (
 	github.com/blevesearch/bleve/v2 v2.5.7
 	github.com/dcadenas/pagerank v0.0.0-20231224215204-32a14b9c24a7
-	github.com/gofrs/flock v0.13.0
 	github.com/modelcontextprotocol/go-sdk v1.4.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/ulikunitz/xz v0.5.15
@@ -40,6 +39,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
 	github.com/segmentio/encoding v0.5.3 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.etcd.io/bbolt v1.4.0 // indirect
 	golang.org/x/mod v0.34.0 // indirect
