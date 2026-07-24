@@ -1,5 +1,5 @@
 ---
-description: Router for GitHub issue/PR workflows — reads conversation context and dispatches to gh-issue-create, gh-issue-work, gh-feedback-work, gh-self-review, or gh-pr.
+description: Router for GitHub issue/PR workflows — reads conversation context and dispatches to gh-issue-create, gh-issue-work, gh-feedback-work, gh-self-review, gh-pr, and the PR-watch loops babysit and caregiver.
 ---
 
 <!-- detritus-generated-command -->

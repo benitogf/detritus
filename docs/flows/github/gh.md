@@ -1,5 +1,5 @@
 ---
-description: Router for GitHub issue/PR workflows — reads conversation context and dispatches to gh-issue-create, gh-issue-work, gh-feedback-work, gh-self-review, or gh-pr.
+description: Router for GitHub issue/PR workflows — reads conversation context and dispatches to gh-issue-create, gh-issue-work, gh-feedback-work, gh-self-review, gh-pr, and the PR-watch loops babysit and caregiver.
 triggers:
   - gh
   - github workflow
@@ -21,7 +21,7 @@ related:
 
 # /gh — Router for GitHub Issue & PR Workflows
 
-One entry point for the six skills it dispatches to. Reads the conversation + any arguments, decides which sub-skill fits, and hands off. The sub-skills stay focused; this file is the dispatcher and the home for cross-skill conventions so they live in one place. The sidecar launchers (`/candyland`, `/quest`) mirror this router's Phase 1 classification outcome in Go, mapping routes to delivery modes — `core/sidecar` holds the mapping.
+One entry point for the seven skills it dispatches to (the five `gh-*` skills plus the two PR-watch loops, `babysit` and `caregiver`). Reads the conversation + any arguments, decides which sub-skill fits, and hands off. The sub-skills stay focused; this file is the dispatcher and the home for cross-skill conventions so they live in one place. The sidecar launchers (`/candyland`, `/quest`) mirror this router's Phase 1 classification outcome in Go, mapping routes to delivery modes — `core/sidecar` holds the mapping.
 
 ## Preconditions (hard gate — every flow that composes /gh inherits this)
 

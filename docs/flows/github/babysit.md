@@ -32,7 +32,7 @@ A watch-until-merge loop over **one** PR. An armed event-watch wakes the loop on
 This skill **composes** existing parts and adds only one new piece:
 
 - **`/gh-feedback-work`** is the per-event "fix it" action — dispatched, never reimplemented. It finds feedback posted after the last commit, classifies it, implements + tests, gates the push on a clean `/gh-self-review`, rewrites the PR body in place, and never posts comments. Its linked-issue preflight and attribution-footer rules are inherited.
-- **`core/loop`** supplies the loop mechanics — re-fetch-live-state-on-every-event, `/gh` delivery, usage-limit resilience.
+- **`core/loop`** supplies the loop mechanics — `/gh` delivery, usage-limit resilience. The re-fetch-live-state-on-every-event discipline is stated in the per-event algorithm below.
 - **`core/janitor-platforms`** owns the watch mechanism — this skill delegates the *how does it wait* (its **event-watch adapter**: an out-of-band poll that emits one event per gate-state change, so the model reacts to emitted events rather than polling itself) rather than hardcoding a primitive.
 - The **only genuinely new logic** is the actor role: the SHA-pinned approval merge gate + the feedback-fix dispatch. Everything else — the wait, the fix, the delivery — is borrowed.
 
@@ -57,7 +57,7 @@ Same input shapes as `/gh-feedback-work`. First match wins:
 
 ## Per-event algorithm
 
-babysit no longer polls each tick — it **reacts to an emitted event** from the armed event-watch (a newly-terminal check, a new review, a new comment — inline or issue-thread, `gate: mergeable`, a CI failure, merged/closed). **The event is a hint, not authority: re-fetch live state on every wake — never act on the event line as a stale snapshot.** (`core/loop` → re-fetch-live-state.) On each emitted event:
+babysit no longer polls each tick — it **reacts to an emitted event** from the armed event-watch (a newly-terminal check, a new review, a new comment — inline or issue-thread, `gate: mergeable`, a CI failure, merged/closed). **The event is a hint, not authority: re-fetch live state on every wake — never act on the event line as a stale snapshot.** On each emitted event:
 
 1. **Fetch the live state — including feedback.** Compute the last-commit cutoff first, then fetch reviews (for the gate), **all three feedback sources** (for detection), mergeability, required check-runs, and the HEAD SHA. **The watch script uses these same endpoints** (`pulls`, `reviews`, `comments`, `issues/comments`, `commits/<sha>/check-runs`) to decide what to emit — so the woken model re-derives from the same source of truth the event came from:
 
