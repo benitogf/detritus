@@ -53,6 +53,18 @@ git, command output) — never from memory of the conversation:
    Converting the obvious sites and stopping silently drops part of a stated requirement and reads as
    done when it is not (e.g. a "make PR links copyable" pass that fixed the detail views but missed the
    table cell rendering the same link).
+1b. **Removing or renaming a named entity requires grep-to-zero across EVERY file kind.** When a change
+   deletes or renames a symbol, flag, route, config key, mode, or file, the old name must be gone
+   everywhere it was referenced — not just where the code still has to compile. Grep the removed/old
+   name over the WHOLE tree up front and prove **zero** references remain in **all** file kinds, not the
+   kind the change edited: source, but also comments and docstrings, `--help`/usage strings, docs
+   (`.md`/runbooks), embedded templates, and config/unit files. A compile-clean removal that leaves the
+   name in prose, docs, or a service/unit file is **not done** — a green build only proves the *code*
+   references are gone, and sweeping only the edited surface class is the canonical miss (e.g. dropping a
+   CLI flag from a binary but leaving it in the systemd unit's `ExecStart` so the new binary rejects it;
+   or deleting a route but leaving it listed in an endpoint doc). This is the author-side mirror of the
+   reviewer's R1/R2 (`core/review-rigor`): run it before self-review, so a removed name never survives to
+   a reviewer — or worse, to a runtime failure.
 2. **The verification gate is green.** Build + tests + lint pass, *or there is a documented reason a
    check could not run* (silent skipping does not satisfy it). This extends `core/build`'s per-unit
    gate to the loop-exit gate.
