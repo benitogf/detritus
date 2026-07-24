@@ -91,10 +91,10 @@ The Sonnet sub-agent gets broader context than the audit (last 20–40 turns or 
   "items": [ /* new priorities */ ],
   "contentious": [ {
     "ids": ["t_005", "t_008"],
-    "question": "Two items rank almost level. The trendboard SIGTERM bug is operational reliability; the dashboard auth refresh is a user-visible feature gap. Which should be next?",
+    "question": "Two items rank almost level. The ingest worker SIGTERM bug is operational reliability; the dashboard auth refresh is a user-visible feature gap. Which should be next?",
     "options": [
-      { "id": "t_005", "label": "Trendboard SIGTERM",      "implication": "Trendboard SIGTERM moves to the top; dashboard auth stays just below." },
-      { "id": "t_008", "label": "Dashboard auth refresh",  "implication": "Dashboard auth refresh moves to the top; trendboard SIGTERM stays just below." },
+      { "id": "t_005", "label": "Ingest worker SIGTERM",   "implication": "Ingest worker SIGTERM moves to the top; dashboard auth stays just below." },
+      { "id": "t_008", "label": "Dashboard auth refresh",  "implication": "Dashboard auth refresh moves to the top; ingest worker SIGTERM stays just below." },
       { "id": "both",  "label": "Both top — fork-eligible?", "implication": "Check fork eligibility; if both pass the gates, surface a fork plan." }
     ]
   } ],
@@ -108,7 +108,7 @@ The `ids`/`id` fields are internal (main uses them to apply the choice). The `qu
 
 ```
 Idle pass complete. Top 3 for now:
-  • Trendboard SIGTERM bug (you chose this over Dashboard auth refresh)
+  • Ingest worker SIGTERM bug (you chose this over Dashboard auth refresh)
   • Dashboard auth refresh (paired; possible fork)
   • Add cross-import hooks between /todo and /janitor
 3 contentious items deferred to next pass.

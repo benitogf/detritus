@@ -25,7 +25,7 @@ related:
 
 `/checkpoint` serializes the **load-bearing** context of a **workstream topic** to a durable doc (`.checkpoint/<slug>.md`) at a semantic boundary, so a `/clear` after it is lossless and a fresh session — minutes or **weeks** later — resumes that topic from the doc alone. It is the **priority-aware alternative** to `/compact`'s lossy uniform summarization: it keeps what matters (a fixed schema of load-bearing fields) and drops the re-derivable bulk.
 
-It **composes `core/loop`** — the checkpoint-then-`/clear` discipline and the State-block spine (overwrite-not-append, pruning) are defined there and referenced here, not restated. Where `core/loop` scopes that discipline to recurring/partitioned loops (`/janitor`, `/smith`, `/forge`'s `.plan/PROGRESS-<slug>.md` ledger) keyed on a loop slug, `/checkpoint` brings the *same* spine to any in-session effort with no loop ledger — a `/gh-pr` review-watch, an ad-hoc multi-step task, a debugging session — and derives its slug differently: **from the topic**, not from `core/loop`'s whole-repo/whole-workspace slug table (see *Identity*). The State-block spine reference stands; the slug rule does not carry over.
+It **composes `core/loop`** — the checkpoint-then-`/clear` discipline and the State-block spine (overwrite-not-append, pruning) are defined there and referenced here, not restated. Where `core/loop` scopes that discipline to recurring/partitioned loops (`/janitor`, `/smith`, `/forge`'s `.plan/PROGRESS-<slug>.md` ledger) keyed on a loop slug, `/checkpoint` brings the *same* spine to any in-session effort with no loop ledger — a `/caregiver` review-watch, an ad-hoc multi-step task, a debugging session — and derives its slug differently: **from the topic**, not from `core/loop`'s whole-repo/whole-workspace slug table (see *Identity*). The State-block spine reference stands; the slug rule does not carry over.
 
 ## Identity — one long-lived topic per file
 
@@ -36,7 +36,7 @@ A checkpoint is **one durable, long-lived topic** that spans many sessions: open
 
 ### Slug — agent-derived from the topic
 
-The **slug is agent-derived from the topic of the work**, kebab-case and **human-readable** so a dev can find the file and hand it to another dev: `xstadium-godot`, `checkpoint-skill`, `pivot-deploy-perf`. Readability is the point — a person names their topic, not an opaque key.
+The **slug is agent-derived from the topic of the work**, kebab-case and **human-readable** so a dev can find the file and hand it to another dev: `inventory-ui`, `checkpoint-skill`, `fleet-deploy-perf`. Readability is the point — a person names their topic, not an opaque key.
 
 - **Not the session id** — opaque, and it changes on resume, which would break the round-trip.
 - **Not the git branch** — the workspace is **multi-repo with worktrees** ("multiversal"): a single topic spans several repos/branches, so there is no one branch key to name the file by.
@@ -52,7 +52,7 @@ Schema (the load-bearing set — **multi-repo aware**):
 - **Decisions + why** — the calls made and the reasoning that selected each, so a resume doesn't relitigate them.
 - **Repos / worktrees touched** — each repo/worktree the topic spans. First-class because the workspace is multi-repo; a resume must re-orient across *all* of them, not one.
 - **Artifacts — portable pointers** — **repo + branch + SHA + PR URL** for each artifact. **Never absolute local worktree paths** — they mean nothing on another machine or to another dev. Portability is what makes dev-to-dev handoff and repo-filtering (`/checkpoint list <repo>`) work.
-- **In-flight watches & background tasks (to re-arm on resume)** — every session-scoped live thing: an armed `/babysit` or `/gh-pr` review-watch, background tasks, sub-agents. See *In-flight state safety*.
+- **In-flight watches & background tasks (to re-arm on resume)** — every session-scoped live thing: an armed `/babysit` or `/caregiver` review-watch, background tasks, sub-agents. See *In-flight state safety*.
 - **Next move** — the concrete first action the resumed session takes.
 - **Open questions** — unresolved threads the next session must not drop.
 - **Last user directive** — the most recent pivot or scope change, **dated**.
@@ -75,7 +75,7 @@ After writing, the skill ends with the literal line `checkpoint complete — saf
 Resume is a **pull**: the user reaches for a topic; nothing is injected or greeted at them. There is **no proactive greeting on session start** (host-neutral, needs no hook), and **no silent auto-load** — in a multiversal workspace, loading the *wrong* topic's context is the worst outcome.
 
 - **Primary — `/checkpoint resume <slug>`.** The user names the topic. They know their topics, and the slugs are readable, so naming is the fast path.
-- **Smart assist — content-match, propose then confirm.** If the user just *describes* the work instead of naming it, the agent content-matches their intent against each checkpoint's *Current orientation* + *Last user directive* lines and **proposes** a topic — "looks like `xstadium-godot` — resume?" — then waits for confirmation. It **always proposes and confirms; it never silently auto-loads**.
+- **Smart assist — content-match, propose then confirm.** If the user just *describes* the work instead of naming it, the agent content-matches their intent against each checkpoint's *Current orientation* + *Last user directive* lines and **proposes** a topic — "looks like `inventory-ui` — resume?" — then waits for confirmation. It **always proposes and confirms; it never silently auto-loads**.
 - **Re-orient across ALL repos, re-arm all watches.** On resume the session re-orients to **every** repo/worktree in *Repos / worktrees touched* and the portable *Artifacts* pointers — not just one repo — and **re-arms** the in-flight watches recorded in the doc (see *In-flight state safety*).
 
 ### Bare `/checkpoint` — state-aware dispatch
@@ -102,7 +102,7 @@ Because resume is a pull — no auto-inject, no greeting — the SessionStart ho
 
 ## In-flight state safety
 
-> `/clear` **kills** session-scoped live state — an armed event-watch (`/babysit` or a `/gh-pr` review-watch), background tasks, sub-agents — that `/compact` would have kept alive. A replacement for `/compact` must not silently drop what `/compact` preserved.
+> `/clear` **kills** session-scoped live state — an armed event-watch (`/babysit` or a `/caregiver` review-watch), background tasks, sub-agents — that `/compact` would have kept alive. A replacement for `/compact` must not silently drop what `/compact` preserved.
 
 The **In-flight watches & background tasks** field captures every such live thing, and **resume re-arms them**. A silently-dropped watch is the exact stall class `flows/github/babysit`'s no-stall contract forbids: a PR left open with **no event-watch armed** never wakes again. So checkpointing before a `/clear` must record the watch, and the resumed session must re-arm it — otherwise checkpoint-then-`/clear` quietly kills the loop. Never checkpoint a session with a live watch without recording it here.
 

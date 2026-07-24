@@ -23,7 +23,7 @@ related:
 
 The same rigor `/gh-pr` applies to a posted PR, applied to local changes that haven't been committed, pushed, or PR'd. The wrapping skill collects the scope pointers and the intent; the actual review work is **delegated to a sub-agent via the `Agent` tool** — spawned fresh on the first pass so the audit runs without the conversational context that produced the code, and continued on later iterations per `core/review-rigor` → *Re-review continuity*. The author's blind spots stay with the author; the sub-agent pulls the diff live and sees only it and the stated intent.
 
-The analysis itself — principles, claim verification, second-pass checklist, correctness / fragility / performance / tests / security / scope / conventions / Godot subsections — lives in `core/review-rigor` and is shared verbatim with `/gh-pr`. The sub-agent loads it via `kb_get` and applies it end-to-end.
+The analysis itself — principles, claim verification, second-pass checklist, correctness / fragility / performance / tests / security / scope / conventions subsections, plus the engine/language-specific review reference (loaded via `kb_get` when the diff matches) — lives in `core/review-rigor` and is shared verbatim with `/gh-pr`. The sub-agent loads it via `kb_get` and applies it end-to-end.
 
 ## Limits
 
@@ -107,7 +107,7 @@ The prompt is built from this template — fill in `<...>` placeholders from Pha
 You are reviewing a developer's pending local changes before they commit/push/PR. The change described below is the only thing you know about — there is no prior conversation. Produce the audit a real reviewer would give them, applied to their own diff, so mechanical issues get fixed before another human looks at it.
 
 ## Step 1: Load the rigor checklist
-Call kb_get(name="roles/reviewer") and kb_get(name="core/review-rigor") and follow them end-to-end against the change described below (pull it live per "The change (pull it live)"). Together they cover: truthseeker principles, claim verification, scope classification, the "don't stop at easy findings" second pass, correctness / fragility / performance / tests / security / scope-discipline / conventions checklists, the Godot subsection, and large-diff handling. Skip nothing. If a subsection's scope didn't fire (e.g., no Godot files in the diff), note it didn't apply rather than silently dropping it.
+Call kb_get(name="roles/reviewer") and kb_get(name="core/review-rigor") and follow them end-to-end against the change described below (pull it live per "The change (pull it live)"). Together they cover: truthseeker principles, claim verification, scope classification, the "don't stop at easy findings" second pass, correctness / fragility / performance / tests / security / scope-discipline / conventions checklists, the engine/language-specific review reference (loaded via kb_get when the diff matches), and large-diff handling. Skip nothing. If a subsection's scope didn't fire (e.g., no matching engine/language files in the diff), note it didn't apply rather than silently dropping it.
 
 ## Step 2: Verify the change's stated intent
 Check each claim against the diff per the rigor doc's "Verify the change's claims" section:

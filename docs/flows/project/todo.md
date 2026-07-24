@@ -206,7 +206,7 @@ Read the store and call **TodoWrite** with the active items. The IDE's native to
 
 Only `title` renders — `body` is detail-mode-only. No markdown syntax in content (the TodoWrite UI renders plain text; literal `**` shows).
 
-**Compact group prefix — deterministic algorithm** (no LLM judgment): for each group present in the active set, the candidate prefix is the first word of the group name; if two active groups collide at the current length, advance ALL colliding groups by one word; repeat until unique (accept a collision only if two groups have identical full names). UPPERCASE the result. Ungrouped items get no brackets and no prefix. Examples: `{"Bulk pivot performance", "Detritus skill development"}` → `BULK`, `DETRITUS`; `{"Bulk pivot performance", "Bulk auth refactor"}` → `BULK PIVOT`, `BULK AUTH`.
+**Compact group prefix — deterministic algorithm** (no LLM judgment): for each group present in the active set, the candidate prefix is the first word of the group name; if two active groups collide at the current length, advance ALL colliding groups by one word; repeat until unique (accept a collision only if two groups have identical full names). UPPERCASE the result. Ungrouped items get no brackets and no prefix. Examples: `{"Fleet deploy performance", "Detritus skill development"}` → `FLEET`, `DETRITUS`; `{"Fleet deploy performance", "Fleet auth refactor"}` → `FLEET DEPLOY`, `FLEET AUTH`.
 
 ### Worked example — exact expected output
 
@@ -216,30 +216,30 @@ Given this store (truncated to relevant fields):
 { "version": 2, "epoch": 1, "items": [
   { "id": "t_001", "title": "Implement the v2 janitor-side write hook", "group": "Detritus skill development", "status": "open",
     "priority": { "score": 50, "tier": "P2" }, "addedAt": "2026-06-01T15:00:00Z" },
-  { "id": "t_002", "title": "Optimize Pivot video-pack fleet deploy (rollup goal)", "group": "Bulk pivot performance", "status": "open",
+  { "id": "t_002", "title": "Optimize asset-pack fleet deploy (rollup goal)", "group": "Fleet deploy performance", "status": "open",
     "priority": { "score": 40, "tier": "P2" }, "addedAt": "2026-06-01T11:10:00Z" },
-  { "id": "t_003", "title": "Decide the Pivot-side source for directory rsync", "group": "Bulk pivot performance", "status": "open",
+  { "id": "t_003", "title": "Decide the source directory for rsync", "group": "Fleet deploy performance", "status": "open",
     "priority": { "score": 74, "tier": "P1" }, "addedAt": "2026-06-02T10:00:00Z" },
-  { "id": "t_009", "title": "Measure before/after per-device deploy time and roll out", "group": "Bulk pivot performance", "status": "open",
+  { "id": "t_009", "title": "Measure before/after per-device deploy time and roll out", "group": "Fleet deploy performance", "status": "open",
     "priority": { "score": 50, "tier": "P2" }, "addedAt": "2026-06-02T10:00:00Z" },
-  { "id": "t_010", "title": "Secondary hardening: rsync --timeout + SSH keepalive", "group": "Bulk pivot performance", "status": "open",
+  { "id": "t_010", "title": "Secondary hardening: rsync --timeout + SSH keepalive", "group": "Fleet deploy performance", "status": "open",
     "priority": { "score": 35, "tier": "P3" }, "addedAt": "2026-06-02T10:00:00Z" }
 ] }
 ```
 
-Prefixes: `BULK`, `DETRITUS` (length 1, no collision). Sort: t_003 (P1/74) → then the P2/50 tie between t_001 and t_009 breaks on `addedAt` — t_001 (06-01) is older and wins → t_009 → t_002 (P2/40) → t_010 (P3/35). Exact TodoWrite call:
+Prefixes: `FLEET`, `DETRITUS` (length 1, no collision). Sort: t_003 (P1/74) → then the P2/50 tie between t_001 and t_009 breaks on `addedAt` — t_001 (06-01) is older and wins → t_009 → t_002 (P2/40) → t_010 (P3/35). Exact TodoWrite call:
 
 ```jsonc
 [
-  { content: "[BULK] Decide the Pivot-side source for directory rsync",          activeForm: "[BULK] Deciding the Pivot-side source for directory rsync",          status: "pending" },
+  { content: "[FLEET] Decide the source directory for rsync",                   activeForm: "[FLEET] Deciding the source directory for rsync",                   status: "pending" },
   { content: "[DETRITUS] Implement the v2 janitor-side write hook",              activeForm: "[DETRITUS] Implementing the v2 janitor-side write hook",            status: "pending" },
-  { content: "[BULK] Measure before/after per-device deploy time and roll out", activeForm: "[BULK] Measuring before/after per-device deploy time and rolling out", status: "pending" },
-  { content: "[BULK] Optimize Pivot video-pack fleet deploy (rollup goal)",     activeForm: "[BULK] Optimizing Pivot video-pack fleet deploy (rollup goal)",     status: "pending" },
-  { content: "[BULK] Secondary hardening: rsync --timeout + SSH keepalive",     activeForm: "[BULK] Hardening rsync --timeout + SSH keepalive",                 status: "pending" }
+  { content: "[FLEET] Measure before/after per-device deploy time and roll out", activeForm: "[FLEET] Measuring before/after per-device deploy time and rolling out", status: "pending" },
+  { content: "[FLEET] Optimize asset-pack fleet deploy (rollup goal)",          activeForm: "[FLEET] Optimizing asset-pack fleet deploy (rollup goal)",          status: "pending" },
+  { content: "[FLEET] Secondary hardening: rsync --timeout + SSH keepalive",    activeForm: "[FLEET] Hardening rsync --timeout + SSH keepalive",                 status: "pending" }
 ]
 ```
 
-Note rank 2: `[DETRITUS]` sits BETWEEN `[BULK]` rows because its priority wins the tiebreaker — correct under pure-priority sort; the global order determines render position, not the group. Any invocation against this JSON state MUST produce exactly this call. Deviation for the same state is a bug, not a judgment call.
+Note rank 2: `[DETRITUS]` sits BETWEEN `[FLEET]` rows because its priority wins the tiebreaker — correct under pure-priority sort; the global order determines render position, not the group. Any invocation against this JSON state MUST produce exactly this call. Deviation for the same state is a bug, not a judgment call.
 
 ### Detail mode (single id / fuzzy text)
 

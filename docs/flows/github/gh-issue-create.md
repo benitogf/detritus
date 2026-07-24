@@ -57,7 +57,7 @@ Rules:
 - Synthesize; do **not** quote transcript verbatim.
 - Do **not** include the agent's own deliberations or speculation.
 - Do **not** reference code identifiers, file paths, or function names. Issues are product-level.
-- **Cross-repo references** (citing PRs, issues, or related work in another repo) default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `idnerdidx/bulk#311` smears into nested autolinks via the `idx` substring; Plane mirrors the broken HTML). Write `[bulk PR #311](https://github.com/idnerdidx/bulk/pull/311)` or `[bulk #311](https://github.com/idnerdidx/bulk/issues/311)`, keeping the `<owner>/<repo>` pattern out of the label. Same-repo refs (`#<n>` with no `<owner>/<repo>/` prefix) stay valid bare. See the cross-repo-refs convention in `flows/github/gh`.
+- **Cross-repo references** (citing PRs, issues, or related work in another repo) default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `acme-tools/widgets#311` smears into nested autolinks via the `acme` substring; a downstream mirror — a tracker syncing GitHub's rendered HTML — mirrors the broken markup). Write `[widgets PR #311](https://github.com/acme-tools/widgets/pull/311)` or `[widgets #311](https://github.com/acme-tools/widgets/issues/311)`, keeping the `<owner>/<repo>` pattern out of the label. Same-repo refs (`#<n>` with no `<owner>/<repo>/` prefix) stay valid bare. See the cross-repo-refs convention in `flows/github/gh`.
 - If the conversation doesn't contain a concrete ask, STOP and ask the user what the issue should be about.
 
 ### Regression causation — when the user references a past change
@@ -91,7 +91,7 @@ Body template:
 ## Context
 <OPTIONAL — include only when Phase 1 identified a past change as causation.
 One or two lines naming the short SHA and the product-level description of what
-drifted. Example: "Behavior drifted after abc123 (trendboard layout swap), March 2026."
+drifted. Example: "Behavior drifted after abc123 (dashboard layout swap), March 2026."
 Omit this section entirely when there's no regression lineage to cite.>
 
 ## Acceptance
@@ -182,7 +182,7 @@ https://github.com/<owner>/<repo>/issues/<n>
 ## Guardrails
 
 - Don't include code identifiers / file paths / function names in the issue body. A short SHA in the `## Context` section is the one exception — it's causation metadata, not implementation detail.
-- Don't write bare `<owner>/<repo>#<n>` cross-repo shortcuts when the org slug contains another repo name in the same org as a substring. The autolinker re-tokenizes the org slug and the result renders as a smear of nested links (especially in Plane). Default to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)` or `[<repo> #<n>](https://github.com/<owner>/<repo>/issues/<n>)`, keeping the `<owner>/<repo>` pattern out of the label. Bare `#<n>` for same-repo refs is unaffected.
+- Don't write bare `<owner>/<repo>#<n>` cross-repo shortcuts when the org slug contains another repo name in the same org as a substring. The autolinker re-tokenizes the org slug and the result renders as a smear of nested links (especially in a downstream mirror that syncs GitHub's rendered HTML). Default to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)` or `[<repo> #<n>](https://github.com/<owner>/<repo>/issues/<n>)`, keeping the `<owner>/<repo>` pattern out of the label. Bare `#<n>` for same-repo refs is unaffected.
 - Don't post without authorization. An explicit instruction to create/open/file the issue (in the triggering message, the `/gh` args, or an upstream `/gh`/`/grow` handoff that propagated the authorization) IS the authorization — show the draft, then post without re-asking. Only gate behind `AskUserQuestion` when the issue was inferred from conversation with no explicit post instruction. Never re-confirm a post the user already directed.
 - Don't open an issue in a repo the user didn't authorize (ask if ambiguous).
 - Don't open obvious duplicates — warn on near-match titles.

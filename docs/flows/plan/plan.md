@@ -131,7 +131,7 @@ Call shape (Shape B, structured — see `core/todo-import`):
 
 ```jsonc
 {
-  "group": "<short title derived from the plan's topic — e.g. 'Detritus todo skill', 'Trendboard SIGTERM fix'>",
+  "group": "<short title derived from the plan's topic — e.g. 'Detritus todo skill', 'Ingest SIGTERM fix'>",
   "source": "plan",
   "items": [
     {

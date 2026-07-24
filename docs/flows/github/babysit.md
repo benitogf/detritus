@@ -14,6 +14,7 @@ argument-hint: "[pr] [interval]"
 when: User wants a PR watched until it is merged — fix reviewer feedback as it arrives, then merge the moment an approval covers the latest commit. Accepts a full PR URL, `<owner>/<repo>#<n>`, or bare `#<n>` when cwd is a clone of the target repo.
 related:
   - flows/github/gh
+  - flows/github/caregiver
   - flows/github/gh-feedback-work
   - flows/github/gh-self-review
   - flows/maintainer/learn
@@ -25,6 +26,8 @@ related:
 # /babysit — Watch a PR Until Merged
 
 A watch-until-merge loop over **one** PR. An armed event-watch wakes the loop on each gate-state change; the loop re-checks the PR; if a reviewer posted feedback after the last commit, it fixes it (push + body rewrite); once an `APPROVED` review covers the current HEAD, the PR's `mergeable_state` is `clean` (or `has_hooks`), and no change-request is standing, it merges and stops.
+
+`/babysit` is the **author's-seat** watch (fix-and-merge). Its reviewer-seat sibling is **`/caregiver`** (`flows/github/caregiver`): the same event-watch primitive, but it re-reviews the PR and re-posts a verdict on each change and **never merges, never fixes**. Don't conflate them — `/babysit` is the **merge-watch** (it reaches `merged`); `/caregiver` is the **review-watch** (it never merges).
 
 This skill **composes** existing parts and adds only one new piece:
 

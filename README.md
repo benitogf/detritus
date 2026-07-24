@@ -62,6 +62,7 @@ absent — they are not commands.
 | Command | Use it for |
 | --- | --- |
 | `/babysit` | Watch a single PR on an interval — fix any review feedback via /gh-feedback-work, and merge once an approval lands on the latest commit. |
+| `/caregiver` | Watch a single PR from the reviewer's seat — re-review on each push or discussion by dispatching the one-shot /gh-pr, re-posting a commit-pinned verdict only when it materially changes, until the PR is merged or closed. |
 | `/gh` | Router for GitHub issue/PR workflows — reads conversation context and dispatches to gh-issue-create, gh-issue-work, gh-feedback-work, gh-self-review, or gh-pr. |
 | `/gh-feedback-work` | Address open review feedback on a PR, push fixes, and update the PR body in place — never posts issue/PR comments. |
 | `/gh-issue-create` | Draft a GitHub issue from the current conversation, confirm with the user unless the post was already directed, post it with the Claude Code attribution footer, then offer next steps (/gh-issue-work, refine, or leave). |
@@ -74,6 +75,7 @@ absent — they are not commands.
 
 | Command | Use it for |
 | --- | --- |
+| `/checkpoint` | Durable per-topic session context — serialize load-bearing state to .checkpoint/<slug>.md at a boundary so a /clear is lossless and a later session (hours or weeks on) resumes the topic by name. |
 | `/code` | Explicit entry point for code exploration backed by the zero-setup code_* tools (code_map, code_outline, code_graph) plus native Grep. |
 | `/todo` | Cross-session todo management — router, conventions, and ALL everyday item operations (view, add, done, edit, defer, clear, file) in one doc. |
 

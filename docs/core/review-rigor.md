@@ -82,10 +82,10 @@ A reviewer at any gate — run delivery, quest branch delivery — receives inte
 
 Set analysis depth based on the files touched. Only the analysis subsections whose scope class fired here run.
 
-- **Docs-only** (`*.md`, frontmatter, KB): links, frontmatter schema, heading structure, convention match against sibling docs, attribution footer where required. Skip runtime analysis of code — but docs-only does NOT exempt the diff from R2b (any prose claim about how code behaves is verified against that code, same repo or sibling — or against the external mechanism it names — not only against other docs) nor from R1's whole-repo reference sweep when the diff deletes or renames an entity (a doc/role deletion's surviving references live in code strings — see R1).
+- **Docs-only** (`*.md`, frontmatter, KB): links, frontmatter schema, heading structure, convention match against sibling docs, attribution footer where required. Skip runtime analysis of code — but docs-only does NOT exempt the diff from R2b (any prose claim about how code behaves is verified against that code, same repo or sibling — or against the external mechanism it names — not only against other docs) nor from R1's whole-repo reference sweep when the diff deletes or renames an entity (a doc/role deletion's surviving references live in code strings — see R1). In a **public knowledge-base repo (the detritus KB)**, a docs diff that introduces internal product/customer/org/domain names, or incident-specific (non-generalized) examples, is a **blocker** — this makes `/gh-self-review` catch a leak pre-PR and `/gh-pr` catch it post. Scope this to public KB repos; a private product repo is not blocked on its own domain vocabulary.
 - **Deps-only** (`go.mod`/`go.sum`, `package.json`/lockfiles, etc.): verify new deps' publishers (supply-chain plausibility), licenses, version bumps vs. version jumps, removed deps that look load-bearing (grep for usages in the repo).
 - **Generated-only**: verify the generated diff is consistent with the hand-edited changes it accompanies. Orphan regenerations are a yellow flag — they mean either the tool ran against a different input, or the hand-edit was abandoned.
-- **Code**: full analysis (the subsections below). Within Code, classify the language(s) touched — `Go`, `JS/TS`, `Python`, `Godot` (any of `*.gd`, `*.tscn`, `*.tres`, `*.res`, `*.uid`, `*.import`, `*.gdshader`, `*.gdshaderinc`, `project.godot`, `export_presets.cfg`, `addons/**`), etc. — and run only the matching language subsections.
+- **Code**: full analysis (the subsections below). Within Code, classify the diff's language/engine; when a dedicated engine/language review-reference doc exists for it, `kb_get` and apply it — e.g. `engines/godot` is the reference doc for a diff touching Godot files.
 - **Mixed**: code rules apply; don't let docs/deps changes dilute scrutiny of the code changes.
 
 ## Don't stop at easy findings
@@ -111,7 +111,7 @@ Diff-correctness is necessary, not sufficient. A change can be internally correc
 
 - **Who is the realistic actor, on what realistic (worst-case) machine/state?** Trace the literal steps: first request → response → each subsequent call the client makes → does each one actually succeed? Pick the state that exposes the assumption — a first-time user on a clean machine, a cold cache, an unauthenticated browser, a node that just rebooted.
 - **Check the change against the rules the running system obeys.** Many failures live not in the code but in the platform / protocol / security model it runs inside — and those rules are knowable from a spec. Identify the boundaries this change crosses and verify it against each boundary's *real* semantics, not its happy-path intent. Boundary rules to consider: TLS chain/SAN validation and OS trust stores; the browser security model (origins by scheme+host+**port**, mixed content, per-origin certificate trust, CORS, cookie `SameSite`/`Secure` scope); auth and redirect flows; cache coherence and invalidation; filesystem permissions/ownership; process and network reachability. The recurring trap is a change that's locally correct but violates one boundary rule, so the feature **silently** doesn't work end to end (e.g. a multi-origin web app whose cross-origin calls fail because a private CA isn't trusted — and a per-origin warning click-through never covers them).
-- **Trace the event ordering, not just the handler.** For a fix that turns on the *sequence* of signals/events or on a deferred flag (one event schedules, a later event consumes), a clean handler in isolation is not the claim — the claim is the behavior across the whole ordering. Enumerate the realistic orderings and walk the flag's lifecycle over each: is it set, consumed, and cleared exactly once; can the consuming event fire twice, or an *immediate* action land while the flag is still pending, leaving a stale flag that misfires later? (This is the deferred-flag discipline in `patterns/state-management` §3 — consume-and-clear, and immediate actions cancel pending ones; a violation is the bug to flag.) A unit or integration test that fires the real ordering is the strongest evidence and is preferred where feasible; where the flow depends on hardware or a live integration that can't be driven here, reason the ordering through analytically per the next bullet and state the conclusion — do **not** treat "can't run the whole stack" as a pass. (e.g. a Godot fix suppressing a first-game badge/countdown, gated across `deck_change` → `start_bettimer` → `no_more_bets`, read as logically correct in review but shipped wrong: the suppression flag leaked when the cutoff fired via two paths — the ordering was never traced end to end.)
+- **Trace the event ordering, not just the handler.** For a fix that turns on the *sequence* of signals/events or on a deferred flag (one event schedules, a later event consumes), a clean handler in isolation is not the claim — the claim is the behavior across the whole ordering. Enumerate the realistic orderings and walk the flag's lifecycle over each: is it set, consumed, and cleared exactly once; can the consuming event fire twice, or an *immediate* action land while the flag is still pending, leaving a stale flag that misfires later? (This is the deferred-flag discipline in `patterns/state-management` §3 — consume-and-clear, and immediate actions cancel pending ones; a violation is the bug to flag.) A unit or integration test that fires the real ordering is the strongest evidence and is preferred where feasible; where the flow depends on hardware or a live integration that can't be driven here, reason the ordering through analytically per the next bullet and state the conclusion — do **not** treat "can't run the whole stack" as a pass. (e.g. a fix suppressing a first-run banner after its first display, gated across `session_start` → `timer_start` → `timer_end`, read as logically correct in review but shipped wrong: the suppression flag leaked when the cutoff fired via two paths — the ordering was never traced end to end.)
 - **"No e2e environment" is not an excuse.** When the behavior is derivable from a published spec or security model (TLS validation, same-origin policy, mixed-content rules, OAuth redirect flow, cookie scoping, cache semantics), reason it through analytically and state the conclusion. Deferring to "couldn't test against a live stack" when the answer is knowable from the spec is precisely the failure this section exists to prevent.
 
 **Bar:** can a first-time user on a clean machine complete the primary task this change touches? If you can't answer that from the diff plus the relevant spec, that uncertainty is itself a finding — flag it; don't bury it under "looks correct" or "not e2e-testable here."
@@ -251,60 +251,14 @@ If the repo is locally available:
 
 Do not flag "non-conventional" without having verified the convention. "I think Go usually does X" is not evidence; `grep -rn "X" repo/` is.
 
-## Godot (gated — only when the diff touches Godot files)
+## Build and packaging integrity (language-agnostic)
 
-Skip this entire subsection unless the diff actually touches Godot files. If only the binary export artifacts changed (`.so`, `.dll`, `.pck`) without source, note the unverifiable rebuild and stop here.
+These apply to any change that generates/serializes resources, wires init/dependency order, or produces a packaged/exported artifact — regardless of engine or language. When the diff touches a specific engine or language for which a dedicated review-reference doc exists (e.g. `engines/godot`), `kb_get` and apply that doc's mechanics on top of these.
 
-**Resource UIDs.** Godot 4.4+ uses `uid://` references for stable cross-scene linking; new resources must have unique UIDs.
-
-- **Duplicate UIDs across the diff or against the existing tree** are a real bug — scene instancing by `uid://` resolves to one of the duplicates non-deterministically across imports, so behaviour can swap between deploys without any code change. Look for `uid="..."` headers in `.tscn` / `.tres` / `.res` and `uid://` references; flag any matches between newly-added files and existing files. Common causes: copy-paste of an asset between customer dirs without regenerating the UID, fork of an existing scene without `Make Local` / `New UID`.
-- **Missing `.uid` sidecar files** for new `.gd` are noise on the first import after upgrade (4.4+ auto-generates them); only flag if the diff adds `.gd` files but the matching `.uid` is absent and the rest of the repo commits them.
-- A trendboard / baccarat road / dashboard build emitting "UID duplicate detected" warnings during export is the pattern to watch for, even if it doesn't fail the build.
-
-**Naming and structure.**
-
-- Signals: `snake_case` (`emit_signal("hand_dealt")`, not `handDealt`).
-- Class names: `class_name PascalCase` matching the file's primary type.
-- Node names in `.tscn`: `PascalCase` for scene roots and named children; unique-name nodes (`%`) for nodes accessed across scenes.
-- Scene-script coupling: a `.tscn` whose root script changed should still resolve at the scripted node path; a `.gd` with `class_name X` must not collide with an existing `class_name X` elsewhere in the project.
-
-**Lifecycle and memory.**
-
-- `queue_free()` after instancing in pooling code; check for orphaned instances (`get_tree().root.add_child` without later `queue_free`).
-- `is_instance_valid(node)` before accessing nodes that may have been freed (especially in deferred callbacks or signal handlers fired after `queue_free`).
-- `connect(callable, CONNECT_ONE_SHOT)` for signals that should fire once; otherwise stale connections accumulate when the receiver outlives the emitter.
-- `WeakRef` for back-references to avoid cycles when both nodes hold strong refs to each other.
-- `_exit_tree` cleanup for things `_ready` set up — timers, autoload subscriptions, file handles.
-
-**Reference semantics.**
-
-- A `Dictionary` / `Array` returned by an accessor is a **reference**, not a copy. When the source mutates it **in place** — a live record a backend/WS layer patches field-by-field (e.g. an ooo-streamed device/state record) — storing that reference and later comparing it against a fresh read of the same source is **always equal**: both sides are the same object mutating together. Any change-detection built on that comparison (a de-dup guard, an "only react when it changed" cache, `if new == _last: return`) **silently never fires**, so the UI keeps the first value forever. The tell: code does `_last = accessor()` (or `_current`, `_prev`) where `accessor()` reaches into a live-patched store, then guards on `x == _last`. Fix: **snapshot before storing** — `_last = value.duplicate()` (deep `duplicate(true)` only if the payload nests containers; shallow suffices for a flat dict). A test that fabricates its own input dicts cannot reproduce this — it only surfaces against the real, in-place-mutated source, so "verified with an injected payload" is not verification of the aliasing path.
-
-**Performance.**
-
-- Per-frame allocations in `_process` / `_physics_process`: avoid `String + String`, repeated `get_node`, `Array.new()` calls. Cache node refs in `_ready`, accumulate strings via `PackedStringArray`.
-- `signal` over polling for state changes — a `_process` that polls `if some_state_changed:` is almost always wrong vs. emitting a signal at the change site.
-- `Resource.duplicate(true)` only when needed; deep duplication is expensive.
-- Tween / Animation churn in tight loops — cap or pool.
-- Shader uniform churn — set in `_ready` if static, else only on actual change.
-
-**Autoload and project config.**
-
-- New autoloads in `project.godot` need to be declared in `export_presets.cfg` / build pipeline if they're not auto-included; missing exports cause runtime "could not find autoload" only on the exported build, not in the editor.
-- Autoload ordering: if A's `_ready` accesses B, B must be declared above A in `project.godot`'s `[autoload]` section.
-
-**Version-specific (Godot 4.6+).**
-
-- `class_exists()` / `is_class()` deprecation patterns.
-- `RenderingServer.global_shader_parameter_set` instead of older variants.
-- `@warning_ignore` annotations should target a specific code, not blanket-suppress.
-- `@tool` scripts: any side-effect in `_ready` runs in the editor — flag editor-only state mutation.
-
-**Tests (gated further — only when the project has a Godot test framework).**
-
-- GUT (Godot Unit Test) is the most common: tests live under `test/` or `tests/`, files match `test_*.gd`, run via `godot --headless --script res://addons/gut/gut_cmdln.gd -gdir=res://test -gexit`.
-- For a Godot bug fix, a regression test means a GUT test (or an in-engine `assert`-driven test) that fires the buggy code path and asserts the new expected behaviour.
-- Missing fixtures in tests (referenced `.tres` / `.tscn` / textures not committed) are the same `t.Skip("requires fixture")` antipattern as in Go — flag fixtures-not-in-repo as fragile.
+- **Unique generated/serialized resource identifiers.** Resources carrying generated or serialized identifiers must have unique IDs; a duplicate ID across the diff or against the existing tree is a real bug — a reference resolving by that ID can bind to either duplicate non-deterministically across builds, so behaviour swaps between deploys with no code change. Duplicate-ID warnings emitted during build/export are findings even when they are non-fatal. A dashboard build emitting "UID duplicate detected" warnings during export is the pattern to watch for, even if it doesn't fail the build.
+- **Init / dependency ordering.** If A's initialization reads B, B must initialize first; an ordering nothing enforces is the footgun. Check that the declared/registered order (or the dependency graph the loader obeys) actually places dependencies ahead of their consumers.
+- **Packaging/export manifest completeness.** Runtime-required assets/entries must be registered in the packaging/export manifest — an asset auto-available in the dev environment but omitted from the manifest fails only in the packaged build. Failures that appear only in the packaged build (not the dev environment) are the pattern to check.
+- **Deferred-flag ordering** stays governed by *Trace the lived path* above (consume-and-clear across the realistic event sequence).
 
 ## Consume the diff from live git
 

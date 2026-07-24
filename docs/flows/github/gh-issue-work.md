@@ -97,7 +97,7 @@ The explicit `origin/<default_branch>` base matters. If you run `git checkout -b
 Branch-name convention: derive from issue title.
 - Conventional-commits–style prefix matches the planned commit type: `feat/`, `fix/`, `refactor/`, `docs/`, `chore/`.
 - Scope is a short kebab-case slug of the issue topic.
-- Example: issue titled "baccarat new PairPlus based results" → `feat/baccarat-pair-plus-sidebets`.
+- Example: issue titled "reports: add CSV export" → `feat/reports-csv-export`.
 
 ## Phase 5: Implement + test
 
@@ -196,9 +196,9 @@ When a Path holds, proceed straight to Phase 9; otherwise ask. Asking the user t
 
 Title: conventional-commits style, ≤70 chars.
 
-Body — product-focused, no file paths / line numbers / function names / symbol names. Describe what a user / operator / dealer experiences that they didn't before.
+Body — product-focused, no file paths / line numbers / function names / symbol names. Describe what a user / operator experiences that they didn't before.
 
-**Cross-repo refs** in the body default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `idnerdidx/bulk#311` smears into nested autolinks via the `idx` substring). Write `[bulk PR #311](https://github.com/idnerdidx/bulk/pull/311)`, keeping the `<owner>/<repo>` pattern out of the label. Same-repo `Closes #<n>` lines stay bare. See the cross-repo-refs convention in `flows/github/gh`.
+**Cross-repo refs** in the body default to explicit markdown links — bare `<owner>/<repo>#<n>` shortcuts are unsafe whenever the org slug contains another repo name in the same org as a substring. GitHub's autolinker mangles those org-slug fragments by relinking the inner repo name (e.g. `acme-tools/widgets#311` smears into nested autolinks via the `acme` substring). Write `[widgets PR #311](https://github.com/acme-tools/widgets/pull/311)`, keeping the `<owner>/<repo>` pattern out of the label. Same-repo `Closes #<n>` lines stay bare. See the cross-repo-refs convention in `flows/github/gh`.
 
 **Pick the `--head` shape first — it depends on write access to the target repo.** The branch was pushed in Phase 7 to whichever remote is pushable; a fork contributor has no write access to the target and their branch lives on their fork, so the PR is cross-fork and `--head` must be owner-prefixed. Probe once:
 
@@ -271,7 +271,7 @@ GitHub-review-comment feedback (posted on the PR itself) is handled by `/gh-feed
 ## Guardrails
 
 - Don't reference code paths, symbols, or line numbers in the PR body. That belongs in the diff. The body is for the non-technical reader.
-- Don't write bare `<owner>/<repo>#<n>` cross-repo shortcuts in the PR body when the org slug contains another repo name in the same org as a substring. Default to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)`, keeping the `<owner>/<repo>` pattern out of the label, or GitHub's autolinker will mangle the render. Same-repo `Closes #<n>` is unaffected.
+- Don't write bare `<owner>/<repo>#<n>` cross-repo shortcuts in the PR body when the org slug contains another repo name in the same org as a substring. Default to `[<repo> PR #<n>](https://github.com/<owner>/<repo>/pull/<n>)`, keeping the `<owner>/<repo>` pattern out of the label, or GitHub's autolinker will mangle the render (a downstream HTML-syncing mirror shows the same smear). Same-repo `Closes #<n>` is unaffected.
 - Don't open the PR without authorization. Open as-is when Phase 8b's two floors hold (8a clean on the current diff, an issue linked) AND either authorization path holds — Path A (direct latest-message directive, diff unchanged since) or Path B (up-front authorization propagated through `/gh`/`/grow`). Otherwise gate behind an explicit "Open PR as-is". A pushed branch is recoverable; an open PR pings reviewers — but never re-ask once the user has directed it (directly or via a propagated handoff) and 8a is clean. Phase 8a is never skipped regardless.
 - Don't force-push, don't rebase shared branches, don't skip hooks.
 - Don't post issue/PR comments from this skill — the PR body carries all narrative.
