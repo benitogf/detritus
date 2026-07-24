@@ -75,15 +75,24 @@ After writing, the skill ends with the literal line `checkpoint complete — saf
 Resume is a **pull**: the user reaches for a topic; nothing is injected or greeted at them. There is **no proactive greeting on session start** (host-neutral, needs no hook), and **no silent auto-load** — in a multiversal workspace, loading the *wrong* topic's context is the worst outcome.
 
 - **Primary — `/checkpoint resume <slug>`.** The user names the topic. They know their topics, and the slugs are readable, so naming is the fast path.
-- **Smart assist — content-match, propose then confirm.** If the user just *describes* the work instead of naming it, the agent content-matches their intent against each checkpoint's *Current orientation* + *Last user directive* lines and **proposes** a topic — "looks like `xstadium-godot` — resume?" — then waits for confirmation. It **always proposes and confirms; it never silently auto-loads**.
+- **Smart assist — content-match, propose then confirm.** If the user just *describes* the work instead of naming it, the agent content-matches their intent against each checkpoint's *Current orientation* + *Last user directive* lines and **proposes** — surfacing the ranked candidates through the resume-list picker below (best match first). A single confident match may be proposed inline ("looks like `xstadium-godot` — resume?"); more than one candidate goes through the picker. It **always proposes and confirms; it never silently auto-loads**.
 - **Re-orient across ALL repos, re-arm all watches.** On resume the session re-orients to **every** repo/worktree in *Repos / worktrees touched* and the portable *Artifacts* pointers — not just one repo — and **re-arms** the in-flight watches recorded in the doc (see *In-flight state safety*).
+
+### The resume-list picker
+
+When resume surfaces a *choice* — a bare `/checkpoint` on a fresh session, or a content-match with more than one candidate — present it as an **`AskUserQuestion`** selection, not a prose list the user has to read and then type a slug back from. The structured picker *is* the propose-and-confirm gate: the user selects, they don't retype, and the safe path (never silently loading the wrong topic) is the easy one. `AskUserQuestion` is the same host primitive the `gh-*` flows reach for when a choice must not be guessed.
+
+- **Options = the top 4 topics**, newest-first (for a content-match, the ranked candidates first). Four is the tool's cap and matches *Set hygiene*'s index-not-a-flat-dump rule — never every topic at once.
+- **Each option carries a briefing to read before picking**: label = the slug; description = `age · one-line Current orientation · repos touched` — the same row shape *`/checkpoint list`* renders (age derived from the file, orientation and repos from the doc's own fields). This is what lets the user recognize the right topic without opening files.
+- **"Other" covers the rest.** The tool's free-text *Other* handles naming an older slug beyond the top 4, or "starting new work instead". When more than 4 active topics exist, say so in the question text ("…and N more — pick Other and name one, or run `/checkpoint list`").
+- **Fallback — prose list.** In a non-interactive context (or a host without `AskUserQuestion`), degrade to the plain prose list + "resume by name" — the same content, unstructured. The picker is the default presentation, not the only one.
 
 ### Bare `/checkpoint` — state-aware dispatch
 
 Bare `/checkpoint` does the right thing on either side of a `/clear`:
 
 - **Session HAS meaningful state to serialize** → it **writes** (the normal case).
-- **Session is fresh / just-cleared with nothing worth saving** → it treats the invocation as **resume intake**: shows the active-topics list (per *`/checkpoint list`*) and offers to resume one.
+- **Session is fresh / just-cleared with nothing worth saving** → it treats the invocation as **resume intake**: surfaces the active topics through *the resume-list picker* (an `AskUserQuestion` selection, briefing per option) and offers to resume one.
 
 One verb, dispatched by whether there is state to save.
 
@@ -98,7 +107,7 @@ Checkpoints **persist indefinitely** — a topic can revive anytime — and are 
 
 The **entire flow works with zero `flows/maintainer/setup-extra-rules`**: manual write, name-based and content-match resume, list, and archive are all host-neutral and need no hook (the opt-in best-effort auto-write is the one setup-extra-rules-gated extra, and it is not required). Two paths do the **writing** (manual, primary + that opt-in best-effort auto-write), and name / content-match does the **resume**. That is the whole model.
 
-Because resume is a pull — no auto-inject, no greeting — the SessionStart hook's role shrinks to almost nothing. It is a **footnote, not a layer**: optionally, a SessionStart hook (via `flows/maintainer/setup-extra-rules`) can *surface your active-topics list* on a fresh session so you see what's resumable — but it is **not required**; bare `/checkpoint` does exactly this on demand. The hook surfaces the list; it does **not** auto-inject any specific doc as the resume mechanism.
+Because resume is a pull — no auto-inject, no greeting — the SessionStart hook's role shrinks to almost nothing. It is a **footnote, not a layer**: optionally, a SessionStart hook (via `flows/maintainer/setup-extra-rules`) can *surface your active-topics list* on a fresh session so you see what's resumable — but it is **not required**; bare `/checkpoint` does this on demand (via *the resume-list picker*). The hook surfaces the list; it does **not** auto-inject any specific doc as the resume mechanism.
 
 ## In-flight state safety
 
