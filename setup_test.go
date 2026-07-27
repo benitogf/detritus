@@ -9,6 +9,33 @@ import (
 	"testing"
 )
 
+// TestWriteFileOrWarnSurfacesWriteError verifies the generators' shared write
+// helper does not silently discard a failed write (issue #248): it returns true
+// and writes on a good path, and returns false when the write fails.
+func TestWriteFileOrWarnSurfacesWriteError(t *testing.T) {
+	dir := t.TempDir()
+
+	if !writeFileOrWarn(filepath.Join(dir, "out.md"), []byte("hi")) {
+		t.Fatalf("writeFileOrWarn reported failure on a writable path")
+	}
+	if got, err := os.ReadFile(filepath.Join(dir, "out.md")); err != nil || string(got) != "hi" {
+		t.Fatalf("content not written: got %q err %v", got, err)
+	}
+
+	// A directory path cannot be written as a file — the error must surface as a
+	// false return, not be silently ignored. Silence the expected stderr warning
+	// so it doesn't clutter test output.
+	devnull, _ := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	orig := os.Stderr
+	os.Stderr = devnull
+	ok := writeFileOrWarn(dir, []byte("hi"))
+	os.Stderr = orig
+	devnull.Close()
+	if ok {
+		t.Errorf("writeFileOrWarn reported success writing to a directory path")
+	}
+}
+
 // TestSetupDoesNotRegisterCandylandMCP: detritus drives candyland over REST (see
 // candyland_client.go); it must NOT register candyland as an MCP server in a host
 // config. Only detritus is upserted; candyland never appears.
@@ -781,6 +808,29 @@ func TestGenerateClaudeReviewerAgentPinsModelAndEffort(t *testing.T) {
 	}
 	if !strings.Contains(got, "roles/reviewer") {
 		t.Errorf("body must direct the reviewer to load roles/reviewer; got:\n%s", got)
+	}
+}
+
+// TestGenerateClaudeReviewerAgentSelfReportsProvenance verifies the reviewer
+// body directs the reviewer to self-report the model it is actually running on
+// plus the two review-stamp lines, so a silent model degrade (an old CLI
+// falling off the claude-fable-5 pin) is visible in the returned verdict.
+func TestGenerateClaudeReviewerAgentSelfReportsProvenance(t *testing.T) {
+	home := t.TempDir()
+
+	generateClaudeReviewerAgent(home)
+
+	raw, err := os.ReadFile(filepath.Join(home, ".claude", "agents", "detritus-reviewer.md"))
+	if err != nil {
+		t.Fatalf("reviewer agent definition not written: %v", err)
+	}
+	got := string(raw)
+
+	if !strings.Contains(got, "Review stamps") {
+		t.Errorf("body must reference the review-rigor Review stamps section; got:\n%s", got)
+	}
+	if !strings.Contains(got, "self-report") {
+		t.Errorf("body must direct the reviewer to self-report the model it runs on; got:\n%s", got)
 	}
 }
 

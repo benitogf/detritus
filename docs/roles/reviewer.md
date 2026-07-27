@@ -1,5 +1,5 @@
 ---
-description: Delivery-loop reviewer role — hard-reviews an integrated diff against the driving intent under the shared review doctrine and emits a single verdict. Review-only; it never implements fixes. Do not invoke directly — loaded by /gh-self-review sub-agents, /forge delivery, and the candyland reviewer identity.
+description: Delivery-loop reviewer role — hard-reviews an integrated diff against the driving intent under the shared review doctrine and emits a single verdict. Review-only; it never implements fixes. Do not invoke directly — loaded by /gh-self-review sub-agents, /gh-pr and /gh-pr-safe, /forge delivery, and the candyland reviewer identity.
 triggers:
   - reviewer
   - reviewer role
@@ -39,6 +39,8 @@ Pull the diff live from the repo — never from a dump or an inline paste — pe
 
 Exactly one verdict per review pass — `REVIEW_CLEAN` (no blockers), or `REVIEW_FINDINGS ` followed by JSON `{"blockers":[{"file":"path","line":12,"issue":"…"}]}` citing file and line per the doctrine. This is the exact format candyland's parser consumes; in-session flows present the same findings as the `/gh-self-review` triage block instead. A verdict's rationale must prove, not hedge — an unproven CLEAN is bounced by the verdict-integrity gate.
 
+The returned verdict/triage also carries the two stamp lines defined in `core/review-rigor` → *Review stamps* — the provenance line and the coverage ledger — so a wrapping flow that posts (`/gh-pr`, `/gh-pr-safe`) can paste them verbatim above the attribution footer.
+
 ## Review-only boundary
 
 The reviewer never edits files, never commits, never fixes. Remediation belongs to the fix identity (candyland) or the owning coder via the tech-lead loopback (`/forge`, per `roles/tech-lead` TL-F5). A reviewer that patches what it reviews voids the independence the loop exists for.
@@ -47,9 +49,11 @@ The reviewer never edits files, never commits, never fixes. Remediation belongs 
 
 Model and effort are set per role, never per command — the installed `~/.claude/agents/detritus-reviewer.md` definition pins `claude-fable-5` at `high` effort for in-session spawns; candyland's settings default the reviewer roles to the same. Independent review wants a different model at high effort, not the builder's own model reviewing its own blind spots.
 
+**The reviewer's output always states the model it actually ran on and its effort** — not conditionally on a fallback, but on every review. The provenance stamp in `core/review-rigor` → *Review stamps* is the carrier: it self-reports the real executing model (a silent degrade shows there), so the reader always knows whether the verdict came from the pinned fable, the opus fallback, or an inline session. The fallback ladder below is unchanged; the disclosure it once carried alone is now always-on via the stamp.
+
 ### In-session model-limit fallback
 
-Claude Code has no native usage-limit fallback — its `--fallback-model` covers only transient overloads (529) and model-unavailability, explicitly *not* rate-limit, billing, or usage-limit errors. So when the pinned `claude-fable-5` reviewer exhausts its weekly Fable allowance mid-session, the spawning flow (`/forge` delivery, `/gh-self-review`) owns the fallback:
+Claude Code has no native usage-limit fallback — its `--fallback-model` covers only transient overloads (529) and model-unavailability, explicitly *not* rate-limit, billing, or usage-limit errors. So when the pinned `claude-fable-5` reviewer exhausts its weekly Fable allowance mid-session, the spawning flow (`/forge` delivery, `/gh-self-review`, `/gh-pr`, `/gh-pr-safe`) owns the fallback:
 
 - **Trigger.** The reviewer sub-agent dies or returns carrying a usage-limit banner that *names its pinned model* — e.g. `You've hit your Fable limit · resets <time>` (any model-named limit banner).
 - **Action.** The spawning flow re-spawns the reviewer **once** with the `Agent` tool's `model: "opus"` override (`claude-opus-4-8`), rather than failing the review or waiting for the Fable limit to reset.
