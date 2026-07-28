@@ -769,6 +769,7 @@ func setupClaudeCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 	generateClaudeSkills(home, docs)
 	generateClaudeCoderAgent(home)
 	generateClaudeReviewerAgent(home)
+	generateClaudeReviewerPRAgent(home)
 
 	// Enforce the flows/project/todo convention #13 when the /todo family ships: install the
 	// PreToolUse write-guard hook (idempotent). If a future build drops /todo,
@@ -855,14 +856,14 @@ You are a coder in the ` + "`/forge`" + ` parallel implementation loop, spawned 
 	}
 }
 
-// generateClaudeReviewerAgent installs the subagent definition the review flows
-// spawn (/gh-self-review Phase 3, /gh-pr + /gh-pr-safe Phase 5, and /forge
-// delivery through them). Model and
-// effort are pinned per ROLE here — never per command: review runs on
+// generateClaudeReviewerAgent installs the fable-pinned reviewer definition the
+// build-side review flows spawn (/gh-self-review Phase 3 and /forge delivery
+// through it). Model and effort are pinned per ROLE here: review runs on
 // claude-fable-5 at high effort regardless of the session model, the reviewing
 // counterpart of the coder's effort:low pin. An unrecognized model value makes
 // Claude Code fall back to inherit, so old CLIs degrade to the session model
-// rather than erroring.
+// rather than erroring. The PR-review flows (/gh-pr, /gh-pr-safe) spawn the
+// separate unpinned counterpart below instead, to conserve the Fable allowance.
 func generateClaudeReviewerAgent(home string) {
 	agentsDir := filepath.Join(home, ".claude", "agents")
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
@@ -876,7 +877,7 @@ func generateClaudeReviewerAgent(home string) {
 	// Grep to verify, though it never edits).
 	content := `---
 name: detritus-reviewer
-description: Delivery-loop reviewer spawned by /gh-self-review, /gh-pr, /gh-pr-safe, and /forge delivery — hard-reviews a diff against the driving intent under the shared review doctrine. Review-only. Do not invoke directly.
+description: Delivery-loop reviewer spawned by /gh-self-review and /forge delivery — hard-reviews a diff against the driving intent under the shared review doctrine. Review-only. Do not invoke directly.
 model: claude-fable-5
 effort: high
 ---
@@ -892,6 +893,45 @@ You are the reviewer in a delivery loop, spawned to hard-review a diff before it
 `
 	if writeFileOrWarn(agentFile, []byte(content)) {
 		fmt.Printf("Claude Code reviewer agent: %s\n", agentFile)
+	}
+}
+
+// generateClaudeReviewerPRAgent installs the unpinned reviewer definition the
+// PR-review flows spawn (/gh-pr, /gh-pr-safe Phase 5). It is identical in role
+// and doctrine to detritus-reviewer but uses `model: inherit` so the review
+// runs on the invoking session's model rather than claude-fable-5 — a deliberate
+// per-flow override that conserves the weekly Fable allowance for the build-side
+// loops (/forge delivery, /gh-self-review) that run many reviews per build. The
+// accepted trade is that PR-review verdicts are no longer model-deterministic
+// across sessions (roles/reviewer → Model and effort). Effort stays high — the
+// review rigor is unchanged; only the model pin is dropped.
+func generateClaudeReviewerPRAgent(home string) {
+	agentsDir := filepath.Join(home, ".claude", "agents")
+	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: claude agents dir: %v\n", err)
+		return
+	}
+	agentFile := filepath.Join(agentsDir, "detritus-reviewer-pr.md")
+	// No `tools:` key — same rationale as detritus-reviewer: omitting it inherits
+	// the session's full toolset (kb_get + Read/Bash/Grep to verify).
+	content := `---
+name: detritus-reviewer-pr
+description: PR-review reviewer spawned by /gh-pr and /gh-pr-safe Phase 5 — hard-reviews a posted PR against the driving intent under the shared review doctrine, on the session model (unpinned) to conserve the Fable allowance. Review-only. Do not invoke directly.
+model: inherit
+effort: high
+---
+
+# Detritus Reviewer (PR-review, unpinned)
+
+You are the reviewer in a PR-review flow, spawned to hard-review a posted PR before its verdict. You run at **high effort** on the invoking session's model — the PR-review counterpart of the fable-pinned ` + "`detritus-reviewer`" + `, unpinned by design to conserve the Fable allowance (roles/reviewer → *Model and effort*). Your rigor is identical; only the model pin differs.
+
+1. Load your role doc with ` + "`kb_get name=\"roles/reviewer\"`" + ` and follow it. It composes ` + "`core/review-rigor`" + ` and ` + "`flows/principles/truthseeker`" + ` — load those too and apply the rubric end-to-end; never paraphrase it.
+2. Your brief carries pointers to the change (repo path, base, head SHA, in-scope files) and the **driving intent** (what the user asked for). Pull the diff live from the repo per the rigor doc — never from a dump or paste. Verify the diff satisfies the intent: a missing, partial, or contradicted intent commitment is a blocker. If no intent was provided, say so in your output and review mechanics only.
+3. Never edit files, stage, commit, push, or post. Your output is the verdict/triage the wrapping flow asked for — nothing else.
+4. In your verdict output, self-report the model you are actually running on and emit the two review-stamp lines (provenance + R-check coverage ledger) per ` + "`core/review-rigor`" + ` → *Review stamps*. Because you are unpinned, the provenance line names the session model you ran on (` + "`detritus-reviewer-pr (<session model> / high)`" + `), which makes the actual reviewing model visible.
+`
+	if writeFileOrWarn(agentFile, []byte(content)) {
+		fmt.Printf("Claude Code PR-review reviewer agent: %s\n", agentFile)
 	}
 }
 

@@ -148,11 +148,11 @@ Your review contributes **net-new signal** only. Restating known information is 
 - If a commit message explains it → don't treat it as a gap. The rationale is documented.
 - If the linked issue already covers the trade-off → don't flag it as an oversight.
 
-## Phase 5: Apply review rigor via the pinned reviewer agent
+## Phase 5: Apply review rigor via the unpinned PR-review reviewer agent
 
-The analysis runs in the **spawned `detritus-reviewer` agent** — the same role definition `/gh-self-review` Phase 3 uses (`~/.claude/agents/detritus-reviewer.md`, pinning `claude-fable-5` at `high` effort per `roles/reviewer` → *Model and effort*). Spawning it, rather than analyzing inline in the invoking session, is what pins the review's model and effort — an inline analysis inherits whatever the invoking session happens to run, and that unobserved variance is exactly what returns opposite verdicts on the same head. The wrapping session keeps Phases 1–4 (resolve, fetch, timeline, prior-signal inventory) and Phases 6–7 (compose, post, report); only the analysis moves into the agent.
+The analysis runs in a **spawned reviewer agent** — but `/gh-pr` (and `/gh-pr-safe`) spawn the **unpinned** `detritus-reviewer-pr` definition (`~/.claude/agents/detritus-reviewer-pr.md`), not the fable-pinned `detritus-reviewer` that `/gh-self-review` Phase 3 and `/forge` delivery use. `detritus-reviewer-pr` carries the identical review role and doctrine but is defined with `model: inherit`, so the review runs on the **invoking session's model** (at `high` effort — the rigor is unchanged). This is the deliberate PR-review exception in `roles/reviewer` → *Model and effort*: it conserves the weekly Fable allowance for the build-side loops (`/forge` delivery, `/gh-self-review`) that run many reviews per build. Spawning a reviewer agent still buys **reviewer independence** — a fresh context that loads the review doctrine via `kb_get` and never reviews its own builder blind spots — which is the reason to spawn rather than analyze inline; the trade is that PR-review verdicts are no longer model-deterministic across sessions (`roles/reviewer` documents the accepted cost). The wrapping session keeps Phases 1–4 (resolve, fetch, timeline, prior-signal inventory) and Phases 6–7 (compose, post, report); only the analysis moves into the agent.
 
-Spawn via the `Agent` tool with `subagent_type: "detritus-reviewer"` and a **pointer brief** — never a pasted diff (`core/review-rigor` → *Consume the diff from live git*). The brief carries:
+Spawn via the `Agent` tool with `subagent_type: "detritus-reviewer-pr"` (the unpinned PR-review definition — **not** `detritus-reviewer`) and a **pointer brief** — never a pasted diff (`core/review-rigor` → *Consume the diff from live git*). Its `model: inherit` gives the session model with no per-spawn override needed. The brief carries:
 
 - The target: `<owner>/<repo>#<n>` and the head SHA captured in Phase 2 (the verdict binds to it).
 - The Phase 3/4 context summary: the prior-signal inventory and each thread's resolution state, so the agent contributes net-new signal only.
@@ -160,11 +160,11 @@ Spawn via the `Agent` tool with `subagent_type: "detritus-reviewer"` and a **poi
 
 The agent loads `roles/reviewer` → `core/review-rigor` + `flows/principles/truthseeker` via `kb_get`, pulls the diff itself with `gh api` (no local clone required — the live-git section's API-transport carve-out covers a remote PR), applies the checklist end-to-end, and returns the verdict, the composed body sections (Lead / Verified / Blockers / Non-blocking), and the two stamp lines (`core/review-rigor` → *Review stamps*) for Phase 6 to paste. It skips nothing; a subsection whose scope didn't fire is noted as `n/a`, not dropped.
 
-**Model-limit fallback.** If the reviewer sub-agent dies or returns carrying a usage-limit banner that *names its pinned model* (e.g. `You've hit your Fable limit`), re-spawn it **once** with the `Agent` tool's `model: "opus"` override, per `roles/reviewer` → *In-session model-limit fallback*; the override is session-sticky (later spawns in this session go straight to opus). An account-wide banner naming no model is a capability blocker — surface it to the user, do not retry on another model.
+**No model-limit fallback here.** Because `detritus-reviewer-pr` runs on the session model (`model: inherit`), there is no fable pin to exhaust and no per-model re-spawn ladder — the *In-session model-limit fallback* in `roles/reviewer` applies only to the fable-pinned flows (`/forge` delivery, `/gh-self-review`). If the reviewer sub-agent dies on a usage-limit banner, the whole session's model is exhausted, so it is a capability blocker: surface it to the user, do not retry on another model.
 
-**General-purpose fallback (definition absent).** If the `Agent` tool is available but the `detritus-reviewer` definition is not installed (setup not run), spawn a `general-purpose` sub-agent instead — same brief, same `kb_get` loads — so the review still runs independently. It inherits the session model, so it MUST emit the general-purpose provenance variant (`general-purpose (<session model> / effort unpinned)`, `core/review-rigor` → *Review stamps*).
+**General-purpose fallback (definition absent).** If the `Agent` tool is available but the `detritus-reviewer-pr` definition is not installed (setup not run), spawn a `general-purpose` sub-agent instead — same brief, same `kb_get` loads — so the review still runs independently. It inherits the session model, so it MUST emit the general-purpose provenance variant (`general-purpose (<session model> / effort unpinned)`, `core/review-rigor` → *Review stamps*).
 
-**Inline fallback (agent spawn unavailable).** On an old CLI with no `Agent` tool at all, run the analysis inline in this session as before — load `core/review-rigor` fresh via `kb_get` and follow it end-to-end. An inline run MUST emit the inline-session provenance variant (`inline session (<session model> / effort unpinned)`, `core/review-rigor` → *Review stamps*), so the posted review discloses it did not run on the pinned agent.
+**Inline fallback (agent spawn unavailable).** On an old CLI with no `Agent` tool at all, run the analysis inline in this session as before — load `core/review-rigor` fresh via `kb_get` and follow it end-to-end. An inline run MUST emit the inline-session provenance variant (`inline session (<session model> / effort unpinned)`, `core/review-rigor` → *Review stamps*), so the posted review discloses it ran inline in the invoking session rather than in a spawned reviewer agent.
 
 ## Phase 6: Compose review + post
 
@@ -241,7 +241,7 @@ gh api -X POST repos/<o>/<r>/pulls/<n>/reviews \
   -f body="$(cat <<'EOF'
 <review body here>
 
-detritus <version> · detritus-reviewer (claude-fable-5 / high) · head <sha8>
+detritus <version> · detritus-reviewer-pr (<session model> / high) · head <sha8>
 R-checks: R1 ✓ · R1b ✓ · R1b-sec n/a · R1c n/a · R2 ✓ · R2b ✓ (N claims) · R3 ✓ · R4 ✓ · R5 ✓ · R6 n/a · R7 n/a · R8 n/a · R9 n/a · R10 n/a · R11 n/a
 
 ---
@@ -250,7 +250,7 @@ EOF
 )"
 ```
 
-The two stamp lines (`core/review-rigor` → *Review stamps*) come from the reviewer agent's return, above the `---` footer, inside the heredoc. Use the actual per-check outcomes the agent reported (`✓` pass · `✗` blocker cited above · `n/a` trigger didn't fire; R2b carries its claim count), and the provenance variant matching how Phase 5 actually ran (pinned agent, general-purpose fallback, or inline session).
+The two stamp lines (`core/review-rigor` → *Review stamps*) come from the reviewer agent's return, above the `---` footer, inside the heredoc. Use the actual per-check outcomes the agent reported (`✓` pass · `✗` blocker cited above · `n/a` trigger didn't fire; R2b carries its claim count), and the provenance variant matching how Phase 5 actually ran — for `/gh-pr` the normal path is the **unpinned `detritus-reviewer-pr` spawn**, which emits the session-model variant (`detritus-reviewer-pr (<session model> / high)`); the general-purpose-fallback and inline-session variants apply only when the definition is absent or the `Agent` tool is unavailable.
 
 If the POST fails with `422 Pull request has been updated since review was started` (the head moved between Phase 2 and Phase 6), do **not** silently retry against the new HEAD — re-run from Phase 3 against the new SHA so prior-signal inventory and resolution checks reflect the current state.
 

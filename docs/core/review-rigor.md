@@ -172,11 +172,17 @@ Forbidden middle states: no `approve-with-reservations`, no `mostly-clean`, no `
 
 Every **posted** review body carries two stamp lines at its end, above the `---` attribution footer, inside the post heredoc. They exist for **human visibility only** — they are guidance, not a new RV-F forbidden-action row, and no gate enforces their presence. Their purpose is to make otherwise-invisible verdict variance (which model reviewed, at what effort, and which check classes actually fired) falsifiable after the fact.
 
-- **Provenance line** — one line naming what produced the verdict. There are **three** producing paths, one variant each — pick by how the review actually ran:
+- **Provenance line** — one line naming what produced the verdict. There are **four** producing paths, one variant each — pick by how the review actually ran:
 
-  - **Pinned agent** (the normal path — the `detritus-reviewer` definition was present and spawned):
+  - **Pinned agent** (the normal path for the fable-pinned flows — `/forge` delivery and `/gh-self-review` — where the `detritus-reviewer` definition was present and spawned *with* its pin):
 
     `detritus <version> · detritus-reviewer (claude-fable-5 / high) · head <sha8>`
+
+  - **Unpinned PR-review agent** (`/gh-pr` and `/gh-pr-safe` — they spawn the separate `detritus-reviewer-pr` definition, which is `model: inherit` at `high` effort by design — `roles/reviewer` → *Model and effort*):
+
+    `detritus <version> · detritus-reviewer-pr (<session model> / high) · head <sha8>`
+
+    The agent identity names the PR-review reviewer; the model self-reports the session model it actually ran on (no fable pin), and effort is the definition's configured `high`.
 
   - **General-purpose fallback** (spawned, but the pinned definition was absent so the flow fell back to a `general-purpose` sub-agent that inherits the session model — `flows/github/gh-self-review` Phase 3, `flows/build/forge`):
 
@@ -186,7 +192,7 @@ Every **posted** review body carries two stamp lines at its end, above the `---`
 
     `detritus <version> · inline session (<session model> / effort unpinned) · head <sha8>`
 
-  The `<version>` is the `detritus --version` output verbatim (e.g. `detritus 3.49.0` — goreleaser strips the tag's `v` prefix, so the stamp carries no `v`; a source build stamps `detritus dev`). The **model** segment is **self-reported by the executing agent** — what it actually ran on, not what the definition pins — so a silent degrade off the pinned model shows. The **effort** segment is *not* a self-report (an agent has no reliable introspection of its own effort): it states the **configured** effort — `high` for the pinned agent, `unpinned` for the general-purpose and inline paths, which run at whatever the session configures. The distinction the stamp makes falsifiable is the model; effort tracks the pin.
+  The `<version>` is the `detritus --version` output verbatim (e.g. `detritus 3.49.0` — goreleaser strips the tag's `v` prefix, so the stamp carries no `v`; a source build stamps `detritus dev`). The **model** segment is **self-reported by the executing agent** — what it actually ran on, not what the definition pins — so a silent degrade off the pinned model shows. The **effort** segment is *not* a self-report (an agent has no reliable introspection of its own effort): it states the **configured** effort — `high` for both the pinned `detritus-reviewer` and the unpinned `detritus-reviewer-pr` agents (each fixes `effort: high` in its definition), and `unpinned` for the general-purpose and inline paths, which run at whatever the session configures. The distinction the stamp makes falsifiable is the model; effort tracks the definition (and only the general-purpose/inline paths have no definition to fix it).
 
 - **Coverage ledger** — one line (not a table), naming each R-check's outcome so an APPROVE makes a falsifiable coverage statement:
 

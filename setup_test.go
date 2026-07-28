@@ -811,6 +811,66 @@ func TestGenerateClaudeReviewerAgentPinsModelAndEffort(t *testing.T) {
 	}
 }
 
+// TestGenerateClaudeReviewerPRAgentInheritsModelKeepsEffort verifies the
+// PR-review reviewer definition (/gh-pr, /gh-pr-safe) is the UNPINNED
+// counterpart: it inherits the session model — never the claude-fable-5 pin,
+// which is the whole point of conserving the Fable allowance — while keeping
+// high effort and the same review obligations as detritus-reviewer.
+func TestGenerateClaudeReviewerPRAgentInheritsModelKeepsEffort(t *testing.T) {
+	home := t.TempDir()
+
+	generateClaudeReviewerPRAgent(home)
+
+	agentFile := filepath.Join(home, ".claude", "agents", "detritus-reviewer-pr.md")
+	raw, err := os.ReadFile(agentFile)
+	if err != nil {
+		t.Fatalf("PR-review reviewer agent definition not written: %v", err)
+	}
+	got := string(raw)
+
+	fm, _, ok := strings.Cut(strings.TrimPrefix(got, "---\n"), "\n---")
+	if !ok {
+		t.Fatalf("agent definition missing YAML frontmatter:\n%s", got)
+	}
+	if !strings.Contains(fm, "name: detritus-reviewer-pr") {
+		t.Errorf("agent must be named detritus-reviewer-pr so /gh-pr can spawn it; got:\n%s", fm)
+	}
+	if !strings.Contains(fm, "\nmodel: inherit") {
+		t.Errorf("PR-review reviewer must inherit the session model; got:\n%s", fm)
+	}
+	// The de-pin is the point: a fable pin here would burn the allowance this agent exists to conserve.
+	if strings.Contains(fm, "claude-fable-5") {
+		t.Errorf("PR-review reviewer must NOT pin claude-fable-5; got:\n%s", fm)
+	}
+	if !strings.Contains(fm, "\neffort: high") {
+		t.Errorf("PR-review reviewer must keep effort high — only the model pin is dropped; got:\n%s", fm)
+	}
+	if strings.Contains(fm, "tools:") {
+		t.Errorf("frontmatter must not restrict tools; got:\n%s", fm)
+	}
+	// Same rigor obligations as the pinned reviewer — this must not be a watered-down
+	// copy. Each assertion below names the exact obligation it guards: a bare
+	// `strings.Contains(got, "roles/reviewer")` would be satisfied by unrelated prose
+	// elsewhere in the file, so match the kb_get directive itself.
+	if !strings.Contains(got, "`kb_get name=\"roles/reviewer\"`") {
+		t.Errorf("body must direct the reviewer to load its role doc via kb_get; got:\n%s", got)
+	}
+	for _, doc := range []string{"core/review-rigor", "flows/principles/truthseeker"} {
+		if !strings.Contains(got, doc) {
+			t.Errorf("body must compose %s like the pinned reviewer does; got:\n%s", doc, got)
+		}
+	}
+	if !strings.Contains(got, "Never edit files, stage, commit, push, or post") {
+		t.Errorf("body must carry the review-only prohibition; got:\n%s", got)
+	}
+	if !strings.Contains(got, "Review stamps") {
+		t.Errorf("body must reference the review-rigor Review stamps section; got:\n%s", got)
+	}
+	if !strings.Contains(got, "self-report") {
+		t.Errorf("body must direct the reviewer to self-report the model it runs on; got:\n%s", got)
+	}
+}
+
 // TestGenerateClaudeReviewerAgentSelfReportsProvenance verifies the reviewer
 // body directs the reviewer to self-report the model it is actually running on
 // plus the two review-stamp lines, so a silent model degrade (an old CLI
