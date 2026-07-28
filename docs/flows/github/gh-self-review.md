@@ -121,6 +121,12 @@ Check each claim against the diff per the rigor doc's "Verify the change's claim
 
 ## Step 3: Output a triage block
 
+Open the block with the provenance line from core/review-rigor → "Review stamps" so the reader knows which model produced this audit and at what effort (this flow spawns the pinned agent; it never posts, so no coverage-ledger requirement — the spawned reviewer returns it anyway via roles/reviewer's verdict contract):
+
+`detritus <version> · detritus-reviewer (claude-fable-5 / high) · head <sha8>`
+
+If the pinned definition was absent and the review ran on the `general-purpose` fallback (Phase 3), substitute the general-purpose variant from *Review stamps* — the model segment reads the session model and effort is `unpinned`. (This flow always spawns; it has no inline-session path.)
+
 ## Self-review on <branch> vs. <base>
 <N> files audited (<C> committed + <M> uncommitted-included + <U> untracked-included; <X> excluded as leftover).
 

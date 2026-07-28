@@ -47,6 +47,17 @@ func homeDir() string {
 	return h
 }
 
+// writeFileOrWarn writes content to path (0o644), warning to stderr on failure
+// instead of discarding the error, so a failed install is never reported as
+// success. Returns true on success — callers gate their success print on it.
+func writeFileOrWarn(path string, content []byte) bool {
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not write %s: %v\n", path, err)
+		return false
+	}
+	return true
+}
+
 // binaryName is the on-disk name of the detritus executable for this platform.
 func binaryName() string {
 	if runtime.GOOS == "windows" {
@@ -564,7 +575,7 @@ func generateSharedPrompts(home string, docs []docEntry, dryRun bool) {
 		filename := doc.alias + ".prompt.md"
 		generated[filename] = true
 		content := fmt.Sprintf("---\ndescription: %s\nagent: agent\n---\n\nCall kb_get(name=\"%s\") and follow the instructions in the returned document.\n", doc.desc, doc.name)
-		_ = os.WriteFile(filepath.Join(promptsDir, filename), []byte(content), 0o644)
+		writeFileOrWarn(filepath.Join(promptsDir, filename), []byte(content))
 	}
 	// Remove stale
 	entries, _ := os.ReadDir(promptsDir)
@@ -613,8 +624,9 @@ func generateInlineCommandInstructions(home string, docs []docEntry, dryRun bool
 		fmt.Fprintf(&sb, "- /%s -> %s\n", doc.alias, doc.name)
 	}
 
-	_ = os.WriteFile(instrFile, []byte(sb.String()), 0o644)
-	fmt.Printf("VS Code shared instructions: %s\n", instrFile)
+	if writeFileOrWarn(instrFile, []byte(sb.String())) {
+		fmt.Printf("VS Code shared instructions: %s\n", instrFile)
+	}
 }
 
 // listCommandAliases returns the slash-command aliases: every doc under
@@ -680,8 +692,9 @@ You have access to the **detritus MCP server** providing knowledge base tools: `
 - For testing guidance, use the ` + "`/testing`" + ` prompt.
 - When uncertain, search the KB first: ` + "`kb_search(query=\"your question\")`" + `.
 `
-	_ = os.WriteFile(agentFile, []byte(content), 0o644)
-	fmt.Printf("Agent file: %s\n", agentFile)
+	if writeFileOrWarn(agentFile, []byte(content)) {
+		fmt.Printf("Agent file: %s\n", agentFile)
+	}
 }
 
 func cleanOldUserPrompts(promptsDir string) {
@@ -782,7 +795,7 @@ func generateClaudeSkills(home string, docs []docEntry) {
 			desc = "Detritus knowledge base document: " + doc.name
 		}
 		content := fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\nCall kb_get with name=\"%s\" and follow the instructions in the returned document.\n", doc.alias, desc, doc.name)
-		_ = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644)
+		writeFileOrWarn(filepath.Join(skillDir, "SKILL.md"), []byte(content))
 	}
 	// Prune detritus-generated skills whose backing doc was removed in this
 	// release, so a deleted doc doesn't leave a dangling skill that kb_gets a
@@ -837,12 +850,14 @@ You are a coder in the ` + "`/forge`" + ` parallel implementation loop, spawned 
 3. Drive the defining test to green and keep the canonical verification passing.
 4. If you hit a decision you cannot make within your boundary, emit the fenced ` + "`BLOCKED {json}`" + ` line and stop — the tech-lead decides and re-spawns you.
 `
-	_ = os.WriteFile(agentFile, []byte(content), 0o644)
-	fmt.Printf("Claude Code coder agent: %s\n", agentFile)
+	if writeFileOrWarn(agentFile, []byte(content)) {
+		fmt.Printf("Claude Code coder agent: %s\n", agentFile)
+	}
 }
 
 // generateClaudeReviewerAgent installs the subagent definition the review flows
-// spawn (/gh-self-review Phase 3, and /forge delivery through it). Model and
+// spawn (/gh-self-review Phase 3, /gh-pr + /gh-pr-safe Phase 5, and /forge
+// delivery through them). Model and
 // effort are pinned per ROLE here — never per command: review runs on
 // claude-fable-5 at high effort regardless of the session model, the reviewing
 // counterpart of the coder's effort:low pin. An unrecognized model value makes
@@ -861,7 +876,7 @@ func generateClaudeReviewerAgent(home string) {
 	// Grep to verify, though it never edits).
 	content := `---
 name: detritus-reviewer
-description: Delivery-loop reviewer spawned by /gh-self-review and /forge delivery — hard-reviews a diff against the driving intent under the shared review doctrine. Review-only. Do not invoke directly.
+description: Delivery-loop reviewer spawned by /gh-self-review, /gh-pr, /gh-pr-safe, and /forge delivery — hard-reviews a diff against the driving intent under the shared review doctrine. Review-only. Do not invoke directly.
 model: claude-fable-5
 effort: high
 ---
@@ -873,9 +888,11 @@ You are the reviewer in a delivery loop, spawned to hard-review a diff before it
 1. Load your role doc with ` + "`kb_get name=\"roles/reviewer\"`" + ` and follow it. It composes ` + "`core/review-rigor`" + ` and ` + "`flows/principles/truthseeker`" + ` — load those too and apply the rubric end-to-end; never paraphrase it.
 2. Your brief carries pointers to the change (repo path, base, head SHA, in-scope files) and the **driving intent** (what the user asked for). Pull the diff live from the repo per the rigor doc — never from a dump or paste. Verify the diff satisfies the intent: a missing, partial, or contradicted intent commitment is a blocker. If no intent was provided, say so in your output and review mechanics only.
 3. Never edit files, stage, commit, push, or post. Your output is the verdict/triage the wrapping flow asked for — nothing else.
+4. In your verdict output, self-report the model you are actually running on and emit the two review-stamp lines (provenance + R-check coverage ledger) per ` + "`core/review-rigor`" + ` → *Review stamps*, so a silent model degrade off the pinned model is visible and the wrapping flow can post them.
 `
-	_ = os.WriteFile(agentFile, []byte(content), 0o644)
-	fmt.Printf("Claude Code reviewer agent: %s\n", agentFile)
+	if writeFileOrWarn(agentFile, []byte(content)) {
+		fmt.Printf("Claude Code reviewer agent: %s\n", agentFile)
+	}
 }
 
 // ---- Codex ------------------------------------------------------------------
@@ -1187,7 +1204,7 @@ func generateCodexSkills(skillsDir string, docs []docEntry) {
 			desc = "Detritus knowledge base document: " + doc.name
 		}
 		content := fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\nCall the detritus MCP tool `kb_get` with name=\"%s\" and follow the instructions in the returned document.\n", doc.alias, desc, doc.name)
-		_ = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644)
+		writeFileOrWarn(filepath.Join(skillDir, "SKILL.md"), []byte(content))
 	}
 
 	entries, _ := os.ReadDir(skillsDir)
@@ -1275,7 +1292,7 @@ func upsertMCPJSON(file, parentKey, command string) {
 	parent["detritus"] = map[string]any{"command": command, "args": []any{}}
 	data[parentKey] = parent
 	out, _ := json.MarshalIndent(data, "", "  ")
-	_ = os.WriteFile(file, append(out, '\n'), 0o644)
+	writeFileOrWarn(file, append(out, '\n'))
 }
 
 func upsertVerdentRules(rulesFile string, docs []docEntry) {
@@ -1317,7 +1334,7 @@ func upsertVerdentRules(rulesFile string, docs []docEntry) {
 		merged = block + "\n"
 	}
 
-	_ = os.WriteFile(rulesFile, []byte(merged), 0o644)
+	writeFileOrWarn(rulesFile, []byte(merged))
 }
 
 func generateVerdentSkills(skillsDir string, docs []docEntry) {
@@ -1338,7 +1355,7 @@ func generateVerdentSkills(skillsDir string, docs []docEntry) {
 			desc = "Detritus knowledge base document: " + doc.name
 		}
 		content := fmt.Sprintf("---\nname: %s\ndescription: %s\n---\n\nCall the detritus MCP tool `kb_get` with name=\"%s\" and follow the instructions in the returned document.\n", doc.alias, desc, doc.name)
-		_ = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644)
+		writeFileOrWarn(filepath.Join(skillDir, "SKILL.md"), []byte(content))
 	}
 	// Remove stale
 	entries, _ := os.ReadDir(skillsDir)
