@@ -759,6 +759,7 @@ func setupClaudeCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 		fmt.Printf("[dry-run] Would write %d skill files to %s\n", len(docs), filepath.Join(home, ".claude", "skills"))
 		fmt.Printf("[dry-run] Would write %s\n", filepath.Join(home, ".claude", "agents", "detritus-coder.md"))
 		fmt.Printf("[dry-run] Would write %s\n", filepath.Join(home, ".claude", "agents", "detritus-reviewer.md"))
+		fmt.Printf("[dry-run] Would write %s\n", filepath.Join(home, ".claude", "agents", "detritus-reviewer-pr.md"))
 		setupClaudeTodoGuard(home, binaryPath, hasTodoDoc(docs), true)
 		return
 	}

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -808,6 +809,60 @@ func TestGenerateClaudeReviewerAgentPinsModelAndEffort(t *testing.T) {
 	}
 	if !strings.Contains(got, "roles/reviewer") {
 		t.Errorf("body must direct the reviewer to load roles/reviewer; got:\n%s", got)
+	}
+}
+
+// TestClaudeDryRunPreviewsEveryAgentFile verifies the --dry-run branch of
+// setupClaudeCode mirrors what a real run writes: every agent definition the
+// real path installs must have a matching "[dry-run] Would write ..." preview
+// line. Adding a generator without its preview line makes --dry-run under-report
+// what setup does, and nothing else in the suite catches that divergence.
+func TestClaudeDryRunPreviewsEveryAgentFile(t *testing.T) {
+	home := t.TempDir()
+
+	// The real path's agent writers — keep in sync with setupClaudeCode's non-dry-run branch.
+	generateClaudeCoderAgent(home)
+	generateClaudeReviewerAgent(home)
+	generateClaudeReviewerPRAgent(home)
+
+	agentsDir := filepath.Join(home, ".claude", "agents")
+	written, err := os.ReadDir(agentsDir)
+	if err != nil {
+		t.Fatalf("agents dir not written: %v", err)
+	}
+	if len(written) == 0 {
+		t.Fatal("no agent definitions written; the generators under test did nothing")
+	}
+
+	src, err := os.ReadFile("setup.go")
+	if err != nil {
+		t.Fatalf("read setup.go: %v", err)
+	}
+	// Scope the search to setupClaudeCode's dry-run branch. Searching the whole
+	// file would be vacuous: each agent's base name also appears in its own
+	// generator, so the assertion would pass with the preview line deleted.
+	const branchStart = "func setupClaudeCode("
+	i := strings.Index(string(src), branchStart)
+	if i < 0 {
+		t.Fatalf("setupClaudeCode not found in setup.go; test needs updating")
+	}
+	rest := string(src)[i:]
+	end := strings.Index(rest, "\n\tupsertMCP(")
+	if end < 0 {
+		t.Fatalf("could not delimit the dry-run branch in setupClaudeCode; test needs updating")
+	}
+	dryRunBranch := rest[:end]
+	if !strings.Contains(dryRunBranch, "[dry-run]") {
+		t.Fatalf("delimited region is not the dry-run branch:\n%s", dryRunBranch)
+	}
+
+	for _, entry := range written {
+		// The preview builds the path via filepath.Join(..., "agents", "<name>.md"),
+		// so the quoted base name must appear inside the dry-run branch itself.
+		quoted := strconv.Quote(entry.Name())
+		if !strings.Contains(dryRunBranch, quoted) {
+			t.Errorf("--dry-run does not preview %s: no %s in setupClaudeCode's dry-run branch, but a real run writes it", entry.Name(), quoted)
+		}
 	}
 }
 
