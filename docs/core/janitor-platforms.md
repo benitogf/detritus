@@ -145,12 +145,13 @@ while true; do
   # Assemble the FULL cur set from all sources; ANY sub-fetch failing makes the whole poll inconclusive.
   cur=$(
     gh api repos/<owner>/<repo>/pulls/<n> --jq '...head_sha/mergeable/mergeable_state/merged/state...' &&
-    gh api ... pulls/<n>/reviews          --jq '... per-reviewer latest state, sorted ...' &&
-    gh api ... commits/<head_sha>/check-runs --jq '... newly-terminal conclusions, sorted ...' &&
+    gh api ... pulls/<n>/reviews          --jq '... per-reviewer latest state ...' &&
+    gh api ... commits/<head_sha>/check-runs --jq '... newly-terminal conclusions ...' &&
     # comment sources folded into cur so a comment-only change produces a NEW line -> an emitted event:
     gh api ... pulls/<n>/comments         --jq '... latest created_at / id per inline comment ...' &&
     gh api ... issues/<n>/comments        --jq '... latest created_at / id per issue comment ...'
   ) 2>/dev/null || { sleep 45; continue; }           # partial/failed poll is inconclusive -> skip; do NOT touch prev
+  cur=$(printf '%s\n' "$cur" | LC_ALL=C sort)        # sort the WHOLE assembly, AFTER the guard -- comm needs globally sorted input
   comm -13 <(echo "$prev") <(echo "$cur")            # emit ONLY newly-changed lines; never re-emit an unchanged state
   prev="$cur"                                        # updated ONLY after a fully-successful cur assembly
   # emit gate: mergeable @<head7> on the strict composite; gate: ci-failed on a failed required check;
@@ -169,6 +170,7 @@ Rules the watch script must carry:
 - **Terminal = merged/closed only.** The loop `break`s (ends the watch) only when the target is merged or closed; `gate: mergeable`, `gate: ci-failed`, `gate: changes-requested`, new-comment, and per-check / per-review events are all **emit-and-continue** — the woken actor decides what to do on each.
 - **Inconclusive polls never emit and never advance `prev`.** `mergeable_state == unknown` / `mergeable == null` (GitHub still computing, typically right after a push) → do not emit a false event; let the next poll settle it. A failed / partial `gh api` → the **whole** `cur` assembly is inconclusive: `continue` without touching `prev`. Guard the entire multi-source assembly, not just the first fetch — a partial `cur` that overwrote `prev` would drop lines and then re-emit them as "new" on the next full poll.
 - **`comm -13` newly-changed diff** — emit only what changed since the previous poll; never re-emit an unchanged state. A too-chatty watch is auto-stopped by `Monitor`.
+- **`comm` inputs must be GLOBALLY sorted, in a pinned collation.** `comm` walks two streams assuming both are sorted; a `cur` built by concatenating separately-sorted sub-fetches is **not** sorted. Sorting each sub-fetch is exactly the trap — it looks sorted and isn't. On unsorted input the walk desyncs and `comm` returns a wrong diff: lines present in **both** streams get re-emitted as new (`prev`=`state open / review A / inline 111`, `cur`=`state open / review B / inline 111` wrongly emits the unchanged `inline 111`), and once desynced the remaining classifications are no longer trustworthy in either direction. Phantom events are not the benign failure they look like: `Monitor` auto-stops a too-chatty watch, so a desynced diff can get the watch **killed**, and a dead watch is indistinguishable from a quiet PR (*silence is not success*, above). The only diagnostic (`comm: input is not in sorted order`) goes to **stderr**, which `Monitor` writes to the output file and never turns into an event — so nothing in the event stream reveals any of this. Fix: sort the **whole** assembly once, immediately before the compare and **after** the failure guard (sorting inside the `$( … )` makes the pipeline's exit status `sort`'s and silently defeats the inconclusive-poll guard above), pinning the order with `LC_ALL=C` so `sort`'s collation matches `comm`'s byte comparison. Applies to **any** set-difference over a multi-source assembly, not just this watch.
 - **Poll interval 45–60s** (30s+ for remote APIs per `Monitor` guidance); honor `core/loop` cache-window guidance.
 
 ### Cloud Routines (GitHub-state-only opt-in)
