@@ -91,6 +91,14 @@ The delta must encode the **underlying rule**, not the specific incident that su
 - An example earns its place only as a parenthetical `e.g.`. If the example is doing the load-bearing work, the rule above it is too narrow — lift the general principle out of it.
 - The illustrative `e.g.` must ITSELF be generic — the triggering incident's product / customer / org / domain names never enter the written doc. This is the public-KB content rule owned by `core/kb-writeback` recipe step 2 (Generalized content only); honor it, don't restate it.
 
+### Ground-truth every claim the delta asserts
+A KB delta is almost entirely **claims about how something behaves** — a tool's semantics, an API or platform guarantee, another doc's contract. That is exactly the prose `core/review-rigor` → **R2b** governs, so apply R2b to your OWN delta **before shipping**, not only when reviewing someone else's diff. Compose R2b by reference; the authoring-time obligation is what lives here.
+- **Enumerate every behavioural claim the delta makes first**, then resolve each one — by *executing* the mechanism or citing its *authoritative* source (man page, published spec, the code itself). Verifying the claims you happened to think of and shipping the rest is the sampled-coverage miss R2b already names.
+- **Familiarity is not evidence.** R2b's bar applies unchanged to prose you authored; being fluent in a tool is not a substitute for reading its contract.
+- **Record the authority** (in the commit body or the PR) so the next reader can re-check it instead of re-deriving it.
+- A claim you could not ground is **not shipped as fact** — cut it, or state the uncertainty explicitly.
+- **A wrong mechanism claim does not stay contained — it licenses a wrong rule.** The claim is normally load-bearing for the fix the delta prescribes, so an unverified assertion widens into prescribed-but-broken guidance carrying doctrine's authority (e.g. a delta describing a comparison tool as operating byte-wise when it honours the ambient collation, and therefore prescribing that only one side of a pair be pinned — leaving the failure it targeted fully reproducible).
+
 ### Prefer editing existing docs
 - If a relevant doc already covers the topic but is missing the specific guidance, propose an edit:
   - Target file path in `docs/`
