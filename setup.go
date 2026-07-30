@@ -757,6 +757,14 @@ func setupClaudeCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 		fmt.Printf("[dry-run] Would upsert detritus into %s (mcpServers)\n", cfgFile)
 		fmt.Printf("[dry-run] Would remove stale candyland MCP entry from %s\n", cfgFile)
 		fmt.Printf("[dry-run] Would write %d skill files to %s\n", len(docs), filepath.Join(home, ".claude", "skills"))
+		// Surface the same settings-store warnings the real path shows, so a
+		// typo'd settings.json is visible in the preview instead of silently
+		// previewing defaults (the tolerate-and-flag contract applies here too).
+		if _, warnings := loadSettings(); len(warnings) > 0 {
+			for _, w := range warnings {
+				fmt.Printf("[dry-run] settings: %s\n", w)
+			}
+		}
 		coderModel, coderEffort := effectiveLevel(roleCoder)
 		reviewerModel, reviewerEffort := effectiveLevel(roleReviewer)
 		fmt.Printf("[dry-run] Would write coder agent (model %s, effort %s)\n", coderModel, coderEffort)
@@ -926,7 +934,7 @@ You are the reviewer in a delivery loop, spawned to hard-review a diff before it
 1. Load your role doc with ` + "`kb_get name=\"roles/reviewer\"`" + ` and follow it. It composes ` + "`core/review-rigor`" + ` and ` + "`flows/principles/truthseeker`" + ` — load those too and apply the rubric end-to-end; never paraphrase it.
 2. Your brief carries pointers to the change (repo path, base, head SHA, in-scope files) and the **driving intent** (what the user asked for). Pull the diff live from the repo per the rigor doc — never from a dump or paste. Verify the diff satisfies the intent: a missing, partial, or contradicted intent commitment is a blocker. If no intent was provided, say so in your output and review mechanics only.
 3. Never edit files, stage, commit, push, or post. Your output is the verdict/triage the wrapping flow asked for — nothing else.
-4. In your verdict output, self-report the model you are actually running on and emit the two review-stamp lines (provenance + R-check coverage ledger) per ` + "`core/review-rigor`" + ` → *Review stamps*, so a silent model degrade off the pinned model is visible and the wrapping flow can post them.
+4. In your verdict output, self-report the model you are actually running on and emit the two review-stamp lines (provenance + R-check coverage ledger) per ` + "`core/review-rigor`" + ` → *Review stamps*, so a silent model degrade off the configured model is visible and the wrapping flow can post them.
 `
 	if err := os.WriteFile(agentFile, []byte(content), 0o644); err != nil {
 		return "", fmt.Errorf("write %s: %w", agentFile, err)

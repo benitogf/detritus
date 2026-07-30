@@ -981,3 +981,21 @@ func TestSetupClaudeCodeDryRunPrintsEffectiveModel(t *testing.T) {
 		t.Fatalf("dry-run must print effective reviewer model/effort; got:\n%s", out)
 	}
 }
+
+// TestSetupClaudeCodeDryRunSurfacesSettingsWarnings verifies the dry-run branch
+// emits the same settings-store warnings the real path does, so `--setup
+// --dry-run` over a typo'd settings.json flags the ignored config instead of
+// silently previewing defaults (the tolerate-and-flag contract).
+func TestSetupClaudeCodeDryRunSurfacesSettingsWarnings(t *testing.T) {
+	home := t.TempDir()
+	store := t.TempDir()
+	t.Setenv("DETRITUS_HOME", store)
+	writeSettingsFile(t, store, `{"levels":{"reviewer":{"model":"fabel-5"}}}`)
+
+	out := captureStdout(t, func() {
+		setupClaudeCode(home, "/usr/bin/detritus", nil, true)
+	})
+	if !strings.Contains(out, "settings:") || !strings.Contains(out, "fabel-5") {
+		t.Fatalf("dry-run must surface the invalid-model warning; got:\n%s", out)
+	}
+}
