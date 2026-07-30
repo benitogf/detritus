@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -739,6 +740,7 @@ func TestUpsertCodexMCPConfigWritesEscapedWindowsPath(t *testing.T) {
 // fallback" decision: the definition file owns it directly.
 func TestGenerateClaudeCoderAgentUsesEffortKey(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", t.TempDir())
 
 	generateClaudeCoderAgent(home)
 
@@ -779,6 +781,7 @@ func TestGenerateClaudeCoderAgentUsesEffortKey(t *testing.T) {
 // restricts tools (it needs kb_get + Read/Bash/Grep to verify).
 func TestGenerateClaudeReviewerAgentPinsModelAndEffort(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", t.TempDir())
 
 	generateClaudeReviewerAgent(home)
 
@@ -817,6 +820,7 @@ func TestGenerateClaudeReviewerAgentPinsModelAndEffort(t *testing.T) {
 // falling off the claude-fable-5 pin) is visible in the returned verdict.
 func TestGenerateClaudeReviewerAgentSelfReportsProvenance(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", t.TempDir())
 
 	generateClaudeReviewerAgent(home)
 
@@ -855,5 +859,82 @@ func TestGenerateAgentFileInheritsTools(t *testing.T) {
 	}
 	if strings.Contains(fm, "tools:") {
 		t.Errorf("frontmatter must not restrict tools (allowlist semantics strip read/search/edit); got:\n%s", fm)
+	}
+}
+
+// captureStdout runs fn with os.Stdout redirected to a pipe and returns what it wrote.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	fn()
+	w.Close()
+	os.Stdout = orig
+	data, _ := io.ReadAll(r)
+	return string(data)
+}
+
+// TestRenderAgentDefinitionsDefaults verifies that with no settings file the
+// rendered agents carry the built-in defaults (reviewer claude-fable-5/high,
+// coder inherit/low), pinning current default behavior through the settings seam.
+func TestRenderAgentDefinitionsDefaults(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+
+	renderAgentDefinitions(home)
+
+	rev, err := os.ReadFile(filepath.Join(home, ".claude", "agents", "detritus-reviewer.md"))
+	if err != nil {
+		t.Fatalf("reviewer not written: %v", err)
+	}
+	if !strings.Contains(string(rev), "\nmodel: claude-fable-5\n") || !strings.Contains(string(rev), "\neffort: high\n") {
+		t.Fatalf("reviewer default frontmatter wrong:\n%s", rev)
+	}
+	cod, err := os.ReadFile(filepath.Join(home, ".claude", "agents", "detritus-coder.md"))
+	if err != nil {
+		t.Fatalf("coder not written: %v", err)
+	}
+	if !strings.Contains(string(cod), "\nmodel: inherit\n") || !strings.Contains(string(cod), "\neffort: low\n") {
+		t.Fatalf("coder default frontmatter wrong:\n%s", cod)
+	}
+}
+
+// TestRenderAgentDefinitionsHonorsSettings verifies a settings.json selection is
+// carried into the generated reviewer frontmatter.
+func TestRenderAgentDefinitionsHonorsSettings(t *testing.T) {
+	home := t.TempDir()
+	store := t.TempDir()
+	t.Setenv("DETRITUS_HOME", store)
+	if err := os.WriteFile(filepath.Join(store, "settings.json"),
+		[]byte(`{"levels":{"reviewer":{"model":"claude-opus-4-8","thinking":"medium"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	renderAgentDefinitions(home)
+
+	rev, err := os.ReadFile(filepath.Join(home, ".claude", "agents", "detritus-reviewer.md"))
+	if err != nil {
+		t.Fatalf("reviewer not written: %v", err)
+	}
+	if !strings.Contains(string(rev), "\nmodel: claude-opus-4-8\n") || !strings.Contains(string(rev), "\neffort: medium\n") {
+		t.Fatalf("reviewer frontmatter did not honor settings:\n%s", rev)
+	}
+}
+
+// TestSetupClaudeCodeDryRunPrintsEffectiveModel verifies the dry-run output
+// names the effective model for the reviewer agent.
+func TestSetupClaudeCodeDryRunPrintsEffectiveModel(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+
+	out := captureStdout(t, func() {
+		setupClaudeCode(home, "/usr/bin/detritus", nil, true)
+	})
+	if !strings.Contains(out, "reviewer agent (model claude-fable-5, effort high)") {
+		t.Fatalf("dry-run must print effective reviewer model/effort; got:\n%s", out)
 	}
 }
