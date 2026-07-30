@@ -57,8 +57,8 @@ Claude Code has no native usage-limit fallback — its `--fallback-model` covers
 
 - **Trigger.** The reviewer sub-agent dies or returns carrying a usage-limit banner that *names its configured model* — e.g. `You've hit your Fable limit · resets <time>` (any model-named limit banner).
 - **Action.** The spawning flow re-spawns the reviewer **once** with the `Agent` tool's `model: "opus"` override (`claude-opus-4-8`), rather than failing the review or waiting for the configured model's limit to reset. When the configured review model is *itself* opus (a user set `/settings reviewer model opus`), exhausting opus can't fall back to opus — the re-spawn uses `model: "inherit"` (the session model) instead, so the fallback never re-hits the just-exhausted limit.
-- **Disclosure.** The review output states it ran on the fallback model, so a reader knows the verdict came from opus, not the configured review model.
-- **Session-stickiness.** Once the configured model's limit is hit, subsequent reviewer spawns in the same session go straight to `model: "opus"` instead of re-hitting the limit each time.
+- **Disclosure.** The review output states it ran on the fallback model, so a reader knows the verdict came from the fallback (opus, or the session model when opus is the configured model), not the configured review model.
+- **Session-stickiness.** Once the configured model's limit is hit, subsequent reviewer spawns in the same session go straight to the fallback model (opus, or `model: "inherit"` when opus is the configured model) instead of re-hitting the limit each time.
 - **Exclusion.** An account-wide banner — a session, weekly, or usage limit with *no model named* — is **not** fallback-eligible: the whole seat is exhausted, so the flow surfaces it to the user as a capability blocker rather than retrying on another model.
 
 The generated `detritus-reviewer` definition carries whatever `/settings` last set (default `claude-fable-5`) as its durable model; the transient opus fallback lives in the *spawning flow*, never in the definition.

@@ -896,9 +896,13 @@ func TestRenderAgentDefinitionsSilent(t *testing.T) {
 	t.Setenv("DETRITUS_HOME", t.TempDir())
 
 	out := captureStdout(t, func() {
-		renderAgentDefinitions(home)
+		if _, err := renderAgentDefinitions(home); err != nil {
+			t.Fatalf("render: %v", err)
+		}
 	})
-	if strings.Contains(out, "Claude Code") {
+	// Assert total silence, not just the absence of today's wording — any stdout
+	// write from this seam corrupts the MCP stdio JSON-RPC frame.
+	if out != "" {
 		t.Fatalf("renderAgentDefinitions must not write to stdout; got:\n%s", out)
 	}
 }
