@@ -757,8 +757,18 @@ func setupClaudeCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 		fmt.Printf("[dry-run] Would upsert detritus into %s (mcpServers)\n", cfgFile)
 		fmt.Printf("[dry-run] Would remove stale candyland MCP entry from %s\n", cfgFile)
 		fmt.Printf("[dry-run] Would write %d skill files to %s\n", len(docs), filepath.Join(home, ".claude", "skills"))
-		fmt.Printf("[dry-run] Would write %s\n", filepath.Join(home, ".claude", "agents", "detritus-coder.md"))
-		fmt.Printf("[dry-run] Would write %s\n", filepath.Join(home, ".claude", "agents", "detritus-reviewer.md"))
+		// Surface the same settings-store warnings the real path shows, so a
+		// typo'd settings.json is visible in the preview instead of silently
+		// previewing defaults (the tolerate-and-flag contract applies here too).
+		if _, warnings := loadSettings(); len(warnings) > 0 {
+			for _, w := range warnings {
+				fmt.Printf("[dry-run] settings: %s\n", w)
+			}
+		}
+		coderModel, coderEffort := effectiveLevel(roleCoder)
+		reviewerModel, reviewerEffort := effectiveLevel(roleReviewer)
+		fmt.Printf("[dry-run] Would write coder agent (model %s, effort %s)\n", coderModel, coderEffort)
+		fmt.Printf("[dry-run] Would write reviewer agent (model %s, effort %s)\n", reviewerModel, reviewerEffort)
 		setupClaudeTodoGuard(home, binaryPath, hasTodoDoc(docs), true)
 		return
 	}
@@ -767,8 +777,21 @@ func setupClaudeCode(home, binaryPath string, docs []docEntry, dryRun bool) {
 	fmt.Printf("Claude Code MCP config: %s\n", cfgFile)
 
 	generateClaudeSkills(home, docs)
-	generateClaudeCoderAgent(home)
-	generateClaudeReviewerAgent(home)
+	// Surface any settings-store warnings once on the setup path — a typo'd
+	// settings.json renders defaults, and the user should see why (the
+	// tolerate-and-flag contract applies here too, not only to settings_get).
+	if _, warnings := loadSettings(); len(warnings) > 0 {
+		for _, w := range warnings {
+			fmt.Fprintf(os.Stderr, "settings: %s\n", w)
+		}
+	}
+	if paths, err := renderAgentDefinitions(home); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: render claude agent definitions: %v\n", err)
+	} else {
+		for _, p := range paths {
+			fmt.Printf("Claude Code agent: %s\n", p)
+		}
+	}
 
 	// Enforce the flows/project/todo convention #13 when the /todo family ships: install the
 	// PreToolUse write-guard hook (idempotent). If a future build drops /todo,
@@ -816,83 +839,107 @@ func generateClaudeSkills(home string, docs []docEntry) {
 	fmt.Printf("Claude Code skills: %s\n", skillsDir)
 }
 
+// renderAgentDefinitions (re)writes BOTH generated Claude agent definitions
+// (detritus-coder.md, detritus-reviewer.md) from the effective settings and
+// returns the written paths. It is the single render seam every caller shares —
+// setup and the settings_get / settings_set MCP tools — so a user's model/effort
+// choice never drifts between the store and the on-disk agent files.
+//
+// It writes NOTHING to stdout: the MCP tools invoke it over the stdio JSON-RPC
+// transport, where a stray human line would corrupt a protocol frame. The
+// human-facing "wrote <path>" lines are the setup caller's to print. It returns
+// an error on a failed write so a caller (settings_set) can report that the
+// store changed but the on-disk definition did not — the drift the seam exists
+// to prevent.
+func renderAgentDefinitions(home string) ([]string, error) {
+	coderPath, err := generateClaudeCoderAgent(home)
+	if err != nil {
+		return nil, err
+	}
+	reviewerPath, err := generateClaudeReviewerAgent(home)
+	if err != nil {
+		return []string{coderPath}, err
+	}
+	return []string{coderPath, reviewerPath}, nil
+}
+
 // generateClaudeCoderAgent installs the subagent definition that /forge spawns
-// per fork-safe task (roles/coder-*). The tech-lead runs at the session effort;
-// its coders are the wide fan-out, so they run at low effort to keep the loop
-// cheap — set via the `effort` frontmatter key, which Claude Code honors as a
-// per-subagent override (low|medium|high|xhigh|max). Verified against the
-// subagents frontmatter contract: `effort` is a first-class key, so no Workflow
-// model/opts fallback is needed — the definition file carries it directly.
-func generateClaudeCoderAgent(home string) {
+// per fork-safe task (roles/coder-*). Its `model:` and `effort:` frontmatter
+// are rendered from the effective settings (default inherit/low) rather than
+// hardcoded — the `effort` key is a first-class per-subagent override Claude
+// Code honors (low|medium|high|xhigh|max), so the definition file carries it
+// directly with no Workflow model/opts fallback needed.
+func generateClaudeCoderAgent(home string) (string, error) {
 	agentsDir := filepath.Join(home, ".claude", "agents")
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: claude agents dir: %v\n", err)
-		return
+		return "", fmt.Errorf("claude agents dir: %w", err)
 	}
 	agentFile := filepath.Join(agentsDir, "detritus-coder.md")
+	model, effort := effectiveLevel(roleCoder)
 	// No `tools:` key: a restricted list strips the built-in file/shell tools
 	// (Read/Edit/Write/Bash/…) and leaves the coder unable to change anything —
 	// its first file-read comes back as plain text. Omitting the key inherits
 	// the session's full toolset, detritus MCP included.
-	content := `---
+	content := fmt.Sprintf(`---
 name: detritus-coder
 description: Implementation-loop coder spawned by /forge's tech-lead — takes one fork-safe task, loads its role via kb_get, and drives it to green. Do not invoke directly.
-model: inherit
-effort: low
----
+model: %s
+effort: %s
+---`, model, effort) + `
 
 # Detritus Coder
 
-You are a coder in the ` + "`/forge`" + ` parallel implementation loop, spawned by the tech-lead for a single fork-safe task. You run at **low effort** deliberately — the task is already partitioned and names its defining test; your job is to write that test failing-first and land the smallest delta that turns it green.
+You are a coder in the ` + "`/forge`" + ` parallel implementation loop, spawned by the tech-lead for a single fork-safe task. You run at the configured effort (default **low**) deliberately — the task is already partitioned and names its defining test; your job is to write that test failing-first and land the smallest delta that turns it green.
 
 1. Load your role doc with ` + "`kb_get`" + ` — ` + "`roles/coder-backend`" + `, ` + "`roles/coder-frontend`" + `, ` + "`roles/coder-fullstack`" + ` per the role in your brief — and follow it. It composes ` + "`core/coder`" + `.
 2. Implement only the assigned task inside your worktree; honor the interface contract the task's defining test asserts.
 3. Drive the defining test to green and keep the canonical verification passing.
 4. If you hit a decision you cannot make within your boundary, emit the fenced ` + "`BLOCKED {json}`" + ` line and stop — the tech-lead decides and re-spawns you.
 `
-	if writeFileOrWarn(agentFile, []byte(content)) {
-		fmt.Printf("Claude Code coder agent: %s\n", agentFile)
+	if err := os.WriteFile(agentFile, []byte(content), 0o644); err != nil {
+		return "", fmt.Errorf("write %s: %w", agentFile, err)
 	}
+	return agentFile, nil
 }
 
 // generateClaudeReviewerAgent installs the subagent definition the review flows
 // spawn (/gh-self-review Phase 3, /gh-pr + /gh-pr-safe Phase 5, and /forge
-// delivery through them). Model and
-// effort are pinned per ROLE here — never per command: review runs on
-// claude-fable-5 at high effort regardless of the session model, the reviewing
-// counterpart of the coder's effort:low pin. An unrecognized model value makes
-// Claude Code fall back to inherit, so old CLIs degrade to the session model
-// rather than erroring.
-func generateClaudeReviewerAgent(home string) {
+// delivery through them). Its `model:` and `effort:` frontmatter are rendered
+// from the effective settings (default claude-fable-5/high) — the reviewing
+// counterpart of the coder's default effort:low. An unrecognized model value
+// makes Claude Code fall back to inherit, so old CLIs degrade to the session
+// model rather than erroring.
+func generateClaudeReviewerAgent(home string) (string, error) {
 	agentsDir := filepath.Join(home, ".claude", "agents")
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: claude agents dir: %v\n", err)
-		return
+		return "", fmt.Errorf("claude agents dir: %w", err)
 	}
 	agentFile := filepath.Join(agentsDir, "detritus-reviewer.md")
+	model, effort := effectiveLevel(roleReviewer)
 	// No `tools:` key — same rationale as detritus-coder: a restricted list
 	// strips the built-in tools; omitting it inherits the session's full
 	// toolset, detritus MCP included (the reviewer needs kb_get + Read/Bash/
 	// Grep to verify, though it never edits).
-	content := `---
+	content := fmt.Sprintf(`---
 name: detritus-reviewer
 description: Delivery-loop reviewer spawned by /gh-self-review, /gh-pr, /gh-pr-safe, and /forge delivery — hard-reviews a diff against the driving intent under the shared review doctrine. Review-only. Do not invoke directly.
-model: claude-fable-5
-effort: high
+model: %s
+effort: %s
 ---
 
 # Detritus Reviewer
 
-You are the reviewer in a delivery loop, spawned to hard-review a diff before it ships. You run on a pinned model at **high effort** deliberately — independent review is the last gate before a PR.
+You are the reviewer in a delivery loop, spawned to hard-review a diff before it ships. You run on the configured review model (default `+"`claude-fable-5`"+`) at the configured effort (default **high**) deliberately — independent review is the last gate before a PR.`, model, effort) + `
 
 1. Load your role doc with ` + "`kb_get name=\"roles/reviewer\"`" + ` and follow it. It composes ` + "`core/review-rigor`" + ` and ` + "`flows/principles/truthseeker`" + ` — load those too and apply the rubric end-to-end; never paraphrase it.
 2. Your brief carries pointers to the change (repo path, base, head SHA, in-scope files) and the **driving intent** (what the user asked for). Pull the diff live from the repo per the rigor doc — never from a dump or paste. Verify the diff satisfies the intent: a missing, partial, or contradicted intent commitment is a blocker. If no intent was provided, say so in your output and review mechanics only.
 3. Never edit files, stage, commit, push, or post. Your output is the verdict/triage the wrapping flow asked for — nothing else.
-4. In your verdict output, self-report the model you are actually running on and emit the two review-stamp lines (provenance + R-check coverage ledger) per ` + "`core/review-rigor`" + ` → *Review stamps*, so a silent model degrade off the pinned model is visible and the wrapping flow can post them.
+4. In your verdict output, self-report the model you are actually running on and emit the two review-stamp lines (provenance + R-check coverage ledger) per ` + "`core/review-rigor`" + ` → *Review stamps*, so a silent model degrade off the configured model is visible and the wrapping flow can post them.
 `
-	if writeFileOrWarn(agentFile, []byte(content)) {
-		fmt.Printf("Claude Code reviewer agent: %s\n", agentFile)
+	if err := os.WriteFile(agentFile, []byte(content), 0o644); err != nil {
+		return "", fmt.Errorf("write %s: %w", agentFile, err)
 	}
+	return agentFile, nil
 }
 
 // ---- Codex ------------------------------------------------------------------

@@ -39,7 +39,7 @@ Call `kb_get` with `name="flows/github/gh-pr"` and follow it **end to end**: res
 
 5. **Track the cleanup.** Add an explicit "remove worktree (if created)" item to the progress list so it runs even if the review short-circuits.
 
-6. **The Phase-5 reviewer spawn is workspace-safe as-is.** `/gh-pr` Phase 5 spawns the pinned `detritus-reviewer` agent, which pulls the diff via `gh api` / read-only git — it never checks out or mutates a working tree, so it composes with this skill's no-mutation constraint unchanged. The no-mutation rule applies to the *wrapping session's clone*; the spawned reviewer reads remotely per its own doctrine. The two stamp lines it returns — the provenance line and the `R-checks:` coverage ledger (`core/review-rigor` → *Review stamps*) — are posted above the attribution footer exactly as in `/gh-pr` Phase 6.
+6. **The Phase-5 reviewer spawn is workspace-safe as-is.** `/gh-pr` Phase 5 spawns the configured `detritus-reviewer` agent, which pulls the diff via `gh api` / read-only git — it never checks out or mutates a working tree, so it composes with this skill's no-mutation constraint unchanged. The no-mutation rule applies to the *wrapping session's clone*; the spawned reviewer reads remotely per its own doctrine. The two stamp lines it returns — the provenance line and the `R-checks:` coverage ledger (`core/review-rigor` → *Review stamps*) — are posted above the attribution footer exactly as in `/gh-pr` Phase 6.
 
 ## Why this is a separate skill, not a change to /gh-pr
 

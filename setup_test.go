@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -739,6 +740,7 @@ func TestUpsertCodexMCPConfigWritesEscapedWindowsPath(t *testing.T) {
 // fallback" decision: the definition file owns it directly.
 func TestGenerateClaudeCoderAgentUsesEffortKey(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", t.TempDir())
 
 	generateClaudeCoderAgent(home)
 
@@ -779,6 +781,7 @@ func TestGenerateClaudeCoderAgentUsesEffortKey(t *testing.T) {
 // restricts tools (it needs kb_get + Read/Bash/Grep to verify).
 func TestGenerateClaudeReviewerAgentPinsModelAndEffort(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", t.TempDir())
 
 	generateClaudeReviewerAgent(home)
 
@@ -817,6 +820,7 @@ func TestGenerateClaudeReviewerAgentPinsModelAndEffort(t *testing.T) {
 // falling off the claude-fable-5 pin) is visible in the returned verdict.
 func TestGenerateClaudeReviewerAgentSelfReportsProvenance(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", t.TempDir())
 
 	generateClaudeReviewerAgent(home)
 
@@ -855,5 +859,143 @@ func TestGenerateAgentFileInheritsTools(t *testing.T) {
 	}
 	if strings.Contains(fm, "tools:") {
 		t.Errorf("frontmatter must not restrict tools (allowlist semantics strip read/search/edit); got:\n%s", fm)
+	}
+}
+
+// captureStdout runs fn with os.Stdout redirected to a pipe and returns what it
+// wrote. The reader runs concurrently so fn can't deadlock by writing more than
+// the pipe buffer holds, and os.Stdout is restored via defer so a panic in fn
+// doesn't leave it redirected for later tests.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	orig := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { os.Stdout = orig }()
+	os.Stdout = w
+
+	done := make(chan string, 1)
+	go func() {
+		data, _ := io.ReadAll(r)
+		done <- string(data)
+	}()
+
+	fn()
+	w.Close()
+	return <-done
+}
+
+// TestRenderAgentDefinitionsSilent proves the render seam writes NOTHING to
+// stdout — the MCP server speaks JSON-RPC over stdio, so a stray human line
+// injected here corrupts the protocol frame. The human-facing path prints are
+// the setup caller's responsibility, not the shared render's.
+func TestRenderAgentDefinitionsSilent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+
+	out := captureStdout(t, func() {
+		if _, err := renderAgentDefinitions(home); err != nil {
+			t.Fatalf("render: %v", err)
+		}
+	})
+	// Assert total silence, not just the absence of today's wording — any stdout
+	// write from this seam corrupts the MCP stdio JSON-RPC frame.
+	if out != "" {
+		t.Fatalf("renderAgentDefinitions must not write to stdout; got:\n%s", out)
+	}
+}
+
+// TestRenderAgentDefinitionsReportsWriteError proves a failed agent-file write
+// surfaces as an error (so settings_set can report drift) rather than a silent
+// stderr warning. A file where the .claude dir must be makes MkdirAll fail.
+func TestRenderAgentDefinitionsReportsWriteError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	if err := os.WriteFile(filepath.Join(home, ".claude"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renderAgentDefinitions(home); err == nil {
+		t.Fatal("render must return an error when the agent file cannot be written")
+	}
+}
+
+// TestRenderAgentDefinitionsDefaults verifies that with no settings file the
+// rendered agents carry the built-in defaults (reviewer claude-fable-5/high,
+// coder inherit/low), pinning current default behavior through the settings seam.
+func TestRenderAgentDefinitionsDefaults(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+
+	renderAgentDefinitions(home)
+
+	rev, err := os.ReadFile(filepath.Join(home, ".claude", "agents", "detritus-reviewer.md"))
+	if err != nil {
+		t.Fatalf("reviewer not written: %v", err)
+	}
+	if !strings.Contains(string(rev), "\nmodel: claude-fable-5\n") || !strings.Contains(string(rev), "\neffort: high\n") {
+		t.Fatalf("reviewer default frontmatter wrong:\n%s", rev)
+	}
+	cod, err := os.ReadFile(filepath.Join(home, ".claude", "agents", "detritus-coder.md"))
+	if err != nil {
+		t.Fatalf("coder not written: %v", err)
+	}
+	if !strings.Contains(string(cod), "\nmodel: inherit\n") || !strings.Contains(string(cod), "\neffort: low\n") {
+		t.Fatalf("coder default frontmatter wrong:\n%s", cod)
+	}
+}
+
+// TestRenderAgentDefinitionsHonorsSettings verifies a settings.json selection is
+// carried into the generated reviewer frontmatter.
+func TestRenderAgentDefinitionsHonorsSettings(t *testing.T) {
+	home := t.TempDir()
+	store := t.TempDir()
+	t.Setenv("DETRITUS_HOME", store)
+	if err := os.WriteFile(filepath.Join(store, "settings.json"),
+		[]byte(`{"levels":{"reviewer":{"model":"claude-opus-4-8","thinking":"medium"}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	renderAgentDefinitions(home)
+
+	rev, err := os.ReadFile(filepath.Join(home, ".claude", "agents", "detritus-reviewer.md"))
+	if err != nil {
+		t.Fatalf("reviewer not written: %v", err)
+	}
+	if !strings.Contains(string(rev), "\nmodel: claude-opus-4-8\n") || !strings.Contains(string(rev), "\neffort: medium\n") {
+		t.Fatalf("reviewer frontmatter did not honor settings:\n%s", rev)
+	}
+}
+
+// TestSetupClaudeCodeDryRunPrintsEffectiveModel verifies the dry-run output
+// names the effective model for the reviewer agent.
+func TestSetupClaudeCodeDryRunPrintsEffectiveModel(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+
+	out := captureStdout(t, func() {
+		setupClaudeCode(home, "/usr/bin/detritus", nil, true)
+	})
+	if !strings.Contains(out, "reviewer agent (model claude-fable-5, effort high)") {
+		t.Fatalf("dry-run must print effective reviewer model/effort; got:\n%s", out)
+	}
+}
+
+// TestSetupClaudeCodeDryRunSurfacesSettingsWarnings verifies the dry-run branch
+// emits the same settings-store warnings the real path does, so `--setup
+// --dry-run` over a typo'd settings.json flags the ignored config instead of
+// silently previewing defaults (the tolerate-and-flag contract).
+func TestSetupClaudeCodeDryRunSurfacesSettingsWarnings(t *testing.T) {
+	home := t.TempDir()
+	store := t.TempDir()
+	t.Setenv("DETRITUS_HOME", store)
+	writeSettingsFile(t, store, `{"levels":{"reviewer":{"model":"fabel-5"}}}`)
+
+	out := captureStdout(t, func() {
+		setupClaudeCode(home, "/usr/bin/detritus", nil, true)
+	})
+	if !strings.Contains(out, "settings:") || !strings.Contains(out, "fabel-5") {
+		t.Fatalf("dry-run must surface the invalid-model warning; got:\n%s", out)
 	}
 }

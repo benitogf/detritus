@@ -46,8 +46,8 @@ func TestMCPServer(t *testing.T) {
 	if err != nil {
 		t.Fatal("ListTools:", err)
 	}
-	if len(tools.Tools) != 7 {
-		t.Fatalf("expected 7 tools, got %d", len(tools.Tools))
+	if len(tools.Tools) != 9 {
+		t.Fatalf("expected 9 tools, got %d", len(tools.Tools))
 	}
 	toolNames := map[string]bool{}
 	for _, tool := range tools.Tools {
@@ -56,6 +56,7 @@ func TestMCPServer(t *testing.T) {
 	for _, name := range []string{
 		"kb_list", "kb_get", "kb_search", "kb_sections",
 		"code_map", "code_outline", "code_graph",
+		"settings_get", "settings_set",
 	} {
 		if !toolNames[name] {
 			t.Errorf("missing tool: %s", name)
@@ -612,5 +613,128 @@ func TestUpsertMCPUpgradesExistingServersEntryWithoutType(t *testing.T) {
 	}
 	if entry["command"] != "/usr/local/bin/detritus" {
 		t.Fatalf("expected command to be refreshed, got %v", entry["command"])
+	}
+}
+
+// settingsToolEnv isolates both the settings store (DETRITUS_HOME) and the agent
+// render target (the home dir homeDir resolves), mirroring exactly what the
+// settings_get / settings_set handlers touch. It sets USERPROFILE too, since
+// os.UserHomeDir reads that (not HOME) on Windows — without it the render would
+// write the developer's real ~/.claude/agents on a Windows run.
+func settingsToolEnv(t *testing.T) (store, home string) {
+	t.Helper()
+	store = t.TempDir()
+	home = t.TempDir()
+	t.Setenv("DETRITUS_HOME", store)
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	return store, home
+}
+
+func reviewerAgentText(t *testing.T, home string) string {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(home, ".claude", "agents", "detritus-reviewer.md"))
+	if err != nil {
+		t.Fatalf("reviewer agent not rendered: %v", err)
+	}
+	return string(raw)
+}
+
+// TestSettingsSetAliasPersistsCanonicalAndRewritesAgent mirrors the settings_set
+// handler: an alias input persists the canonical id AND the same call rewrites
+// the reviewer agent frontmatter.
+func TestSettingsSetAliasPersistsCanonicalAndRewritesAgent(t *testing.T) {
+	store, home := settingsToolEnv(t)
+
+	if _, err := applySettingsSet("reviewer", "opus", "", false); err != nil {
+		t.Fatalf("applySettingsSet: %v", err)
+	}
+	renderAgentDefinitions(homeDir()) // the handler's post-write render
+
+	raw, _ := os.ReadFile(filepath.Join(store, "settings.json"))
+	if !strings.Contains(string(raw), "claude-opus-4-8") {
+		t.Fatalf("store must carry canonical id:\n%s", raw)
+	}
+	if !strings.Contains(reviewerAgentText(t, home), "\nmodel: claude-opus-4-8\n") {
+		t.Fatalf("reviewer agent must be rewritten with the new model in the same call")
+	}
+}
+
+// TestSettingsSetUnresolvableChangesNothing verifies an invalid model returns
+// the allowed values and persists no file.
+func TestSettingsSetUnresolvableChangesNothing(t *testing.T) {
+	store, _ := settingsToolEnv(t)
+
+	_, err := applySettingsSet("reviewer", "gpt-9", "", false)
+	if err == nil {
+		t.Fatal("expected error for unresolvable model")
+	}
+	if !strings.Contains(err.Error(), "opus") {
+		t.Fatalf("error must list allowed values; got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(store, "settings.json")); statErr == nil {
+		t.Fatal("no file must be persisted on an unresolvable input")
+	}
+}
+
+// TestSettingsSetResetRestoresDefaults verifies both per-role and global reset.
+func TestSettingsSetResetRestoresDefaults(t *testing.T) {
+	settingsToolEnv(t)
+
+	if _, err := applySettingsSet("reviewer", "opus", "medium", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applySettingsSet("coder", "sonnet", "", false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Per-role reset returns reviewer to its default, leaves coder set.
+	if _, err := applySettingsSet("reviewer", "", "", true); err != nil {
+		t.Fatal(err)
+	}
+	m, th := effectiveLevel("reviewer")
+	if m != "claude-fable-5" || th != "high" {
+		t.Fatalf("per-role reset failed: %s/%s", m, th)
+	}
+	if cm, _ := effectiveLevel("coder"); cm != "claude-sonnet-5" {
+		t.Fatalf("per-role reset must not touch coder: %s", cm)
+	}
+
+	// Global reset returns everything to default.
+	if _, err := applySettingsSet("", "", "", true); err != nil {
+		t.Fatal(err)
+	}
+	if cm, cth := effectiveLevel("coder"); cm != "inherit" || cth != "low" {
+		t.Fatalf("global reset failed: %s/%s", cm, cth)
+	}
+}
+
+// TestSettingsGetReportsProvenanceAndRepairsDrift verifies the report marks a
+// set value vs default, and that re-rendering repairs a manually-edited stale
+// agent definition (the settings_get drift-repair step).
+func TestSettingsGetReportsProvenanceAndRepairsDrift(t *testing.T) {
+	_, home := settingsToolEnv(t)
+
+	if _, err := applySettingsSet("reviewer", "opus", "", false); err != nil {
+		t.Fatal(err)
+	}
+	renderAgentDefinitions(homeDir()) // handler's post-write render establishes the baseline
+
+	report := renderSettingsReport()
+	if !strings.Contains(report, "model:    claude-opus-4-8 (set)") {
+		t.Fatalf("report must mark an explicit value as set:\n%s", report)
+	}
+	if !strings.Contains(report, "thinking: high (default)") {
+		t.Fatalf("report must mark an unset field as default:\n%s", report)
+	}
+
+	// Simulate a manual stale edit of the rendered agent, then the drift repair.
+	agentFile := filepath.Join(home, ".claude", "agents", "detritus-reviewer.md")
+	if err := os.WriteFile(agentFile, []byte("stale\nmodel: claude-haiku-4-5-20251001\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	renderAgentDefinitions(homeDir()) // settings_get's repair step
+	if !strings.Contains(reviewerAgentText(t, home), "\nmodel: claude-opus-4-8\n") {
+		t.Fatal("drift repair must restore the agent to the effective settings")
 	}
 }
