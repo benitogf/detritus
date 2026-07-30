@@ -335,6 +335,38 @@ func buildMCPServer(engine *search.Engine) *mcp.Server {
 		return textResult(b.String()), nil, nil
 	})
 
+	// settings_get / settings_set: read and mutate the per-user role settings
+	// (model + reasoning effort) that render the generated Claude agent
+	// definitions. Both may write to disk (re-rendering the agent files), so
+	// neither carries ReadOnlyHint. They resolve the home dir the same way setup
+	// does (os.UserHomeDir via homeDir), so test isolation via HOME works.
+	type SettingsGetArgs struct{}
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "settings_get",
+		Description: "Show the effective per-role model + reasoning effort (reviewer, coder) with provenance (default vs set), the allowed model inputs and thinking values, the store path, and any load warnings. Repairs drifted agent definitions before answering.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args SettingsGetArgs) (*mcp.CallToolResult, any, error) {
+		renderAgentDefinitions(homeDir())
+		return textResult(renderSettingsReport()), nil, nil
+	})
+
+	type SettingsSetArgs struct {
+		Role     string `json:"role" jsonschema:"Role to configure: reviewer or coder"`
+		Model    string `json:"model,omitempty" jsonschema:"Model input (canonical id or alias fable|opus|sonnet|haiku|session); optional"`
+		Thinking string `json:"thinking,omitempty" jsonschema:"Reasoning effort: low|medium|high|xhigh|max; optional"`
+		Reset    bool   `json:"reset,omitempty" jsonschema:"Reset to defaults: with a role clears that role, with empty role resets everything"`
+	}
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "settings_set",
+		Description: "Set (or reset) a role's model and/or reasoning effort. Aliases normalize to canonical ids; an unresolvable value changes nothing and returns the allowed values. Re-renders both agent definitions on success.",
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args SettingsSetArgs) (*mcp.CallToolResult, any, error) {
+		summary, err := applySettingsSet(args.Role, args.Model, args.Thinking, args.Reset)
+		if err != nil {
+			return errResult(err.Error()), nil, nil
+		}
+		renderAgentDefinitions(homeDir())
+		return textResult(summary), nil, nil
+	})
+
 	var resourceSummary strings.Builder
 	resourceSummary.WriteString("# Detritus Knowledge Base\n\n")
 	resourceSummary.WriteString("Available documents and tools: kb_get(name, section?), kb_list(), kb_search(query), kb_sections(name)\n\n")
