@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -169,6 +168,34 @@ func TestSaveSettingsRejectsInvalid(t *testing.T) {
 	}
 }
 
+// TestSettingsSetToleratesPreexistingJunk proves a valid settings_set (and a
+// per-role reset) succeeds even when the store already holds hand-edited junk
+// (an invalid field and an unknown role): rejection-on-write is scoped to the
+// caller's input, and the persisted store comes out sanitized.
+func TestSettingsSetToleratesPreexistingJunk(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", home)
+	writeSettingsFile(t, home, `{"levels":{"reviewer":{"thinking":"hihg"},"helper":{"model":"opus"}}}`)
+
+	if _, err := applySettingsSet("reviewer", "opus", "", false); err != nil {
+		t.Fatalf("valid set must succeed over a junk store: %v", err)
+	}
+	raw, _ := os.ReadFile(filepath.Join(home, "settings.json"))
+	if strings.Contains(string(raw), "helper") || strings.Contains(string(raw), "hihg") {
+		t.Fatalf("persisted store must be sanitized of prior junk:\n%s", raw)
+	}
+	if !strings.Contains(string(raw), "claude-opus-4-8") {
+		t.Fatalf("valid set must persist:\n%s", raw)
+	}
+
+	// A per-role reset must also succeed regardless of prior junk (an unknown
+	// role in the store previously made saveSettings reject the reset).
+	writeSettingsFile(t, home, `{"levels":{"helper":{"model":"opus"},"reviewer":{"thinking":"hihg"}}}`)
+	if _, err := applySettingsSet("reviewer", "", "", true); err != nil {
+		t.Fatalf("reset must succeed over a junk store: %v", err)
+	}
+}
+
 func writeSettingsFile(t *testing.T, home, body string) {
 	t.Helper()
 	if err := os.MkdirAll(home, 0o755); err != nil {
@@ -176,10 +203,5 @@ func writeSettingsFile(t *testing.T, home, body string) {
 	}
 	if err := os.WriteFile(filepath.Join(home, "settings.json"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
-	}
-	// Sanity: the fixture is the shape we think it is (skip for the corrupt case).
-	if json.Valid([]byte(body)) {
-		var s Settings
-		_ = json.Unmarshal([]byte(body), &s)
 	}
 }

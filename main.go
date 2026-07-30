@@ -339,14 +339,19 @@ func buildMCPServer(engine *search.Engine) *mcp.Server {
 	// (model + reasoning effort) that render the generated Claude agent
 	// definitions. Both may write to disk (re-rendering the agent files), so
 	// neither carries ReadOnlyHint. They resolve the home dir the same way setup
-	// does (os.UserHomeDir via homeDir), so test isolation via HOME works.
+	// does (os.UserHomeDir via homeDir), so test isolation via HOME (and
+	// USERPROFILE on Windows) works. renderAgentDefinitions is silent — it must
+	// never print to stdout here, which carries the JSON-RPC frames.
 	type SettingsGetArgs struct{}
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "settings_get",
 		Description: "Show the effective per-role model + reasoning effort (reviewer, coder) with provenance (default vs set), the allowed model inputs and thinking values, the store path, and any load warnings. Repairs drifted agent definitions before answering.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args SettingsGetArgs) (*mcp.CallToolResult, any, error) {
-		renderAgentDefinitions(homeDir())
-		return textResult(renderSettingsReport()), nil, nil
+		report := renderSettingsReport()
+		if _, err := renderAgentDefinitions(homeDir()); err != nil {
+			report += fmt.Sprintf("\n\n⚠️  could not re-render agent definitions: %v — the on-disk agent files may not match these settings.", err)
+		}
+		return textResult(report), nil, nil
 	})
 
 	type SettingsSetArgs struct {
@@ -363,7 +368,9 @@ func buildMCPServer(engine *search.Engine) *mcp.Server {
 		if err != nil {
 			return errResult(err.Error()), nil, nil
 		}
-		renderAgentDefinitions(homeDir())
+		if _, rerr := renderAgentDefinitions(homeDir()); rerr != nil {
+			return errResult(fmt.Sprintf("%s\n\n⚠️  but the agent definition could not be re-rendered: %v — the setting was saved, yet the on-disk agent file does not reflect it. Fix the write error and run `detritus --setup` (or settings_get) to re-render.", summary, rerr)), nil, nil
+		}
 		return textResult(summary), nil, nil
 	})
 

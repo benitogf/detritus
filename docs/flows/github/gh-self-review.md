@@ -99,7 +99,7 @@ If the `--stat` exceeds ~2000 changed lines, the brief should say so explicitly 
 
 ## Phase 3: Hand off to a fresh sub-agent
 
-Spawn the review via the `Agent` tool. The sub-agent runs with **no prior context** — the prompt is everything it sees. Use `subagent_type: "detritus-reviewer"` — the role definition `detritus --setup` installs at `~/.claude/agents/detritus-reviewer.md`, which pins the reviewer's model and effort per role (`roles/reviewer` → *Model and effort*). If the definition is absent (setup not run), fall back to `subagent_type: "general-purpose"` so the review still runs — it then inherits the session model. If the reviewer spawn returns or dies with a banner naming its pinned model's limit (not an account-wide limit), re-spawn it per `roles/reviewer` → *Model and effort* (In-session model-limit fallback).
+Spawn the review via the `Agent` tool. The sub-agent runs with **no prior context** — the prompt is everything it sees. Use `subagent_type: "detritus-reviewer"` — the role definition `detritus --setup` installs at `~/.claude/agents/detritus-reviewer.md`, which sets the reviewer's model and effort per role, configurable via `/settings` (`roles/reviewer` → *Model and effort*). If the definition is absent (setup not run), fall back to `subagent_type: "general-purpose"` so the review still runs — it then inherits the session model. If the reviewer spawn returns or dies with a banner naming its configured model's limit (not an account-wide limit), re-spawn it per `roles/reviewer` → *Model and effort* (In-session model-limit fallback).
 
 The prompt is built from this template — fill in `<...>` placeholders from Phases 1-2:
 
@@ -125,7 +125,7 @@ Open the block with the provenance line from core/review-rigor → "Review stamp
 
 `detritus <version> · detritus-reviewer (claude-fable-5 / high) · head <sha8>`
 
-If the pinned definition was absent and the review ran on the `general-purpose` fallback (Phase 3), substitute the general-purpose variant from *Review stamps* — the model segment reads the session model and effort is `unpinned`. (This flow always spawns; it has no inline-session path.)
+The `claude-fable-5 / high` is the **default**; the model segment is self-reported (what the reviewer actually ran on) and the effort segment is the reviewer's configured effort, so a reviewer set via `/settings` to a different model/effort stamps that instead. If the definition was absent and the review ran on the `general-purpose` fallback (Phase 3), substitute the general-purpose variant from *Review stamps* — the model segment reads the session model and effort is `unpinned`. (This flow always spawns; it has no inline-session path.)
 
 ## Self-review on <branch> vs. <base>
 <N> files audited (<C> committed + <M> uncommitted-included + <U> untracked-included; <X> excluded as leftover).

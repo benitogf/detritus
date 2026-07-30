@@ -617,14 +617,17 @@ func TestUpsertMCPUpgradesExistingServersEntryWithoutType(t *testing.T) {
 }
 
 // settingsToolEnv isolates both the settings store (DETRITUS_HOME) and the agent
-// render target (HOME, which homeDir resolves), mirroring exactly what the
-// settings_get / settings_set handlers touch.
+// render target (the home dir homeDir resolves), mirroring exactly what the
+// settings_get / settings_set handlers touch. It sets USERPROFILE too, since
+// os.UserHomeDir reads that (not HOME) on Windows — without it the render would
+// write the developer's real ~/.claude/agents on a Windows run.
 func settingsToolEnv(t *testing.T) (store, home string) {
 	t.Helper()
 	store = t.TempDir()
 	home = t.TempDir()
 	t.Setenv("DETRITUS_HOME", store)
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	return store, home
 }
 

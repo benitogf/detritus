@@ -150,7 +150,7 @@ Your review contributes **net-new signal** only. Restating known information is 
 
 ## Phase 5: Apply review rigor via the pinned reviewer agent
 
-The analysis runs in the **spawned `detritus-reviewer` agent** — the same role definition `/gh-self-review` Phase 3 uses (`~/.claude/agents/detritus-reviewer.md`, running the configured review model (default `claude-fable-5`) at `high` effort per `roles/reviewer` → *Model and effort*). Spawning it, rather than analyzing inline in the invoking session, is what pins the review's model and effort — an inline analysis inherits whatever the invoking session happens to run, and that unobserved variance is exactly what returns opposite verdicts on the same head. The wrapping session keeps Phases 1–4 (resolve, fetch, timeline, prior-signal inventory) and Phases 6–7 (compose, post, report); only the analysis moves into the agent.
+The analysis runs in the **spawned `detritus-reviewer` agent** — the same role definition `/gh-self-review` Phase 3 uses (`~/.claude/agents/detritus-reviewer.md`, running the configured review model (default `claude-fable-5`) at the configured effort (default `high`) per `roles/reviewer` → *Model and effort*). Spawning it, rather than analyzing inline in the invoking session, is what holds the review's model and effort constant — an inline analysis inherits whatever the invoking session happens to run, and that unobserved variance is exactly what returns opposite verdicts on the same head. The wrapping session keeps Phases 1–4 (resolve, fetch, timeline, prior-signal inventory) and Phases 6–7 (compose, post, report); only the analysis moves into the agent.
 
 Spawn via the `Agent` tool with `subagent_type: "detritus-reviewer"` and a **pointer brief** — never a pasted diff (`core/review-rigor` → *Consume the diff from live git*). The brief carries:
 
@@ -160,7 +160,7 @@ Spawn via the `Agent` tool with `subagent_type: "detritus-reviewer"` and a **poi
 
 The agent loads `roles/reviewer` → `core/review-rigor` + `flows/principles/truthseeker` via `kb_get`, pulls the diff itself with `gh api` (no local clone required — the live-git section's API-transport carve-out covers a remote PR), applies the checklist end-to-end, and returns the verdict, the composed body sections (Lead / Verified / Blockers / Non-blocking), and the two stamp lines (`core/review-rigor` → *Review stamps*) for Phase 6 to paste. It skips nothing; a subsection whose scope didn't fire is noted as `n/a`, not dropped.
 
-**Model-limit fallback.** If the reviewer sub-agent dies or returns carrying a usage-limit banner that *names its pinned model* (e.g. `You've hit your Fable limit`), re-spawn it **once** with the `Agent` tool's `model: "opus"` override, per `roles/reviewer` → *In-session model-limit fallback*; the override is session-sticky (later spawns in this session go straight to opus). An account-wide banner naming no model is a capability blocker — surface it to the user, do not retry on another model.
+**Model-limit fallback.** If the reviewer sub-agent dies or returns carrying a usage-limit banner that *names its configured model* (e.g. `You've hit your Fable limit`), re-spawn it **once** per `roles/reviewer` → *In-session model-limit fallback* (opus, or the session model when opus is itself the configured model); the override is session-sticky (later spawns in this session go straight to the fallback). An account-wide banner naming no model is a capability blocker — surface it to the user, do not retry on another model.
 
 **General-purpose fallback (definition absent).** If the `Agent` tool is available but the `detritus-reviewer` definition is not installed (setup not run), spawn a `general-purpose` sub-agent instead — same brief, same `kb_get` loads — so the review still runs independently. It inherits the session model, so it MUST emit the general-purpose provenance variant (`general-purpose (<session model> / effort unpinned)`, `core/review-rigor` → *Review stamps*).
 
@@ -250,7 +250,7 @@ EOF
 )"
 ```
 
-The two stamp lines (`core/review-rigor` → *Review stamps*) come from the reviewer agent's return, above the `---` footer, inside the heredoc. Use the actual per-check outcomes the agent reported (`✓` pass · `✗` blocker cited above · `n/a` trigger didn't fire; R2b carries its claim count), and the provenance variant matching how Phase 5 actually ran (pinned agent, general-purpose fallback, or inline session).
+The two stamp lines (`core/review-rigor` → *Review stamps*) come from the reviewer agent's return, above the `---` footer, inside the heredoc. Use the actual per-check outcomes the agent reported (`✓` pass · `✗` blocker cited above · `n/a` trigger didn't fire; R2b carries its claim count), the reviewer's **actual** self-reported model and configured effort (the `claude-fable-5 / high` above is only the default — a reviewer configured via `/settings` stamps its own), and the provenance variant matching how Phase 5 actually ran (pinned agent, general-purpose fallback, or inline session).
 
 If the POST fails with `422 Pull request has been updated since review was started` (the head moved between Phase 2 and Phase 6), do **not** silently retry against the new HEAD — re-run from Phase 3 against the new SHA so prior-signal inventory and resolution checks reflect the current state.
 

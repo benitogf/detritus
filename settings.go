@@ -214,6 +214,29 @@ func saveSettings(s Settings) error {
 	return os.WriteFile(settingsPath(), append(data, '\n'), 0o644)
 }
 
+// sanitizeStored drops every role/field the tolerate-on-read path would ignore,
+// keeping only the caller-independent VALID explicit entries (canonicalized).
+// The write path merges the caller's input onto this result so strict
+// validation is scoped to the caller's own input, never to junk already in the
+// store (an invalid field or unknown role must not brick a valid set/reset).
+func sanitizeStored(stored Settings) Settings {
+	clean := Settings{Levels: map[string]LevelConfig{}}
+	for role, lc := range stored.Levels {
+		if !knownRole(role) {
+			continue
+		}
+		norm := LevelConfig{}
+		if canonical, ok := normalizeModel(lc.Model); ok {
+			norm.Model = canonical
+		}
+		if canonical, ok := normalizeThinking(lc.Thinking); ok {
+			norm.Thinking = canonical
+		}
+		clean.Levels[role] = norm
+	}
+	return clean
+}
+
 // effectiveLevel returns the effective (model, thinking) a role renders with.
 func effectiveLevel(role string) (string, string) {
 	eff, _ := loadSettings()
@@ -301,7 +324,11 @@ func applySettingsSet(role, model, thinking string, reset bool) (string, error) 
 		return "", fmt.Errorf("unknown role %q (allowed: %s, %s)", role, roleReviewer, roleCoder)
 	}
 
-	stored := loadStoredSettings()
+	// Sanitize the loaded store BEFORE merging the caller's input, so strict
+	// write-validation applies only to what THIS call provides — pre-existing
+	// hand-edited junk (invalid fields, unknown roles) is dropped exactly as the
+	// tolerate-on-read path drops it, never bricking a valid set or reset.
+	stored := sanitizeStored(loadStoredSettings())
 	oldModel, oldThinking := effectiveLevel(role)
 
 	if reset {

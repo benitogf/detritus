@@ -862,7 +862,10 @@ func TestGenerateAgentFileInheritsTools(t *testing.T) {
 	}
 }
 
-// captureStdout runs fn with os.Stdout redirected to a pipe and returns what it wrote.
+// captureStdout runs fn with os.Stdout redirected to a pipe and returns what it
+// wrote. The reader runs concurrently so fn can't deadlock by writing more than
+// the pipe buffer holds, and os.Stdout is restored via defer so a panic in fn
+// doesn't leave it redirected for later tests.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 	orig := os.Stdout
@@ -870,12 +873,48 @@ func captureStdout(t *testing.T, fn func()) string {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer func() { os.Stdout = orig }()
 	os.Stdout = w
+
+	done := make(chan string, 1)
+	go func() {
+		data, _ := io.ReadAll(r)
+		done <- string(data)
+	}()
+
 	fn()
 	w.Close()
-	os.Stdout = orig
-	data, _ := io.ReadAll(r)
-	return string(data)
+	return <-done
+}
+
+// TestRenderAgentDefinitionsSilent proves the render seam writes NOTHING to
+// stdout — the MCP server speaks JSON-RPC over stdio, so a stray human line
+// injected here corrupts the protocol frame. The human-facing path prints are
+// the setup caller's responsibility, not the shared render's.
+func TestRenderAgentDefinitionsSilent(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+
+	out := captureStdout(t, func() {
+		renderAgentDefinitions(home)
+	})
+	if strings.Contains(out, "Claude Code") {
+		t.Fatalf("renderAgentDefinitions must not write to stdout; got:\n%s", out)
+	}
+}
+
+// TestRenderAgentDefinitionsReportsWriteError proves a failed agent-file write
+// surfaces as an error (so settings_set can report drift) rather than a silent
+// stderr warning. A file where the .claude dir must be makes MkdirAll fail.
+func TestRenderAgentDefinitionsReportsWriteError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("DETRITUS_HOME", t.TempDir())
+	if err := os.WriteFile(filepath.Join(home, ".claude"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := renderAgentDefinitions(home); err == nil {
+		t.Fatal("render must return an error when the agent file cannot be written")
+	}
 }
 
 // TestRenderAgentDefinitionsDefaults verifies that with no settings file the
