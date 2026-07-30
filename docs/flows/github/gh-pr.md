@@ -150,7 +150,7 @@ Your review contributes **net-new signal** only. Restating known information is 
 
 ## Phase 5: Apply review rigor via the pinned reviewer agent
 
-The analysis runs in the **spawned `detritus-reviewer` agent** — the same role definition `/gh-self-review` Phase 3 uses (`~/.claude/agents/detritus-reviewer.md`, pinning `claude-fable-5` at `high` effort per `roles/reviewer` → *Model and effort*). Spawning it, rather than analyzing inline in the invoking session, is what pins the review's model and effort — an inline analysis inherits whatever the invoking session happens to run, and that unobserved variance is exactly what returns opposite verdicts on the same head. The wrapping session keeps Phases 1–4 (resolve, fetch, timeline, prior-signal inventory) and Phases 6–7 (compose, post, report); only the analysis moves into the agent.
+The analysis runs in the **spawned `detritus-reviewer` agent** — the same role definition `/gh-self-review` Phase 3 uses (`~/.claude/agents/detritus-reviewer.md`, running the configured review model (default `claude-fable-5`) at `high` effort per `roles/reviewer` → *Model and effort*). Spawning it, rather than analyzing inline in the invoking session, is what pins the review's model and effort — an inline analysis inherits whatever the invoking session happens to run, and that unobserved variance is exactly what returns opposite verdicts on the same head. The wrapping session keeps Phases 1–4 (resolve, fetch, timeline, prior-signal inventory) and Phases 6–7 (compose, post, report); only the analysis moves into the agent.
 
 Spawn via the `Agent` tool with `subagent_type: "detritus-reviewer"` and a **pointer brief** — never a pasted diff (`core/review-rigor` → *Consume the diff from live git*). The brief carries:
 

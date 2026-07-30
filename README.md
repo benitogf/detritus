@@ -77,6 +77,7 @@ absent — they are not commands.
 | --- | --- |
 | `/checkpoint` | Durable per-topic session context — serialize load-bearing state to .checkpoint/<slug>.md at a boundary so a /clear is lossless and a later session (hours or weeks on) resumes the topic by name. |
 | `/code` | Explicit entry point for code exploration backed by the zero-setup code_* tools (code_map, code_outline, code_graph) plus native Grep. |
+| `/settings` | Show or change global detritus settings — the model and effort the generated reviewer and coder agents run on. |
 | `/todo` | Cross-session todo management — router, conventions, and ALL everyday item operations (view, add, done, edit, defer, clear, file) in one doc. |
 
 ### Testing
