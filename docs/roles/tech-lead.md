@@ -7,6 +7,9 @@ triggers:
   - partition
   - integrate coders
   - parallel build coordinator
+  - coder stalled
+  - stall watchdog
+  - liveness
 when: Internal. Loaded by an agent acting as the implementation-loop coordinator, spawned by a driver (/forge or candyland) against a settled plan contract.
 related:
   - core/build
@@ -40,6 +43,15 @@ The tech-lead is the orchestrating role of the parallel implementation loop. It 
 - **candyland conductor (out-of-process driver):** the conductor is candyland's **Go orchestrator** — a driver process, never an agent. The tech-lead runs as a candyland-launched process; it **emits** the partition and per-phase decisions, and **candyland** spawns each coder as its own process it can watch, pause, and kill. The tech-lead does **not** spawn coders itself in this mode.
 
 The critical invariant in both: **the tech-lead decides and emits; it never hides coders inside its own context in a way the driver can't see.** Under candyland that means emit-don't-spawn; under `/forge` the sub-agents are the spawn.
+
+### Liveness — the tech-lead owns stall detection (in-process driver)
+
+A spawned coder that stops its turn to "wait" on its own background watcher (a build monitor, a completion hook) may never be re-invoked — the work finishes but the report never comes, and the loop silently loses wall-clock until a human notices (observed failure shape: build done, tree dirty with finished artifacts, coder idle with no active task). Two rules close this:
+
+- **Coder briefs forbid stop-and-wait.** Render into every coder brief: never end your turn to wait on a background command or watcher you armed; poll it within the turn (background execution + in-turn checks) or finish the verifiable part and report. If a wait is unavoidable, say so in the report — handing the wait BACK to the tech-lead — instead of going idle.
+- **The tech-lead arms an independent watchdog** the moment long-running coder work starts: a periodic check (~5-min cadence; e.g. a Monitor loop) over observable progress signals — new commits, working-tree churn, live compiler/test processes — that raises a STALL after ~2 quiet cycles. On STALL, verify the state read-only (never mutate the coder's tree — TL-F8) and re-invoke the idle coder with a nudge restating exactly where to resume ("build appears done, no fix commit landed — proceed with verification steps X/Y, ignore if mid-work"). A false STALL during a legitimately quiet phase (e.g. a read-only review pass) costs one glance; a missed real stall costs hours.
+
+Treat the sub-agent's own resume mechanism as the primary wake signal and the watchdog as the fallback heartbeat — never as the only wake path. Under candyland this section is moot: the conductor owns process liveness natively.
 
 ## Forbidden actions (TL-F#)
 
