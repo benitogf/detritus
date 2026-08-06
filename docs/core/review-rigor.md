@@ -149,14 +149,14 @@ The diff is never the whole system. Most expensive misses live in the *relations
   - **Example demotion** — the triggering incident appears as at most a parenthetical `e.g.`; when the example carries the load, the rule above it is too narrow = blocker.
   Detection cues: a rule whose conditions restate the incident's specifics (same entity kind + same surface + same flow); a delta to exactly one flow doc for a mechanism that is flow-independent; a 📚 learning-loop footer on a PR whose rule names a single repo/file/tool where the mechanism is generic.
 
-## Verdict integrity (V1–V2)
+## Verdict integrity (V1–V3)
 
 A blocker-class finding once DETECTED does not evaporate because clearing it is convenient. `truthseeker` §1 ("Prove Before Acting") is the foundation here: an assertion is not a fact, "it probably works" is not evidence, and a convenient explanation is rejected until proven. These rules apply that principle to the APPROVE/CLEAN decision itself and add the review-verdict-specific teeth truthseeker doesn't name.
 
 **Verdict — closed enum** `(do NOT invent others)`. A review resolves to exactly one:
 
 - `approve` / `clean` — every applicable R1–R11 check is `pass` and every finding is either resolved or a cited non-blocker. A positive claim the change is correct and safe (`Prove before approving`) — back it with what you read.
-- `changes` — at least one standing blocker (any R-check `blocker`, or a V1/V2 finding that could not be cleared by cited evidence). List each blocker as one sentence + file:line.
+- `changes` — at least one standing blocker (any R-check `blocker`, or a V1–V3 finding that could not be cleared by cited evidence). List each blocker as one sentence + file:line.
 
 Forbidden middle states: no `approve-with-reservations`, no `mostly-clean`, no `LGTM-but`. A finding that needs a hedge-word to clear (RV-F3 / V1) makes the verdict `changes`, not a softened `approve`.
 
@@ -168,6 +168,12 @@ Forbidden middle states: no `approve-with-reservations`, no `mostly-clean`, no `
   - **Detection cue:** a CLEAN verdict whose own prose admits a gap ("not yet wired…, but…"). A verdict that contradicts its own narration is not clean.
   - **Out-of-scope code is not proof.** Speculation that a consumer or caller "lives elsewhere" never clears a reachability gap; only FINDING and CITING it does.
 - **V2 — Resolve reachability across the change's FULL shipping scope.** "Unwired in this diff" is checked against the whole scope the change ships in — the integrated branch AND the sibling PRs of a coordinated multi-PR feature (one feature → one PR per repo, or a validator-PR + wiring-PR split). When a consumer is CLAIMED to live in a sibling PR or branch, LOCATE that PR/branch, confirm it wires the symbol, and CITE it; otherwise the symbol is unwired = blocker. This is the verify-don't-assume half of R1/R1b sharpened for the cross-PR clear — do not duplicate the whole-repo reachability sweep of R1, the entrypoint trace of R1b, or the test-vs-entrypoint check of R1c; this extends them to the multi-PR boundary.
+- **V3 — A finding about DETECTION is not closed by a change to PREVENTION.** When the finding is that something is *unverified* — no test, no assertion, nothing fails if it regresses — it closes ONLY when something FAILS on regression. Making the bad state *less likely* is a different thing: hardening, a stricter default, a declarative constraint, a type that makes the state unrepresentable. Each is often a real improvement, and that is precisely why the substitution slips through — it feels like progress, so the item gets marked resolved while the gap it named stays open. Unlike V1 this needs no hedge-word to go wrong; the resolution is stated confidently and *is* genuinely better code. **The test that settles it: if someone deletes this hardening, what turns red?** If the answer is "nothing", the finding STANDS.
+  - **Detection cue:** the finding's own words are *no test / nothing catches / unenforced / could silently regress / no gate*, and the resolution changed a **mechanism** instead of adding an **observer**.
+  - **Especially prone in self-review**, where the accepted resolution is often the reviewer's OWN earlier suggestion — no independent party notices the goalposts moved. Per *Re-review continuity*, iterations 2+ inherit that resolution rather than re-litigating it, so a later pass anchors on it instead of re-asking. On every re-review, ask whether the original finding was CLOSED, not merely mitigated.
+  - **A red-then-green demo is only evidence if the ARTIFACT moved.** Editing the source that supposedly produces the artifact is not the same as changing the artifact under test — a "negative" that leaves the built output byte-identical, or an edit that silently fails to apply, produces a green run that reads exactly like a passing check. Confirm the observable actually differs before trusting the red half.
+  - ✅ "constraint is unenforced — nothing fails if it regresses" → cleared by a check that fails on a violating input, demonstrated red against a genuinely violating artifact and green against a compliant one.
+  - ❌ Same finding → cleared by a declarative constraint that expresses the rule, where deleting the declaration breaks nothing (banned: V3).
 
 ## Review stamps
 
@@ -199,7 +205,7 @@ Every **posted** review body carries two stamp lines at its end, above the `---`
 
 The **first** review pass runs in a fresh, uncontaminated context — independence from the authoring conversation is what makes it a real gate (the spawner owns that handoff). Every **re-review after a fix pass** is a different job: verifying that cited findings were resolved. It **continues the same reviewer context** — the diff understanding, the brief, and the evidence trail it already established — with a delta instruction; it never re-derives context it already holds.
 
-- **Fresh evidence, held context.** The continued reviewer re-verifies each cited finding against the live tree: diff the fix commits, re-run the checks it already established, confirm nothing regressed. Held *context* is reused; held *conclusions* are not — the verdict-integrity rules (V1–V2) apply to a re-review verdict unchanged.
+- **Fresh evidence, held context.** The continued reviewer re-verifies each cited finding against the live tree: diff the fix commits, re-run the checks it already established, confirm nothing regressed. Held *context* is reused; held *conclusions* are not — the verdict-integrity rules (V1–V3) apply to a re-review verdict unchanged, V3 especially: a resolution accepted in an earlier pass is inherited, not re-litigated, so re-ask whether each finding was closed rather than merely mitigated.
 - **Fallback.** When the prior reviewer context is unavailable (session gone, agent not continuable), spawn fresh with the full brief — continuity is an optimization, never a gate bypass.
 - **Realizations.** The candyland conductor continues the reviewer by resuming its session in the next round; in-session flows (`/gh-self-review`, `/forge` convergence) continue the same review sub-agent instead of spawning a new one per iteration. One contract, two transports.
 
@@ -236,7 +242,7 @@ Actively look for patterns that require multiple things to go right:
 
 Tests are evidence. Missing tests on a hot-path change, a caching change, or a concurrency change is usually a blocker, not a suggestion.
 
-- Bug fix: is there a regression test? If not, the next regression is silent.
+- Bug fix: is there a regression test? If not, the next regression is silent. Hardening that makes the bug harder to reintroduce is **not** a substitute — see V3.
 - New feature: happy path + at least one edge case covered?
 - Caching / invalidation: hit, miss, and invalidation tested?
 - Concurrency: race test (`go test -race`) or equivalent?
