@@ -201,6 +201,15 @@ The interval arg defaults to 60s (the watch's poll cadence); if a chosen platfor
 
 Under either automatic arrangement, while the PR is open a live watch MUST be armed; yielding on an open PR with no watch armed **and** no degraded-fallback hand-off (below) is the stall this contract forbids.
 
+### Watch liveness is part of being armed
+
+An event-watch that **died** is not an armed watch — and a monitor that dies silently is worse than no monitor: the loop believes it is waiting while nothing can ever wake it. When the chosen adapter is (or is implemented as) a long-lived detached background process, the loop must observe its liveness, not assume it:
+
+1. **Heartbeat.** The watcher writes durable records the loop can read — last successful poll (timestamp + observed gate state) — and exits loudly (exit code + emitted line) on every terminal condition, *including its own failure conditions* (poll-error streaks, token/config loss, host teardown). A watcher that can vanish without output turns its own death into silence.
+2. **Liveness check at every wake and every yield/hand-back.** Before reporting "waiting" or handing back, verify the watcher process exists and its heartbeat is fresh; treat stale-beyond-2 poll intervals as dead. A dead or unverifiable watcher is NOT armed: **re-arm immediately** (fresh process with a fresh poll baseline — the old process's state must not be trusted), or emit the degraded hand-off. Never let the loop's status line claim a live watch it only believes in.
+3. **Backfill after a gap.** After re-arming a watcher that had been down, run the manual full state re-fetch (per-event algorithm step 1) from the last verified liveness point before concluding "nothing special changed" — events that occurred while the watch was dead never emitted, so the re-fetch must cover that window.
+4. **Prefer re-armable over immortal.** A detached process that must survive unattended for hours is the loop's least reliable component; a fresh, re-armed process with a fresh baseline beats an uninspectable daemon. If the host's adapter cannot offer observable liveness, fall back to the most inspectable arrangement available and say so — do not present the unverifiable one as normal operation.
+
 ### On-demand: override and fallback (never the default)
 
 - **Override — "check now."** While an automatic watch is live, the user may invoke `/babysit <pr>` (or nudge) to run **one extra check immediately**, without waiting for the next emitted event — e.g. "I just approved, check now, don't wait." The armed watch keeps running; the override is an additional user-initiated check, **not** a replacement for the automatic continuation.
