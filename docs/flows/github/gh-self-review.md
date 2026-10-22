@@ -31,6 +31,18 @@ The analysis itself — principles, claim verification, second-pass checklist, c
 - Doesn't run tests or builds. The sub-agent reasons over the diff and the surrounding source; it doesn't compile or execute.
 - Doesn't post comments, create issues, or push. Output is a triage list the dev acts on.
 
+## Verification signal gap — reading cannot discover un-authored sequences
+
+Diff-reading and the author's green suites validate the change against the scenarios the implementer imagined. The same mental model that shaped the code also shaped which sequences were tested, so the riskiest failures of multi-channel state machines — ordering across channels, reconnect/late-delivery interleavings, retention-window eviction, void/reset ordering — are usually *sequences nobody constructed yet*, invisible to both a clean self-review and a green suite.
+
+When the change claims verified behavior for any state machine fed by multiple asynchronous inputs (or any delivery contract with retention, eviction, or retry semantics), the sub-agent runs the claim-vs-evidence check:
+
+1. **Name the tests.** For each behavioral claim, name the test(s) in the tree that actually exercise it — existing near the code is not existing on the path.
+2. **Enumerate the interleavings the channels allow** — cold start, duplicate/late delivery per channel, snapshot-vs-live ordering, eviction/expiry, void/reset orders — and check which have NO named test.
+3. **Flag unverifiable-by-reading claims.** A claim covered only by "the suites pass" where the risky interleaving is unexercised is a Blocker-level gap for the delivery flow to close — by *running* the constructed sequence (red first). This skill does not execute; the finding must name the scenario in constructible form — ordering, per-channel stamps, retention state — so the implementation leg can build and run it. A vague "test reconnects more" is not actionable.
+
+This gap is why a surviving blocker is a gate miss even under a loop-until-clean self-review: the reviewer's reproducer is adversarial *construction*, which reading-world verification only loses to. Feeding the named scenarios back (fixtures/regressions) is what converts the loss into coverage.
+
 ## Not a substitute for a posted review — reconcile it first
 
 If the changes belong to an **open PR that already carries an unaddressed `CHANGES_REQUESTED` review**, this is the wrong skill: route to `gh-feedback-work` and fix what the reviewer named. A fresh self-review that returns *clean* while a posted review says *blocked* is incoherent — the self-review shares the author's blind spot and will happily miss the very finding the reviewer already proved. Before spawning the audit, fetch posted reviews (`gh api repos/<owner>/<repo>/pulls/<n>/reviews`); a self-review may NOT clear a finding a reviewer has posted on the same head — that finding stands until it is fixed, not until a self-audit fails to re-find it.
